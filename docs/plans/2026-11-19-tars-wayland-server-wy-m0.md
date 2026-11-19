@@ -2,7 +2,7 @@
 
 Date: 2026-11-19
 Design: `docs/specs/2026-11-19-tars-wayland-server-design.md`(확인 1~8, 결정 1~14)
-Status: plan. 브랜치 `app-layer-0-3`.
+Status: 끝(2026-11-19). 브랜치 `app-layer-0-3`.
 
 ## 누가 무엇을 하나
 
@@ -102,4 +102,31 @@ Status: plan. 브랜치 `app-layer-0-3`.
 
 ## 결과
 
-(구현 뒤에 쓴다.)
+구현은 Herdr 서브에이전트가 했다(A · B는 `wy-impl` 이전 세션, C는 `wy-impl`, Opus). lead는 diff 대조 · 체인 · 게이트 · commit.
+
+1. 단계 A `470cded` · `8147624`, 단계 B `22e5d51`, 단계 C(이 commit). 단계 B의 남은 수동 확인("새 workspace에 창으로
+   뜨는가")은 체인 `wayland` 판정 2가 대신했다.
+2. R-KEY-1 표를 `input.State.tableChord` 하나로 뺐다 — 셸 경로(`chord`)와 app 경로(`appKey`)가 같은 표를 본다.
+   `input_test` 검사 91이 수정키 조합 여덟 × 키 코드 전부에서 두 경로가 같은 명령을 내는지 대조한다(44개).
+3. `Cmd+W` · `Cmd+T`는 app에서 앱의 것이다(요구사항 결정 3 · R-KEY-1 표의 비고). 확정 10은 `Cmd+T`를 compositor 쪽에
+   적었는데 요구사항과 어긋났다 — 서브에이전트는 확정 10을 따랐고, lead가 대조에서 잡아 요구사항으로 고쳤다(브라우저의
+   새 탭). app에서 셸로 가는 길은 `Cmd+1`~`9`다.
+4. design 확인 6의 `input_test` 단언은 셋이 아니라 여섯이었다(937 · 1852 · 1888행이 더). design에 덧붙였다.
+5. 판정 2: 기본 320x200은 1280x800을 4배로 꽉 채워 둘레가 없다 — `--size 300x200`(4배 1200x800, x=40)으로 모서리 검정을 본다.
+   정가운데는 포인터가 설 수 있어 창 안의 두 상자(16x16)를 본다.
+6. 디스크 없는 부팅이라 키보드가 pc로 읽혀 체인의 Cmd는 `alt-`다(input 체인 판정 10 · 12와 같은 모양).
+7. 판정에 더한 것: 판정 3에 음성 둘(app이 앞인 동안 셸 `key>` 줄이 안 늘고, `Cmd+1`의 `1`이 클라이언트로 안 간다), 판정 7에
+   "스스로 닫힌 클라이언트에는 `wl> kill`이 없다", 판정 8에 시간 범위 1.5~4초(실측 1,942 · 2,054ms).
+8. 키의 순서: 한 배치의 키를 먼저 클라이언트에 보내고 명령(워크스페이스 옮기기)은 뒤에 한다 — `leave`가 키보다 뒤에 가야
+   눌린 채 남는 키가 없다. 보낸 적 없는 누름의 뗌은 `wl_logic.Held`가 거른다(compositor가 먹은 chord의 뗌, 포커스 전에
+   누른 키의 뗌이 같은 길).
+9. 체인 단독 PASS: wayland · fullscreen · pane · terminal · hangul · input, verify 이상 줄 0.
+10. 루트 게이트 첫 판 34/35(`out/gate-logs/20261119-133012`): DY-M2 판정 12a — 자동 실행 `tars-gpu-demo`(SDL3)가 kmsdrm 대신
+    우리 Wayland 서버의 창이 됐다(`wl> client pid=49` · `toplevel id=1 ws=2`). 단계 B가 셸에 `WAYLAND_DISPLAY`를 준 결과이고, 단계 B는
+    루트 게이트를 안 돌려 여기서 드러났다. design 결정 18: `tars-fullscreen`이 exec 전에 `WAYLAND_DISPLAY` · `XDG_RUNTIME_DIR`을 뺀다
+    (앞의 것만 빼서는 libwayland가 `$XDG_RUNTIME_DIR/wayland-0`을 기본으로 찾아 그래도 붙었다 — display 체인 둘째 판에서 봤다). display 단독 PASS.
+11. 루트 게이트 둘째 판 34/35(prebuild 350초 + lanes 1,550초, `out/gate-logs/20261119-142419`, verify 이상 줄 0): 빨강은 BT-M2의
+    `btvirt` segfault(carryover의 여섯 번째, 같은 서명) — 체인만 다시 돌린 판은 초록(3분 22초). WY-M0(새 체인)은 38초.
+
+남은 걱정(WY-M1 이후): `wl> key` 줄이 키마다 찍혀 둠에서 로그가 분다. CapsLock은 app에서 누를 때, 셸에서 뗄 때 뒤집는다 —
+둘 사이에 `Cmd+1`을 끼우면 두 번 뒤집혀 그대로다(사람 손으로는 드묾).

@@ -1,8 +1,9 @@
 //! WY-M0: Wayland 서버의 순수한 부분(WY design 결정 1 · 9, plan 확정 4 · 8). 시스템 콜도 libwayland도 안 부른다 —
 //! `wl_logic_test.zig`가 호스트에서 본다. `layout.zig`와 같은 경계다.
 //!
-//! 셋이다. (1) 정수 배율과 가운데 자리(`fit`), (2) 그 자리로 옮기는 가장 가까운 픽셀 늘리기(`blit`),
-//! (3) xdg toplevel의 configure 순서(`onCommit`).
+//! 여섯이다. (1) 정수 배율과 가운데 자리(`fit`), (2) 그 자리로 옮기는 가장 가까운 픽셀 늘리기(`blit`),
+//! (3) xdg toplevel의 configure 순서(`onCommit`), (4) `wl_keyboard.modifiers`의 비트(`modifierMask`, 단계 C),
+//! (5) 클라이언트에 누름을 보낸 키의 목록(`Held`, 단계 C), (6) `Cmd+Q`의 2초 기한(`Deadline`, 단계 C).
 
 const std = @import("std");
 
@@ -112,3 +113,105 @@ pub fn onCommit(phase: Phase, acked: bool, has_buffer: bool) Step {
         .mapped => .{ .action = .update, .next = .mapped },
     };
 }
+
+// ── 수정키 비트(design 결정 6, 확인 3) ──────────────────────────────────
+
+/// `wl_keyboard.modifiers`에 실을 수정키. 좌우를 합친 것이고 `caps`는 잠금이다.
+pub const Mods = struct {
+    shift: bool = false,
+    caps: bool = false,
+    ctrl: bool = false,
+    alt: bool = false,
+    super: bool = false,
+};
+
+/// 키맵(us · evdev · pc105)의 수정키 비트 — Shift 0x1 · Lock 0x2 · Control 0x4 · Mod1(Alt) 0x8 · Mod4(Super = Cmd)
+/// 0x40(확인 3). NumLock(Mod2 0x10)은 안 쓴다. 대문자 잠금은 누른 것(depressed)이 아니라 잠긴 것(locked)이다 —
+/// 클라이언트의 xkb가 그 둘을 다르게 센다(잠금은 떼도 남는다).
+pub const MOD_SHIFT: u32 = 0x1;
+pub const MOD_LOCK: u32 = 0x2;
+pub const MOD_CTRL: u32 = 0x4;
+pub const MOD_ALT: u32 = 0x8;
+pub const MOD_SUPER: u32 = 0x40;
+
+pub const Mask = struct { depressed: u32, locked: u32 };
+
+pub fn modifierMask(m: Mods) Mask {
+    var d: u32 = 0;
+    if (m.shift) d |= MOD_SHIFT;
+    if (m.ctrl) d |= MOD_CTRL;
+    if (m.alt) d |= MOD_ALT;
+    if (m.super) d |= MOD_SUPER;
+    return .{ .depressed = d, .locked = if (m.caps) MOD_LOCK else 0 };
+}
+
+// ── 보낸 누름(R-KEY-2 · R-KEY-7) ────────────────────────────────────────
+
+/// 포커스 창에 누름을 보낸 키. 뗌은 누름을 보낸 키만 보낸다 — compositor가 먹은 chord의 뗌(R-KEY-2)과 포커스가
+/// 들어오기 전에 누른 키의 뗌(`enter`는 빈 목록이다, R-KEY-7)이 같은 길로 걸러진다. 포커스가 바뀌면 비운다.
+/// 크기는 evdev의 `KEY_MAX`(0x2ff) + 1이다.
+pub const Held = struct {
+    bits: std.StaticBitSet(KEY_LIMIT) = .empty,
+
+    pub const KEY_LIMIT = 0x300;
+
+    /// 누름이다. 보낼 것이면 true(이미 보낸 누름의 되풀이도 보낸다 — 커널은 반복을 2로 주므로 1이 겹치지 않는다).
+    pub fn press(self: *Held, code: u16) bool {
+        if (code >= KEY_LIMIT) return false;
+        self.bits.set(code);
+        return true;
+    }
+
+    /// 뗌이다. 누름을 보낸 키면 true(그리고 목록에서 뺀다).
+    pub fn release(self: *Held, code: u16) bool {
+        if (code >= KEY_LIMIT or !self.bits.isSet(code)) return false;
+        self.bits.unset(code);
+        return true;
+    }
+
+    pub fn clear(self: *Held) void {
+        self.bits = .empty;
+    }
+};
+
+// ── Cmd+Q의 기한(design 결정 12, plan 확정 11) ───────────────────────────
+
+/// close + ping 뒤 2초. 그 안에 pong도 끝도 없으면 SIGKILL이다.
+pub const KILL_AFTER_MS: i64 = 2000;
+
+/// 창 하나의 기한. `poll`의 시간 제한으로 건다 — 화면 양보의 SIGKILL 기한(`yield.Machine.timeout`)과 같은 모양이다.
+pub const Deadline = struct {
+    /// 이 시각(루프의 밀리초 시계)이 지나면 죽인다. null이면 기한이 없다.
+    at: ?i64 = null,
+    /// 기다리는 ping의 serial. 이 serial의 pong만 기한을 버린다.
+    serial: u32 = 0,
+
+    /// close + ping을 보냈다. 이미 걸려 있으면 그대로 둔다 — `Cmd+Q`를 거듭 눌러도 기한이 밀리지 않는다.
+    pub fn arm(self: *Deadline, now_ms: i64, serial: u32) bool {
+        if (self.at != null) return false;
+        self.at = now_ms + KILL_AFTER_MS;
+        self.serial = serial;
+        return true;
+    }
+
+    /// pong이 왔다. 기다리던 serial이면 기한을 버린다.
+    pub fn pong(self: *Deadline, serial: u32) bool {
+        if (self.at == null or serial != self.serial) return false;
+        self.at = null;
+        return true;
+    }
+
+    /// `poll`에 넘길 밀리초. 기한이 없으면 -1(무한).
+    pub fn timeout(self: Deadline, now_ms: i64) i32 {
+        const at = self.at orelse return -1;
+        return @intCast(@max(0, @min(at - now_ms, std.math.maxInt(i32))));
+    }
+
+    /// 기한이 지났으면 true를 한 번 돌려주고 기한을 버린다.
+    pub fn expired(self: *Deadline, now_ms: i64) bool {
+        const at = self.at orelse return false;
+        if (now_ms < at) return false;
+        self.at = null;
+        return true;
+    }
+};

@@ -124,6 +124,28 @@ fn execvp(argv: [*:null]const ?[*:0]const u8, envp: [*:null]const ?[*:0]const u8
     return EXIT_NOT_FOUND;
 }
 
+/// 명령에 물려줄 환경의 칸 수 상한. 넘는 것은 버린다(셸의 환경은 수십 개다).
+const ENV_MAX = 1024;
+
+/// 환경에서 `WAYLAND_DISPLAY` · `XDG_RUNTIME_DIR`을 뺀 사본(WY design 결정 18). 이 문으로 띄우는 명령은 KMS에 직접
+/// 그린다 — 양보한 동안 terminal의 compositor는 그리지 않으므로 거기 붙으면 아무것도 안 보인다. SDL3는 Wayland에 붙을
+/// 수 있으면 kmsdrm보다 먼저 고른다(WY-M0 루트 게이트에서 DY 판정 12a가 이것으로 빨갰다). 둘 다 빼는 까닭:
+/// `WAYLAND_DISPLAY`가 없으면 libwayland는 `$XDG_RUNTIME_DIR/wayland-0`을 기본으로 찾는다 — 하나만 빼서는 붙었다
+/// (같은 체인의 둘째 판). Mesa의 셰이더 캐시는 `XDG_CACHE_HOME` · `HOME`을 쓴다.
+fn withoutWayland(envp: [*:null]const ?[*:0]const u8, out: *[ENV_MAX + 1]?[*:0]const u8) [*:null]const ?[*:0]const u8 {
+    var i: usize = 0;
+    var n: usize = 0;
+    while (envp[i]) |e| : (i += 1) {
+        const kv = std.mem.span(e);
+        if (std.mem.startsWith(u8, kv, "WAYLAND_DISPLAY=") or std.mem.startsWith(u8, kv, "XDG_RUNTIME_DIR=")) continue;
+        if (n == ENV_MAX) break;
+        out[n] = e;
+        n += 1;
+    }
+    out[n] = null;
+    return @ptrCast(out);
+}
+
 pub fn main(init: std.process.Init.Minimal) u8 {
     const argv = init.args.vector;
     if (argv.len < 2) return usage();
@@ -136,5 +158,6 @@ pub fn main(init: std.process.Init.Minimal) u8 {
         return EXIT_REFUSED;
     }
     const cmd: [*:null]const ?[*:0]const u8 = @ptrCast(argv[1..].ptr);
-    return execvp(cmd, init.environ.block.slice.ptr);
+    var env: [ENV_MAX + 1]?[*:0]const u8 = undefined;
+    return execvp(cmd, withoutWayland(init.environ.block.slice.ptr, &env));
 }

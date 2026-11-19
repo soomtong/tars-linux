@@ -413,6 +413,48 @@ pub const Pane = enum {
     /// `Cmd+R` — 포커스 column의 폭을 다음 preset으로(SW-M3, 80칸 → 120칸 → 절반 → 전체).
     /// 맨 끝인 이유는 `fullscreen_toggle`과 같다.
     width_cycle,
+    /// `Cmd+Q` — 앞의 app 워크스페이스 창에 `xdg_toplevel.close`(WY design 결정 12, 요구사항 결정 3). 셸 워크스페이스에서는
+    /// 아무것도 안 한다 — 삼킨다. 맨 끝인 이유는 `fullscreen_toggle`과 같다.
+    close_app,
+};
+
+/// app 워크스페이스에서 키 하나가 만드는 것(WY-M0, design 결정 11). 셸의 `Action`과 따로인 것은 목적지가 다르기
+/// 때문이다 — 셸은 바이트를 받고 클라이언트는 키 코드와 수정키 상태를 받는다(R-KEY-3). 번역하지 않는다.
+pub const AppAction = union(enum) {
+    /// 클라이언트의 `wl_keyboard.key`로 갈 것(evdev 코드, 맞바꿈 뒤).
+    key: AppKey,
+    /// R-KEY-1 표의 chord — compositor가 먹는다.
+    pane: Pane,
+    brightness: Brightness,
+    /// 아무것도 안 나간다(자동 반복 · 밝기 키의 뗌).
+    none,
+};
+
+/// 클라이언트로 갈 키 하나. `mods`는 이 키를 처리한 뒤의 수정키 상태다 — 받는 쪽(`main.zig`)이 Wayland 비트로 바꿔
+/// 바뀌었으면 `modifiers`를 보낸다. 키마다 싣는 까닭은 한 read에 `Shift 누름, a 누름, a 뗌, Shift 뗌`이 함께 오면
+/// 배치 끝의 상태 하나로는 `a`가 대문자였는지 잃기 때문이다.
+pub const AppKey = struct {
+    code: u16,
+    pressed: bool,
+    mods: AppMods,
+};
+
+/// 클라이언트가 볼 수정키(좌우를 합친 것). `caps`는 잠금(대문자 잠금)이다.
+pub const AppMods = struct {
+    shift: bool = false,
+    caps: bool = false,
+    ctrl: bool = false,
+    alt: bool = false,
+    super: bool = false,
+};
+
+/// `readKeysApp`의 답. 키와 명령은 따로 순서대로 모은다 — 키를 먼저 보내고 명령(워크스페이스 옮기기)을 뒤에 한다.
+/// 옮긴 뒤의 `leave`가 그 배치의 키보다 뒤에 가야 클라이언트가 눌린 채로 남는 키가 없다.
+pub const AppKeys = struct {
+    keys: []const AppKey,
+    panes: []const Pane,
+    brightness: i32 = 0,
+    gone: bool = false,
 };
 
 /// copy mode 안에서 키가 만드는 명령.
@@ -740,6 +782,10 @@ pub const State = struct {
     /// 한 번의 read에서 나온 받아쓰기 명령의 저장소(VD-M1). 같은 이유로 힙을
     /// 안 쓰고, 넘치면 버린다.
     dictates: [8]Dictate = undefined,
+
+    /// 한 번의 read에서 나온 클라이언트 키의 저장소(WY-M0, `readKeysApp`). 같은 이유로 힙을 안 쓴다. 한 read가
+    /// 이벤트 64개까지라 넘칠 일이 없다.
+    app_keys: [64]AppKey = undefined,
 
     /// 한글을 치는 중인가(HI design 결정 5). `Mode`에 넣지 않는다 —
     /// `Mode`는 normal·copy·find인데 한/영은 그것과 독립이고, copy mode에
@@ -1271,6 +1317,59 @@ pub const State = struct {
         return .redraw;
     }
 
+    /// R-KEY-1 표(요구사항, WY design 결정 11)의 패널 · 워크스페이스 chord. Cmd가 눌려 있을 때만 부른다. 셸 경로
+    /// (`chord`)와 app 경로(`appKey`)가 같은 표를 본다 — 두 벌로 두면 한쪽에 키를 더하고 다른 쪽을 잊는다.
+    /// 표에 없으면 null이다. 무엇을 할지(셸: 바이트 표 · 삼키기, app: 클라이언트로)는 부르는 쪽이 정한다.
+    fn tableChord(self: *const State, code: u16) ?Pane {
+        // 전체 화면(FU-M0, `Cmd+Ctrl+F`). Shift · Option처럼 갈래 하나를 두지 않고 이 한
+        // 조합만 가로챈다 — 갈래를 두면 표에 없는 `Cmd+Ctrl` 조합이 null이 되어, 지금
+        // Ctrl을 무시하고 Cmd 표로 가는 `Cmd+Ctrl+←`(0x01) 같은 것이 바뀐다. 나머지는 그대로다.
+        if (self.ctrled() and code == c.KEY_F) return .fullscreen_toggle;
+        // Meta 분기 안에서 Shift를 한 번 더 보는 자리는 이 switch와 `chord`의 copy mode 진입
+        // 하나뿐이어야 한다(CM design 위험 2 · WP design 결정 4).
+        //
+        // 표에 없는 Cmd+Shift 조합은 null이다. 아래 Shift 없는 표로
+        // 떨어지지 않는다 — 떨어지면 Cmd+Shift+W가 Cmd+W(패널 닫기)가
+        // 되는 식으로 Shift가 조용히 무시된다.
+        if (self.shifted()) return switch (code) {
+            c.KEY_D => .split_below,
+            else => null,
+        };
+        // Cmd+Option(WP-M3, design 위험 6이 예고한 자리). Shift와 같은
+        // 규칙이다 — 표에 없는 조합은 null이고 아래 Option 없는 표로
+        // 떨어지지 않는다. 떨어지면 Cmd+Option+D가 분할이 된다.
+        if (self.alted()) return switch (code) {
+            c.KEY_LEFT => .focus_left,
+            c.KEY_RIGHT => .focus_right,
+            c.KEY_UP => .focus_up,
+            c.KEY_DOWN => .focus_down,
+            else => null,
+        };
+        return switch (code) {
+            c.KEY_D => .split_right,
+            c.KEY_W => .close,
+            c.KEY_RIGHTBRACE => .focus_next,
+            c.KEY_LEFTBRACE => .focus_prev,
+            c.KEY_R => .width_cycle,
+            // `Cmd+Q`(WY design 결정 12). app 창에 close, 셸에서는 삼킨다(`main.zig`의 `runPanes`).
+            c.KEY_Q => .close_app,
+            // 워크스페이스(WP-M2). 숫자는 물리 키 자리다 — evdev의
+            // `KEY_1`(2)~`KEY_9`(10)이고 자판(드보락)과 무관하다. `KEY_0`은
+            // 표에 없다: 번호가 1부터 아홉이다.
+            c.KEY_T => .new_workspace,
+            c.KEY_1 => .workspace_1,
+            c.KEY_2 => .workspace_2,
+            c.KEY_3 => .workspace_3,
+            c.KEY_4 => .workspace_4,
+            c.KEY_5 => .workspace_5,
+            c.KEY_6 => .workspace_6,
+            c.KEY_7 => .workspace_7,
+            c.KEY_8 => .workspace_8,
+            c.KEY_9 => .workspace_9,
+            else => null,
+        };
+    }
+
     /// design doc 결정 2의 2번 단계 — 조합 dispatch. TF design doc이
     /// "여긴 나중에"라고 비워두고 두 서브프로젝트를 건너온 자리다.
     ///
@@ -1278,76 +1377,40 @@ pub const State = struct {
     /// 여기 닿기 전에 특수키 조회에서 그냥 ESC [ D로 번역돼 새어 나간다.
     /// "가로챌 것을 먼저 가로채고, 남은 것만 평소대로"가 규칙이다.
     ///
-    /// 표에 없는 조합(Option+b, Cmd+C 등)은 null을 돌려주고 modifier가
+    /// 표에 없는 Option · Shift 조합(Option+b 등)은 null을 돌려주고 modifier가
     /// 없었던 것처럼 흘러간다. Ctrl이 마스크 대상이 아닌 문자를 다루는
-    /// 방식(Ctrl+1 → '1')과 같은 규칙이다.
+    /// 방식(Ctrl+1 → '1')과 같은 규칙이다. 표에 없는 Cmd 조합은 WY-M0부터
+    /// 흘러가지 않고 삼킨다(아래 Meta 갈래).
     ///
     /// Meta를 먼저 보는 것은 둘 다 눌렸을 때 Cmd가 이긴다는 뜻이고,
     /// 임의의 선택이지만 결정적이어야 해서 여기 한 곳에서만 정한다.
     fn chord(self: *State, code: u16) ?Action {
         if (self.metaed()) {
-            // 전체 화면(FU-M0, `Cmd+Ctrl+F`). Shift · Option처럼 갈래 하나를 두지 않고 이 한
-            // 조합만 가로챈다 — 갈래를 두면 표에 없는 `Cmd+Ctrl` 조합이 null이 되어, 지금
-            // Ctrl을 무시하고 Cmd 표로 가는 `Cmd+Ctrl+←`(0x01) 같은 것이 바뀐다. 나머지는 그대로다.
-            if (self.ctrled() and code == c.KEY_F) return .{ .pane = .fullscreen_toggle };
-            // Meta 분기 안에서 Shift를 한 번 더 보는 자리는 이 switch
-            // 하나뿐이어야 한다(CM design 위험 2 · WP design 결정 4).
-            // 예외를 if로 하나씩 늘리지 않고 switch 하나에 나란히 적는다 —
-            // 셋째가 오면 여기 한 줄이다. 둘 다 iTerm2의 키를 고른 대가다.
+            // 패널 명령(WP-M1)은 바이트가 아니라 동작이다. copy mode 안에서는 여기 안 닿는다 — copy 분기가
+            // chord()보다 앞이라 copy 표가 삼킨다(결정 4, `input_test` 검사 61).
+            if (self.tableChord(code)) |p| return .{ .pane = p };
+            // 표 밖의 Cmd 조합은 삼킨다(WY design 결정 11, 요구사항 결정 3 — "Cmd는 PTY에 가지 않는다"). WY 전에는
+            // null을 돌려줘 Cmd가 없었던 것처럼 흘러갔다 — `Cmd+C`가 `c`를, `Cmd+Shift+PageUp`이 맨 PageUp을 쳤다.
+            // 예외는 셸만의 뜻 넷이다: copy mode 진입(`Cmd+Shift+C`)과 줄 편집 바이트 셋(`Cmd+←` · `→` · `Backspace`).
+            // `Cmd+V`는 이 함수보다 앞(1.35번 단계)에서 끝났다.
             //
-            // 표에 없는 Cmd+Shift 조합은 null이다. 아래 Shift 없는 표로
-            // 떨어지지 않는다 — 떨어지면 Cmd+Shift+W가 Cmd+W(패널 닫기)가
-            // 되는 식으로 Shift가 조용히 무시된다. 대가가 하나 있다: WP 전에는
-            // Cmd+Shift+←·→·Backspace가 Shift를 무시하고 0x01·0x05·0x15가
-            // 됐는데, 이제 null이라 맨 ←·→·Backspace로 나간다(WP-M1).
-            if (self.shifted()) return switch (code) {
+            // 내력: Cmd+Shift · Cmd+Option의 ←·→·Backspace는 WP-M1 · M3 전에 Shift · Option을 무시하고
+            // 0x01·0x05·0x15였고, 그 뒤 WY-M0 전까지는 맨 ←·→·Backspace로 나갔다. 이제 아무것도 안 나간다.
+            if (self.shifted()) {
                 // copy mode 진입(CM-M0). 모드를 여기서 바로 세우고 나가는
                 // 이유는, 이 뒤에 오는 키들이 handleKey 앞쪽의 copy 분기로
                 // 빠져야 하기 때문이다.
-                c.KEY_C => blk: {
+                if (code == c.KEY_C) {
                     self.mode = .copy;
-                    break :blk .{ .copy = .enter };
-                },
-                c.KEY_D => .{ .pane = .split_below },
-                else => null,
-            };
-            // Cmd+Option(WP-M3, design 위험 6이 예고한 자리). Shift와 같은
-            // 규칙이다 — 표에 없는 조합은 null이고 아래 Option 없는 표로
-            // 떨어지지 않는다. 떨어지면 Cmd+Option+D가 분할이 된다. M3 전에는
-            // Cmd+Option+←·→·Backspace가 Option을 무시하고 0x01·0x05·0x15였다.
-            if (self.alted()) return switch (code) {
-                c.KEY_LEFT => .{ .pane = .focus_left },
-                c.KEY_RIGHT => .{ .pane = .focus_right },
-                c.KEY_UP => .{ .pane = .focus_up },
-                c.KEY_DOWN => .{ .pane = .focus_down },
-                else => null,
-            };
+                    return .{ .copy = .enter };
+                }
+                return nothing;
+            }
+            if (self.alted()) return nothing;
             // Cmd 계열은 제어 문자 한 바이트다. 0x01이 beginning-of-line인
             // 이유는 그것이 readline의 기본 바인딩이기 때문이지 Cmd와 A
             // 사이에 무슨 관계가 있어서가 아니다.
-            //
-            // 패널 명령 넷(WP-M1)은 바이트가 아니라 동작이다. copy mode
-            // 안에서는 이 줄에 안 닿는다 — copy 분기가 chord()보다 앞이라
-            // copy 표가 삼킨다(결정 4, `input_test` 검사 61).
             return switch (code) {
-                c.KEY_D => .{ .pane = .split_right },
-                c.KEY_W => .{ .pane = .close },
-                c.KEY_RIGHTBRACE => .{ .pane = .focus_next },
-                c.KEY_LEFTBRACE => .{ .pane = .focus_prev },
-                c.KEY_R => .{ .pane = .width_cycle },
-                // 워크스페이스(WP-M2). 숫자는 물리 키 자리다 — evdev의
-                // `KEY_1`(2)~`KEY_9`(10)이고 자판(드보락)과 무관하다. `KEY_0`은
-                // 표에 없다: 번호가 1부터 아홉이다.
-                c.KEY_T => .{ .pane = .new_workspace },
-                c.KEY_1 => .{ .pane = .workspace_1 },
-                c.KEY_2 => .{ .pane = .workspace_2 },
-                c.KEY_3 => .{ .pane = .workspace_3 },
-                c.KEY_4 => .{ .pane = .workspace_4 },
-                c.KEY_5 => .{ .pane = .workspace_5 },
-                c.KEY_6 => .{ .pane = .workspace_6 },
-                c.KEY_7 => .{ .pane = .workspace_7 },
-                c.KEY_8 => .{ .pane = .workspace_8 },
-                c.KEY_9 => .{ .pane = .workspace_9 },
                 c.KEY_LEFT => .{ .bytes = self.one(0x01) }, // beginning-of-line
                 c.KEY_RIGHT => .{ .bytes = self.one(0x05) }, // end-of-line
                 // 0x15는 bash에서 커서 앞까지, zsh에서는 줄 전체를 지운다.
@@ -1355,7 +1418,7 @@ pub const State = struct {
                 // 있는 시스템에서 이 어긋남은 A안을 고른 대가이고, 감추지
                 // 않고 여기 적어둔다(design doc 결정 8).
                 c.KEY_BACKSPACE => .{ .bytes = self.one(0x15) },
-                else => null,
+                else => nothing,
             };
         }
         if (self.alted()) {
@@ -1370,9 +1433,10 @@ pub const State = struct {
         // Shift 계열 — 스크롤(TR design 결정 12). 바이트가 아니라 동작이다.
         //
         // Cmd·Option보다 뒤에 있는 것에 뜻이 있다. 위 두 분기는 조합이
-        // 표에 없어도 null을 돌려주며 chord 전체를 끝내므로, Cmd+Shift+PageUp은
-        // 스크롤하지 않고 맨 PageUp이 된다. 임의의 선택이지만 결정적이고,
-        // Cmd는 project_copy_mode가 예약한 자리라 여기서 뜻을 더하지 않는다.
+        // 표에 없어도 chord 전체를 끝내므로, Cmd+Shift+PageUp은 스크롤하지 않고
+        // 삼켜지며(WY-M0 전에는 맨 PageUp) Option+Shift+PageUp은 맨 PageUp이 된다.
+        // 임의의 선택이지만 결정적이고, Cmd는 project_copy_mode가 예약한 자리라
+        // 여기서 뜻을 더하지 않는다.
         //
         // Shift+PageUp을 고른 이유는 xterm·리눅스 콘솔·tmux가 전부 쓰는
         // 형태라서다. Mac 노트북의 Fn+↑도 evdev에는 KEY_PAGEUP으로 도착하므로
@@ -1778,6 +1842,63 @@ pub const State = struct {
         }
         return .{ .bytes = self.one(ch) };
     }
+
+    /// app 워크스페이스가 앞일 때의 EV_KEY 하나(WY-M0, design 결정 11). `handleKey`의 짝이지만 번역하지 않는다 —
+    /// 키는 evdev 코드 그대로 클라이언트에 가고(R-KEY-3) 수정키 상태가 함께 간다.
+    ///
+    /// 하는 일은 넷이다.
+    /// 1. 맞바꿈(`swap_alt_meta`)과 수정키 비트 — `handleKey`와 같은 칸 · 같은 규칙이라, 셸로 돌아가도 쥔 수정키가
+    ///    맞다. 수정키 자체도 키로 보낸다(클라이언트의 xkb는 `modifiers`로 상태를 받지만 키 이벤트도 본다).
+    /// 2. CapsLock은 누를 때 잠금을 뒤집는다. 셸의 tap(한/영) · 뗄 때 뒤집기는 app에서 안 돈다 — 한/영 조합은
+    ///    M4(text-input) 전까지 app에서 안 돈다(결정 11). 잠금 값(`caps_lock`)은 하나라 셸과 app이 같은 것을 본다.
+    /// 3. Cmd가 쥐인 누름이 R-KEY-1 표에 있으면 compositor가 먹는다(`.pane`). `Cmd+W` · `Cmd+T`만 빼고 클라이언트로
+    ///    보낸다 — 요구사항 결정 3(R-KEY-1 표의 비고)이 둘 다 "app pane에서는 앱의 것"이라고 정했다(브라우저의 탭 닫기 ·
+    ///    새 탭). app 창에서 셸로 가는 길은 `Cmd+1`~`9`다. 표 밖의 Cmd 조합도 Super와 함께 간다.
+    /// 4. 자동 반복(2)은 안 보낸다 — Wayland에서 반복은 클라이언트가 `repeat_info`로 한다(R-KEY-2).
+    ///
+    /// 삼킨 누름의 뗌은 여기서 가리지 않는다(`.key`로 나간다). 어느 누름을 클라이언트에 보냈는지는 받는 쪽(서버)이
+    /// 들고 있고 보낸 적 없는 키의 뗌은 거기서 버린다 — 포커스가 들어오기 전에 누른 키의 뗌과 같은 길이다.
+    ///
+    /// 밝기 키는 셸과 같다(어디서 누르든 밝기, LP-M2). 한/영 tap · 받아쓰기 더블 탭은 이 배치 머리에서
+    /// `readKeysApp`이 버린다(`watchEscape`와 같은 까닭 — app에서 반쯤 누른 것이 셸에서 판정되면 안 된다).
+    pub fn appKey(self: *State, raw_code: u16, value: i32, ctx: Context) AppAction {
+        const code = if (ctx.swap_alt_meta) swapAltMeta(raw_code) else raw_code;
+        const dev: usize = ctx.device;
+        std.debug.assert(dev < MAX_KEYBOARDS);
+        const mods = &self.mods[dev];
+        if (brightnessKey(code, ctx)) |dir| return if (value != 0) .{ .brightness = dir } else .none;
+        const down = value != 0;
+        switch (code) {
+            c.KEY_LEFTSHIFT => mods.shift_left = down,
+            c.KEY_RIGHTSHIFT => mods.shift_right = down,
+            c.KEY_LEFTCTRL => mods.ctrl_left = down,
+            c.KEY_RIGHTCTRL => mods.ctrl_right = down,
+            c.KEY_LEFTALT => mods.alt_left = down,
+            c.KEY_RIGHTALT => mods.alt_right = down,
+            c.KEY_LEFTMETA => mods.meta_left = down,
+            c.KEY_RIGHTMETA => mods.meta_right = down,
+            c.KEY_CAPSLOCK => if (value == 1) {
+                self.caps_lock = !self.caps_lock;
+            },
+            else => {},
+        }
+        if (value == 2) return .none;
+        if (value == 1 and self.metaed()) {
+            if (self.tableChord(code)) |p| if (p != .close and p != .new_workspace) return .{ .pane = p };
+        }
+        return .{ .key = .{ .code = code, .pressed = down, .mods = self.appMods() } };
+    }
+
+    /// 지금 클라이언트가 볼 수정키(`AppMods`). 칸들의 OR다(`anyMods`).
+    pub fn appMods(self: State) AppMods {
+        return .{
+            .shift = self.shifted(),
+            .caps = self.caps_lock,
+            .ctrl = self.ctrled(),
+            .alt = self.alted(),
+            .super = self.metaed(),
+        };
+    }
 };
 
 /// evdev 이벤트의 시각을 마이크로초 하나로 합친다(HI design 조사 5).
@@ -2002,6 +2123,55 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
         .dictates = self.dictates[0..dictated],
         .brightness = bright,
         .redraw = redraw,
+    };
+}
+
+/// app 워크스페이스가 앞일 때의 읽기(WY-M0, design 결정 11). `readKeys`의 짝이고 키 하나는 `State.appKey`가
+/// 정한다. 클라이언트로 갈 키와 compositor가 먹을 명령을 따로 순서대로 모은다.
+///
+/// tap(한/영)과 받아쓰기의 더블 탭은 배치마다 버린다(`watchEscape`와 같다). app에서 한/영은 안 돈다(결정 11) —
+/// app에서 누른 왼쪽 Ctrl이 셸에서 뗀 것으로 판정되면 셸에서 한/영이 저절로 뒤집힌다.
+pub fn readKeysApp(self: *State, fd: c_int, ctx: Context) AppKeys {
+    const ev_size = @sizeOf(c.struct_input_event);
+    var raw: [ev_size * 64]u8 = undefined;
+
+    const n = read(fd, &raw, raw.len);
+    if (n <= 0) return .{
+        .keys = self.app_keys[0..0],
+        .panes = self.panes[0..0],
+        .gone = n == 0 or switch (std.c.errno(n)) {
+            .AGAIN, .INTR => false,
+            else => true,
+        },
+    };
+
+    self.taps = @splat(.{});
+    self.dictate_tap.reset();
+    const count = @as(usize, @intCast(n)) / ev_size;
+    var keyed: usize = 0;
+    var paned: usize = 0;
+    var bright: i32 = 0;
+    var i: usize = 0;
+    while (i < count) : (i += 1) {
+        const ev: *align(1) const c.struct_input_event = @ptrCast(&raw[i * ev_size]);
+        if (ev.type != c.EV_KEY or ev.code >= c.BTN_MISC) continue;
+        switch (self.appKey(ev.code, ev.value, ctx)) {
+            .key => |k| if (keyed < self.app_keys.len) {
+                self.app_keys[keyed] = k;
+                keyed += 1;
+            },
+            .pane => |p| if (paned < self.panes.len) {
+                self.panes[paned] = p;
+                paned += 1;
+            },
+            .brightness => |dir| bright += if (dir == .up) 1 else -1,
+            .none => {},
+        }
+    }
+    return .{
+        .keys = self.app_keys[0..keyed],
+        .panes = self.panes[0..paned],
+        .brightness = bright,
     };
 }
 

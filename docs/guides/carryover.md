@@ -199,6 +199,7 @@ BT(2026-11-02)가 남긴 것.
       셋 다 동시 레인 안이다. 이 게이트는 lanes 1,462초로 지금까지 가장 길었다(lane-0의 devtools가 716초).
       다섯 번째(SW-M1 루트 게이트, 2026-11-18, 다시 lane 20): 같은 서명(`services.d/bt` 53행 `Segmentation fault`,
       `controllers 0 paired`). 체인만 다시 돌린 판은 초록(206초). 네 번째는 아래 pointer 항목에 잘못 들어간 PS-M0의 것이다.
+      여섯 번째(WY-M0 루트 게이트 둘째 판, 2026-11-19): `btvirt[94]`, 같은 서명. 체인만 다시 돌린 판은 초록(3분 22초).
 - [ ] `pointer`(PD-M4) 부팅 C의 말없는 끝(TP-M2 루트 게이트 2회차, 2026-11-06, lane 16). `(라)`의 `=== … ===` 줄 바로 뒤에
       `report_failure` 없이 체인이 끝났다. 시리얼 로그는 `(나)`가 친 `/config/pd/tp-replay`의 메아리와 그 뒤 몇 줄에서 멎었고 패닉
       줄은 없다. lane 출력에도 셸 오류가 없다. `set -e`가 꺼진 체인이 말없이 끝나는 길은 SIGPIPE다 — QEMU(`-no-reboot`)가 사라진 뒤

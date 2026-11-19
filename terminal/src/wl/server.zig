@@ -7,6 +7,10 @@
 //!
 //! 순수한 셈(배율 · 옮기기 · configure 순서)은 `wl_logic.zig`에 있다. 여기는 libwayland의 객체와 시스템 콜이다.
 //!
+//! 키(단계 C, 확정 10)는 포커스 창 하나에 간다 — App이 바퀴마다 `setFocus`로 앞 workspace의 창을 알리고, 서버가
+//! 그 클라이언트의 `wl_keyboard`에 `leave` · `enter`(빈 키 목록) · `key` · `modifiers`를 보낸다. `Cmd+Q`(확정 11)는
+//! `close` + `ping`과 2초 기한이다 — 기한은 `poll`의 시간 제한으로 건다(`timeout` · `expire`).
+//!
 //! 버퍼는 commit 때 복사하지 않는다(확정 8). 그릴 때 클라이언트의 shm에서 바로 읽고, 새 버퍼가 그 자리를 넘겨받을
 //! 때 옛 것에 `release`를 보낸다 — 복사하지 않으므로 화면에 있는 동안은 쥐고 있어야 다시 그릴 수 있다(workspace를
 //! 오가면 통째로 다시 그린다). weston의 pixman 렌더러와 같은 수명이다.
@@ -65,8 +69,17 @@ pub const Server = struct {
     next_id: u32 = 1,
     toplevels: std.ArrayList(*Toplevel) = .empty,
     events: std.ArrayList(Event) = .empty,
-    /// 모든 `wl_keyboard`(단계 C가 키를 보낸다).
+    /// 모든 `wl_keyboard`. 키는 포커스 창의 클라이언트 것에만 간다.
     keyboards: wl.list.Head(wl.Keyboard, null) = undefined,
+    /// 모든 `xdg_wm_base`(단계 C, ping을 보낼 곳). 창과 같은 클라이언트의 것을 고른다.
+    wm_bases: std.ArrayList(*xdg.WmBase) = .empty,
+    /// 키보드 포커스 창(단계 C). App이 `setFocus`로 고친다. 창이 사라지면 null이 된다.
+    focused: ?u32 = null,
+    /// 포커스 창에 누름을 보낸 키(R-KEY-2 · R-KEY-7). 포커스가 바뀌면 비운다.
+    held: logic.Held = .{},
+    /// 지금 수정키(App이 키마다 준다)와 포커스 클라이언트에 마지막으로 보낸 값. 다르면 `modifiers`를 보낸다.
+    mods: logic.Mask = .{ .depressed = 0, .locked = 0 },
+    sent_mods: ?logic.Mask = null,
     client_created: wl.Listener(*wl.Client) = .init(clientCreated),
 
     /// 소켓을 연다(design 결정 3, 확정 4). `/run/user/<uid>`(0700, 그 계정의 것)를 만들고 `XDG_RUNTIME_DIR`을 거기로
@@ -151,6 +164,99 @@ pub const Server = struct {
     fn find(self: *Server, id: u32) ?*Toplevel {
         for (self.toplevels.items) |t| if (t.id == id) return t;
         return null;
+    }
+
+    /// 키보드 포커스를 창 `want`로 옮긴다(확정 10, R-KEY-7). 옛 창의 클라이언트에 `leave`, 새 창의 클라이언트에
+    /// `enter`(눌린 키는 빈 목록)와 지금 수정키. 같은 창이면 아무것도 안 한다. App이 바퀴마다 부른다 — 앞 workspace가
+    /// app이면 그 창, 셸이면 null이다.
+    pub fn setFocus(self: *Server, want: ?u32, mods: logic.Mask) void {
+        self.mods = mods;
+        if (self.focused == want) return;
+        if (self.focused) |old| if (self.find(old)) |t| if (surfaceOf(t)) |sr| {
+            const serial = self.display.nextSerial();
+            var it = self.keyboards.iterator(.forward);
+            while (it.next()) |kb| if (kb.getClient() == sr.getClient()) kb.sendLeave(serial, sr);
+        };
+        self.focused = want;
+        self.held.clear();
+        self.sent_mods = null;
+        const t = self.find(want orelse return) orelse return;
+        const sr = surfaceOf(t) orelse return;
+        var it = self.keyboards.iterator(.forward);
+        while (it.next()) |kb| if (kb.getClient() == sr.getClient()) self.enterKeyboard(kb, sr);
+        self.sent_mods = mods;
+    }
+
+    /// 키보드 하나에 `enter`와 수정키. 눌린 키 목록은 비운다(R-KEY-7 — 포커스 전에 누른 키는 클라이언트의 것이 아니다).
+    fn enterKeyboard(self: *Server, kb: *wl.Keyboard, sr: *wl.Surface) void {
+        var empty: wl.Array = .{ .size = 0, .alloc = 0, .data = null };
+        kb.sendEnter(self.display.nextSerial(), sr, &empty);
+        kb.sendModifiers(self.display.nextSerial(), self.mods.depressed, 0, self.mods.locked, 0);
+    }
+
+    /// 포커스 창에 키 하나(확정 10). `code`는 evdev 코드다(클라이언트가 +8 한다, 확인 3). 뗌은 누름을 보낸 키만 간다
+    /// (`Held`). 키 뒤에 수정키가 바뀌었으면 `modifiers`를 보낸다 — 수정키를 누른 키 이벤트 다음에 상태가 오는 것이
+    /// weston과 같은 순서다. 포커스 창이 없으면 아무것도 안 한다.
+    pub fn key(self: *Server, code: u16, pressed: bool, mods: logic.Mask, time_ms: u32) void {
+        self.mods = mods;
+        const id = self.focused orelse return;
+        const t = self.find(id) orelse return;
+        const sr = surfaceOf(t) orelse return;
+        const send = if (pressed) self.held.press(code) else self.held.release(code);
+        const mods_changed = if (self.sent_mods) |m| !std.meta.eql(m, mods) else true;
+        if (!send and !mods_changed) return;
+        var it = self.keyboards.iterator(.forward);
+        if (send) {
+            const serial = self.display.nextSerial();
+            const state: wl.Keyboard.KeyState = if (pressed) .pressed else .released;
+            while (it.next()) |kb| if (kb.getClient() == sr.getClient()) kb.sendKey(serial, time_ms, code, state);
+            logline.print("terminal: wl> key code={d} state={d} to={d}\n", .{ code, @intFromBool(pressed), id });
+        }
+        if (mods_changed) {
+            const serial = self.display.nextSerial();
+            it = self.keyboards.iterator(.forward);
+            while (it.next()) |kb| if (kb.getClient() == sr.getClient())
+                kb.sendModifiers(serial, mods.depressed, 0, mods.locked, 0);
+            self.sent_mods = mods;
+        }
+    }
+
+    /// `Cmd+Q`(확정 11, design 결정 12). 창 `id`에 `xdg_toplevel.close`, 그 클라이언트의 `xdg_wm_base`에 `ping`, 그리고
+    /// 2초 기한. pong이 오거나 클라이언트가 끝나면 기한이 사라진다(`wmBaseRequest`의 pong · 창의 destroy). 기한이 이미
+    /// 걸려 있으면 close만 다시 보낸다 — 거듭 눌러도 기한이 밀리지 않는다.
+    pub fn close(self: *Server, id: u32, now_ms: i64) void {
+        const t = self.find(id) orelse return;
+        t.resource.sendClose();
+        logline.print("terminal: wl> close id={d}\n", .{id});
+        const client = t.resource.getClient();
+        const serial = self.display.nextSerial();
+        if (!t.deadline.arm(now_ms, serial)) return;
+        t.pid = client.getCredentials().pid;
+        for (self.wm_bases.items) |wm| if (wm.getClient() == client) {
+            wm.sendPing(serial);
+            break;
+        };
+        logline.print("terminal: wl> ping id={d}\n", .{id});
+    }
+
+    /// `poll`에 넘길 밀리초 — 가장 이른 `Cmd+Q` 기한까지. 없으면 -1.
+    pub fn timeout(self: *const Server, now_ms: i64) i32 {
+        var best: i32 = -1;
+        for (self.toplevels.items) |t| {
+            const ms = t.deadline.timeout(now_ms);
+            if (ms >= 0 and (best < 0 or ms < best)) best = ms;
+        }
+        return best;
+    }
+
+    /// 기한이 지난 창의 클라이언트에 SIGKILL(design 결정 12). 끝은 libwayland가 소켓이 닫힌 것으로 알고 클라이언트를
+    /// 지운다 — 그 길에 `wl> gone` 줄과 창의 `gone` 일이 나온다(다음 `dispatch`).
+    pub fn expire(self: *Server, now_ms: i64) void {
+        for (self.toplevels.items) |t| {
+            if (!t.deadline.expired(now_ms)) continue;
+            logline.print("terminal: wl> kill pid={d}\n", .{t.pid});
+            if (t.pid > 0) _ = linux.kill(t.pid, .KILL);
+        }
     }
 
     /// workspace가 아홉이라 받을 자리가 없다(확정 12) — close를 보낸다.
@@ -445,6 +551,10 @@ fn seatRequest(seat: *wl.Seat, req: wl.Seat.Request, srv: *Server) void {
             srv.keyboards.append(kb);
             kb.sendKeymap(.xkb_v1, srv.keymap_fd, srv.keymap_size);
             if (seat.getVersion() >= 4) kb.sendRepeatInfo(REPEAT_RATE, REPEAT_DELAY);
+            // 포커스 창의 클라이언트가 키보드를 나중에 얻었다(창을 만든 뒤 seat의 capabilities를 받는 순서가 흔하다).
+            // 이 키보드에도 `enter`를 보낸다 — 안 보내면 다음 포커스 변경까지 키를 못 받는다.
+            if (srv.focused) |id| if (srv.find(id)) |t| if (surfaceOf(t)) |sr| if (sr.getClient() == client)
+                srv.enterKeyboard(kb, sr);
         },
         // 포인터 · 터치는 아직 없다(capabilities에 없다). 그래도 묻는 클라이언트에게 아무 일도 안 하는 객체를 준다 —
         // 오류로 끊는 것보다 너그럽다. `wl_pointer`는 M2다.
@@ -487,7 +597,11 @@ fn touchRequest(t: *wl.Touch, req: wl.Touch.Request, _: ?*anyopaque) void {
 
 fn bindWmBase(client: *wl.Client, srv: *Server, version: u32, id: u32) void {
     const wm = xdg.WmBase.create(client, version, id) catch return client.postNoMemory();
-    wm.setHandler(*Server, wmBaseRequest, null, srv);
+    srv.wm_bases.append(srv.allocator, wm) catch {
+        wm.destroy();
+        return client.postNoMemory();
+    };
+    wm.setHandler(*Server, wmBaseRequest, wmBaseDestroyed, srv);
 }
 
 fn wmBaseRequest(wm: *xdg.WmBase, req: xdg.WmBase.Request, srv: *Server) void {
@@ -510,9 +624,26 @@ fn wmBaseRequest(wm: *xdg.WmBase, req: xdg.WmBase.Request, srv: *Server) void {
             s.role = xs;
             res.setHandler(*XdgSurface, xdgSurfaceRequest, xdgSurfaceDestroyed, xs);
         },
-        // 단계 C(확정 11)가 pong으로 응답 없는 클라이언트를 가린다.
-        .pong => {},
+        // `Cmd+Q`의 ping에 답했다(확정 11) — 살아 있는 클라이언트다. 그 serial을 기다리던 창의 기한을 버린다.
+        // close를 받고도 창을 안 닫는 것은 클라이언트의 선택이다(저장할지 묻는 창 등).
+        .pong => |p| for (srv.toplevels.items) |t| {
+            if (t.resource.getClient() == client) _ = t.deadline.pong(p.serial);
+        },
     }
+}
+
+fn wmBaseDestroyed(wm: *xdg.WmBase, srv: *Server) void {
+    for (srv.wm_bases.items, 0..) |x, i| if (x == wm) {
+        _ = srv.wm_bases.swapRemove(i);
+        break;
+    };
+}
+
+/// 창의 `wl_surface`. xdg_surface나 surface가 먼저 사라졌으면 null이다.
+fn surfaceOf(t: *Toplevel) ?*wl.Surface {
+    const xs = t.xdg orelse return null;
+    const s = xs.surface orelse return null;
+    return s.resource;
 }
 
 /// popup의 자리 셈은 M5(R-WY-14)다. 받기만 한다.
@@ -541,6 +672,9 @@ const Toplevel = struct {
     xdg: ?*XdgSurface,
     /// 마지막 `wl> commit` 줄의 값.
     last: ?Sig = null,
+    /// `Cmd+Q`의 2초 기한(단계 C)과 그때 잰 클라이언트의 pid.
+    deadline: logic.Deadline = .{},
+    pid: i32 = 0,
 
     const Sig = struct { w: i32, h: i32, fit: logic.Fit };
 };
@@ -623,6 +757,12 @@ fn toplevelRequest(res: *xdg.Toplevel, req: xdg.Toplevel.Request, _: *Toplevel) 
 fn toplevelDestroyed(_: *xdg.Toplevel, t: *Toplevel) void {
     const srv = t.srv;
     if (t.xdg) |xs| xs.toplevel = null;
+    // 포커스 창이 사라졌다. surface가 같이 사라지므로 `leave`는 없다 — 클라이언트가 지운 것이다.
+    if (srv.focused == t.id) {
+        srv.focused = null;
+        srv.held.clear();
+        srv.sent_mods = null;
+    }
     for (srv.toplevels.items, 0..) |x, i| if (x == t) {
         _ = srv.toplevels.swapRemove(i);
         break;

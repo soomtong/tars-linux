@@ -78,5 +78,57 @@ pub fn main() !void {
     try expectStep(.mapped, true, true, .{ .action = .update, .next = .mapped });
     try expectStep(.mapped, true, false, .{ .action = .update, .next = .mapped });
     std.debug.print("wl_logic_test: configure 8 steps\n", .{});
+
+    // 수정키 비트(단계 C) — 확인 3의 값. 잠금은 locked 쪽이다.
+    {
+        const none = logic.modifierMask(.{});
+        if (none.depressed != 0 or none.locked != 0) return error.WrongMask;
+        const all = logic.modifierMask(.{ .shift = true, .caps = true, .ctrl = true, .alt = true, .super = true });
+        if (all.depressed != 0x1 | 0x4 | 0x8 | 0x40 or all.locked != 0x2) {
+            std.debug.print("FAIL: mask all = {any}\n", .{all});
+            return error.WrongMask;
+        }
+        // Cmd 하나 = Super 0x40.
+        if (logic.modifierMask(.{ .super = true }).depressed != 0x40) return error.WrongMask;
+        if (logic.modifierMask(.{ .caps = true }).depressed != 0) return error.WrongMask;
+    }
+    std.debug.print("wl_logic_test: modifiers 4 cases\n", .{});
+
+    // 보낸 누름 — 누름을 보낸 키만 뗌이 간다(R-KEY-2 · R-KEY-7).
+    {
+        var h: logic.Held = .{};
+        // 포커스 전에 누른 키(30)의 뗌은 안 간다.
+        if (h.release(30)) return error.WrongHeld;
+        if (!h.press(30) or !h.release(30)) return error.WrongHeld;
+        // 같은 뗌이 두 번 오면 둘째는 안 간다.
+        if (h.release(30)) return error.WrongHeld;
+        // 비우면(포커스가 바뀌면) 쥐었던 키의 뗌도 안 간다.
+        _ = h.press(125);
+        h.clear();
+        if (h.release(125)) return error.WrongHeld;
+        // 범위 밖은 보내지 않는다.
+        if (h.press(0x300) or h.release(0x300)) return error.WrongHeld;
+        if (!h.press(0x2ff) or !h.release(0x2ff)) return error.WrongHeld;
+    }
+    std.debug.print("wl_logic_test: held 6 cases\n", .{});
+
+    // Cmd+Q의 기한 — 2초, pong이면 버린다, 거듭 눌러도 안 밀린다.
+    {
+        var d: logic.Deadline = .{};
+        if (d.timeout(0) != -1 or d.expired(1_000_000)) return error.WrongDeadline;
+        if (!d.arm(1000, 7)) return error.WrongDeadline;
+        if (d.timeout(1000) != 2000 or d.timeout(2500) != 500 or d.timeout(9000) != 0) return error.WrongDeadline;
+        // 둘째 Cmd+Q는 기한을 밀지 않는다.
+        if (d.arm(2000, 8) or d.serial != 7) return error.WrongDeadline;
+        if (d.expired(2999)) return error.WrongDeadline;
+        if (!d.expired(3000)) return error.WrongDeadline;
+        // 한 번만 참이다(SIGKILL을 두 번 안 보낸다).
+        if (d.expired(3001) or d.timeout(3001) != -1) return error.WrongDeadline;
+        // pong — 다른 serial은 안 버리고, 기다리던 serial은 버린다.
+        _ = d.arm(5000, 9);
+        if (d.pong(8)) return error.WrongDeadline;
+        if (!d.pong(9) or d.expired(10_000)) return error.WrongDeadline;
+    }
+    std.debug.print("wl_logic_test: deadline 9 cases\n", .{});
     std.debug.print("wl_logic_test: all checks passed\n", .{});
 }

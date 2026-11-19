@@ -1739,6 +1739,11 @@ const AppWs = struct {
     toplevel: u32,
 };
 
+/// 클라이언트가 볼 수정키를 `wl_keyboard.modifiers`의 비트로(WY-M0, design 결정 6). 비트는 `wl_logic`이 정한다.
+fn wlMask(m: input.AppMods) wl_logic.Mask {
+    return wl_logic.modifierMask(.{ .shift = m.shift, .caps = m.caps, .ctrl = m.ctrl, .alt = m.alt, .super = m.super });
+}
+
 /// 워크스페이스 수의 상한. Cmd+1~9가 번호라 아홉이다(WP design "모델" 절).
 const MAX_WORKSPACES = 9;
 
@@ -4691,7 +4696,10 @@ const App = struct {
     /// 워크스페이스를 뒤 키보드의 키가 본다(KH design 결정 5). 장치가 사라졌으면
     /// `.gone`이고 아무것도 안 한다 — 닫는 것은 부르는 쪽이다.
     fn readKeyboard(self: *App, fd: c_int, slot: usize) !KeyboardRead {
-        const ws = self.workspaces[self.current].?.asShell() orelse return self.readKeyboardApp(fd, slot);
+        const ws = switch (self.workspaces[self.current].?) {
+            .shell => |*sh| sh,
+            .app => |a| return self.readKeyboardApp(fd, slot, a.toplevel),
+        };
         const focus = &ws.panes[ws.focus].?;
 
         // DECCKM은 셸이 언제든 켜고 끌 수 있으므로(프롬프트를 그릴 때
@@ -4763,20 +4771,41 @@ const App = struct {
         return .open;
     }
 
-    /// 바퀴 2 — 앞이 app 워크스페이스일 때(WY-M0 단계 B). 키를 읽어 버리고, 워크스페이스를 오가는 명령
-    /// (`Cmd+1`~`9` · `Cmd+T`)과 밝기만 한다 — 그래야 app 창에서 셸로 돌아온다. 셸의 바이트 · 스크롤 · copy · 조합 ·
-    /// 받아쓰기는 갈 곳이 없다. 클라이언트의 `wl_keyboard`로 보내는 것은 단계 C(plan 확정 10)다.
-    fn readKeyboardApp(self: *App, fd: c_int, slot: usize) !KeyboardRead {
+    /// 바퀴 2 — 앞이 app 워크스페이스일 때(WY-M0, design 결정 11, plan 확정 10). 키는 번역하지 않고 창 `id`의
+    /// 클라이언트에 evdev 코드와 수정키 상태로 보낸다(`input.readKeysApp`). R-KEY-1 표의 chord(워크스페이스 · `Cmd+T` ·
+    /// `Cmd+Q` …)는 compositor가 먹는다 — 키를 다 보낸 뒤 `runPanes`가 한다. 그래서 `Cmd+1`로 셸에 갈 때 그 배치의
+    /// 키가 먼저 클라이언트에 닿고 `leave`가 뒤에 간다(바퀴 끝의 `syncFocus`). 셸의 바이트 · 스크롤 · copy · 조합 ·
+    /// 받아쓰기는 여기 없다.
+    fn readKeyboardApp(self: *App, fd: c_int, slot: usize, id: u32) !KeyboardRead {
         const ctx = input.Context{
             .swap_alt_meta = self.keyboard_devs[slot].?.swap_alt_meta,
-            .dictating = dictation.escCancels(self.dict.phase),
             .device = @intCast(slot),
         };
-        const keys = input.readKeys(&self.key_state, fd, &self.key_buf, ctx);
+        const keys = input.readKeysApp(&self.key_state, fd, ctx);
         if (keys.gone) return .gone;
+        if (self.wl) |srv| {
+            // 이 배치 전에 앞이 바뀌었을 수 있다(같은 바퀴의 앞 키보드). 키보다 enter가 먼저다.
+            srv.setFocus(id, wlMask(self.key_state.appMods()));
+            const now: u32 = @truncate(@as(u64, @intCast(self.nowMs())));
+            for (keys.keys) |k| srv.key(k.code, k.pressed, wlMask(k.mods), now);
+        }
         try self.runPanes(keys.panes);
         if (keys.brightness != 0) stepBacklight(self.io, &self.backlight_state, keys.brightness);
         return .open;
+    }
+
+    /// 키보드 포커스를 앞 워크스페이스에 맞춘다(WY-M0, plan 확정 10). app이면 그 창, 셸이면 없음 — 서버가 옛 창에
+    /// `leave`, 새 창에 `enter`를 보낸다. 앞이 바뀌는 자리(키 · 새 창 · 사라진 창)가 모두 이 바퀴의 `readWayland` 앞이라
+    /// 바퀴에 한 번, 그 뒤에 부른다.
+    fn syncFocus(self: *App) void {
+        const srv = self.wl orelse return;
+        // 워크스페이스가 하나도 안 남았으면(끝나는 바퀴) 앞이 없다.
+        const front = self.workspaces[self.current] orelse return;
+        const want: ?u32 = switch (front) {
+            .app => |a| a.toplevel,
+            .shell => null,
+        };
+        srv.setFocus(want, wlMask(self.key_state.appMods()));
     }
 
     /// 바퀴 2의 머리. 키보드 칸을 순서대로 본다(KH design 결정 4 · 5).
@@ -5077,6 +5106,15 @@ const App = struct {
                 if (ran) self.needs_redraw = true;
                 continue;
             }
+            // `Cmd+Q`(WY design 결정 12). app 창이면 close + ping + 2초 기한이고, 셸이면 삼킨다 — 셸에 끝낼 앱이 없다.
+            // 셸 패널의 `Cmd+W`와 달리 다시 그릴 것이 없다(창은 클라이언트가 지울 때 사라진다).
+            if (cmd == .close_app) {
+                switch (self.workspaces[self.current].?) {
+                    .app => |a| if (self.wl) |srv| srv.close(a.toplevel, self.nowMs()),
+                    .shell => {},
+                }
+                continue;
+            }
             const ws = self.workspaces[self.current].?.asShell() orelse continue;
             switch (cmd) {
                 .split_right, .split_below => {
@@ -5132,7 +5170,7 @@ const App = struct {
                     // 이웃은 화면 밖 column일 수 있다(SW-M2 plan 확정 4).
                     try self.revealFocus(ws);
                 },
-                .new_workspace, .workspace_1, .workspace_2, .workspace_3, .workspace_4, .workspace_5, .workspace_6, .workspace_7, .workspace_8, .workspace_9 => unreachable,
+                .new_workspace, .workspace_1, .workspace_2, .workspace_3, .workspace_4, .workspace_5, .workspace_6, .workspace_7, .workspace_8, .workspace_9, .close_app => unreachable,
                 // 전체 화면(FU-M0, `Cmd+Ctrl+F`). strip은 그대로이고 패널의 사각형만 커지거나 준다. 앞의 워크스페이스
                 // 하나의 값이다(WY design 결정 8).
                 .fullscreen_toggle => try self.setFullscreen(self.current, !ws.fullscreen),
@@ -5903,7 +5941,11 @@ const App = struct {
     /// commit하면(tars-wl-test가 그렇다) 하한이 없을 때 terminal이 CPU 하나를 다 쓴다.
     fn readWayland(self: *App) enum { keep, quit } {
         const srv = self.wl orelse return .keep;
+        // `Cmd+Q`의 기한(확정 11)이 지났으면 SIGKILL. 끝은 다음 `dispatch`가 소켓이 닫힌 것으로 안다.
+        srv.expire(self.nowMs());
         if (self.fds[self.pty_end + 5].revents != 0) srv.dispatch();
+        // 앞 워크스페이스가 이 바퀴에 바뀌었으면(키 · 새 창 · 사라진 창) 키보드 포커스를 옮긴다.
+        defer self.syncFocus();
         for (srv.takeEvents()) |e| switch (e) {
             .toplevel => |id| {
                 const n = workspaceCount(&self.workspaces);
@@ -6120,10 +6162,12 @@ const App = struct {
         // 미룬 프레임이 있으면 그 하한까지도 기다린다(RS-M2). 둘 중 먼저 오는 쪽이다.
         // 여기서 막히는 동안 CPU가 출력을 만드는 자식에게 넘어가 PTY 버퍼가 다시 찬다.
         // 양보한 화면을 못 되찾고 기다리는 동안이면 1초마다도 깬다(DY design 결정 6).
-        const ready = c.poll(&self.fds, @intCast(self.nfds), pacing.soonest(pacing.soonest(
+        // `Cmd+Q`의 2초 기한(WY-M0 확정 11)도 같은 방법이다 — 키도 클라이언트도 조용해도 그 시각에 깬다.
+        const wl_timeout: c_int = if (self.wl) |w| w.timeout(poll_now) else -1;
+        const ready = c.poll(&self.fds, @intCast(self.nfds), pacing.soonest(pacing.soonest(pacing.soonest(
             battery.pollTimeout(poll_now, self.battery_state.due),
             pacing.wait(poll_now, self.last_frame_ms, self.output_pending),
-        ), self.yield_state.timeout(poll_now)));
+        ), self.yield_state.timeout(poll_now)), wl_timeout));
         if (ready < 0) return true; // EINTR 등은 그냥 다시 기다린다
 
         // 키보드가 먼저다. 그 뒤 단계는 키보드가 바꾼 워크스페이스 · 포커스를 본다.

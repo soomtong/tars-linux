@@ -619,11 +619,17 @@ pub fn main() !void {
     try expect(&state, K.KEY_RIGHT, 1, "\x05"); // end-of-line
     try expect(&state, K.KEY_BACKSPACE, 1, "\x15"); // 줄 앞부분 삭제
 
-    // Cmd+Delete는 표에 없다 → 맨 Delete가 나간다.
-    try expect(&state, K.KEY_DELETE, 1, "\x1b[3~");
+    // Cmd+Delete는 표에 없다 → 아무것도 안 나간다. WY-M0 전에는 Cmd가 없었던 것처럼
+    // 맨 Delete가 나갔다. 표에 없는 Cmd 조합은 셸에서 삼킨다(WY design 결정 11, 요구사항
+    // 결정 3 — "Cmd는 PTY에 가지 않는다"가 문장 그대로 참이 된다).
+    try expect(&state, K.KEY_DELETE, 1, "");
     // Cmd+C는 여전히 일부러 비워둔 자리다(design doc 비목표, CM design
-    // 결정 4). 모드 밖에서는 무엇을 복사할지가 정해져 있지 않다.
-    try expect(&state, K.KEY_C, 1, "c");
+    // 결정 4). 모드 밖에서는 무엇을 복사할지가 정해져 있지 않다. WY-M0 전에는
+    // `c`를 쳤다 — macOS 손버릇으로 누른 Cmd+C가 셸에 글자를 남겼다. 이제 삼킨다(같은 결정).
+    try expect(&state, K.KEY_C, 1, "");
+    // Cmd+Q는 R-KEY-1 표에 있다(WY design 결정 12) — app 창을 닫는 명령이고 셸에서는 `main.zig`가 삼킨다.
+    // 여기서는 바이트가 아니라 명령이 나오는 것을 본다.
+    try expectPane(&state, K.KEY_Q, .close_app);
     // Cmd+V는 CM-M2가 채웠다. 원래 이 자리에 "복사·붙여넣기는 그때 이 두
     // 줄이 바뀐다"고 적혀 있었는데, 바뀐 것은 둘 중 하나뿐이다 — 붙여넣기는
     // 모드 밖에서도 뜻이 있지만 복사는 그렇지 않기 때문이다.
@@ -745,13 +751,14 @@ pub fn main() !void {
 
     // ── Cmd가 Shift를 이긴다 ────────────────────────────────────────────
     //
-    // chord가 Meta를 먼저 보고, 조합이 표에 없으면 null로 chord 전체를
-    // 끝내기 때문이다. 그래서 Cmd+Shift+PageUp은 스크롤하지 않고 맨 PageUp이
-    // 된다. 임의의 선택이지만 결정적이어야 하고, Cmd는 project_copy_mode가
-    // 예약한 자리라 여기서 뜻을 더하지 않는다.
+    // chord가 Meta를 먼저 보고, 조합이 표에 없으면 chord 전체를
+    // 끝내기 때문이다. 그래서 Cmd+Shift+PageUp은 스크롤하지 않는다. 임의의 선택이지만
+    // 결정적이어야 하고, Cmd는 project_copy_mode가 예약한 자리라 여기서 뜻을 더하지 않는다.
+    // WY-M0 전에는 맨 PageUp(`ESC [ 5 ~`)이 나갔다. 이제 표에 없는 Cmd 조합이라 삼킨다
+    // (WY design 결정 11) — 아무것도 안 나간다.
     try expect(&state, K.KEY_LEFTMETA, 1, "");
     try expect(&state, K.KEY_LEFTSHIFT, 1, "");
-    try expect(&state, K.KEY_PAGEUP, 1, "\x1b[5~");
+    try expect(&state, K.KEY_PAGEUP, 1, "");
     try expect(&state, K.KEY_LEFTSHIFT, 0, "");
     try expect(&state, K.KEY_LEFTMETA, 0, "");
 
@@ -924,10 +931,11 @@ pub fn main() !void {
     try expect(&cm, K.KEY_H, 1, "h");
 
     // 검사 10. Cmd+C도 같은 일을 한다. 모드 밖에서는 Cmd+C가 표에 없어
-    // 그냥 'c'가 된다는 것도 함께 본다 — normal 모드의 Cmd+C를 비워 두는
-    // 것이 design 결정 4다.
+    // 아무것도 안 나간다는 것도 함께 본다 — normal 모드의 Cmd+C를 비워 두는
+    // 것이 design 결정 4다. WY-M0 전에는 그냥 'c'가 됐다. 이제 표에 없는 Cmd
+    // 조합은 셸에서 삼킨다(WY design 결정 11).
     try expect(&cm, K.KEY_LEFTMETA, 1, "");
-    try expect(&cm, K.KEY_C, 1, "c");
+    try expect(&cm, K.KEY_C, 1, "");
     try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
     try expectCopy(&cm, K.KEY_C, .enter);
     try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
@@ -1839,9 +1847,9 @@ pub fn main() !void {
         try expectPane(&ws, K.KEY_5, .workspace_5);
         try expectPane(&ws, K.KEY_9, .workspace_9);
         // 음성. `Cmd+0`은 표에 없다 — 워크스페이스는 아홉이고 번호가 1부터다.
-        // 표에 없는 Cmd 조합은 modifier가 없었던 것처럼 흘러가므로 `0`이
-        // 나간다(`Cmd+Delete`가 맨 Delete인 것과 같은 규칙).
-        try expect(&ws, K.KEY_0, 1, "0");
+        // 표에 없는 Cmd 조합은 셸에서 삼키므로 아무것도 안 나간다(`Cmd+Delete`와 같은 규칙,
+        // WY design 결정 11). WY-M0 전에는 modifier가 없었던 것처럼 `0`이 나갔다.
+        try expect(&ws, K.KEY_0, 1, "");
         try expect(&ws, K.KEY_LEFTMETA, 0, "");
         // 대조군. Meta를 떼면 `t`와 `1`은 글자다.
         try expect(&ws, K.KEY_T, 1, "t");
@@ -1875,8 +1883,9 @@ pub fn main() !void {
         try expectPane(&wf, K.KEY_UP, .focus_up);
         try expectPane(&wf, K.KEY_DOWN, .focus_down);
         // 음성. 표에 없는 Cmd+Option 조합은 Option 없는 Cmd 표로 안 떨어진다 —
-        // 떨어지면 `Cmd+Option+D`가 분할이다. modifier가 없었던 것처럼 `d`다.
-        try expect(&wf, K.KEY_D, 1, "d");
+        // 떨어지면 `Cmd+Option+D`가 분할이다. 표에 없는 Cmd 조합이라 삼킨다(WY design
+        // 결정 11). WY-M0 전에는 modifier가 없었던 것처럼 `d`가 나갔다.
+        try expect(&wf, K.KEY_D, 1, "");
         try expect(&wf, K.KEY_LEFTALT, 0, "");
         // 대조군. Option을 떼면 `Cmd+←`는 다시 beginning-of-line이다.
         try expect(&wf, K.KEY_LEFT, 1, "\x01");
@@ -2669,5 +2678,185 @@ pub fn main() !void {
     }
     std.debug.print("input_test: 양보 중의 수정키는 따라가고 tap · 한/영은 안 바뀐다 OK\n", .{});
 
+    // ── WY-M0: app 워크스페이스의 키(design 결정 11, plan 확정 10) ──────────
+    //
+    // 검사 90. 키는 번역 없이 evdev 코드 그대로 간다 — 수정키도 키로 가고, 키마다 그 뒤의 수정키 상태가 실린다.
+    // `Shift+a`의 `a`는 shift가 참인 채로 가야 한다(배치 끝의 상태 하나면 잃는다).
+    {
+        var ap: input.State = .{};
+        try expectAppKey(&ap, .{}, K.KEY_A, 1, K.KEY_A, true, .{});
+        try expectAppKey(&ap, .{}, K.KEY_A, 0, K.KEY_A, false, .{});
+        try expectAppKey(&ap, .{}, K.KEY_LEFTSHIFT, 1, K.KEY_LEFTSHIFT, true, .{ .shift = true });
+        try expectAppKey(&ap, .{}, K.KEY_A, 1, K.KEY_A, true, .{ .shift = true });
+        // 자동 반복(2)은 안 간다 — 반복은 클라이언트가 `repeat_info`로 한다(R-KEY-2).
+        if (ap.appKey(K.KEY_A, 2, .{}) != .none) return error.AppRepeatSent;
+        try expectAppKey(&ap, .{}, K.KEY_A, 0, K.KEY_A, false, .{ .shift = true });
+        try expectAppKey(&ap, .{}, K.KEY_LEFTSHIFT, 0, K.KEY_LEFTSHIFT, false, .{});
+        // Ctrl · Option은 바이트가 아니라 수정키 비트다(R-KEY-3) — `Ctrl+C`가 0x03이 아니라 46과 ctrl이다.
+        try expectAppKey(&ap, .{}, K.KEY_LEFTCTRL, 1, K.KEY_LEFTCTRL, true, .{ .ctrl = true });
+        try expectAppKey(&ap, .{}, K.KEY_C, 1, K.KEY_C, true, .{ .ctrl = true });
+        try expectAppKey(&ap, .{}, K.KEY_LEFTCTRL, 0, K.KEY_LEFTCTRL, false, .{});
+        try expectAppKey(&ap, .{}, K.KEY_RIGHTALT, 1, K.KEY_RIGHTALT, true, .{ .alt = true });
+        try expectAppKey(&ap, .{}, K.KEY_RIGHTALT, 0, K.KEY_RIGHTALT, false, .{});
+        // CapsLock은 누를 때 잠금을 뒤집는다(셸의 tap · 뗄 때 뒤집기는 app에서 안 돈다). 잠금은 셸과 같은 값이다.
+        try expectAppKey(&ap, .{}, K.KEY_CAPSLOCK, 1, K.KEY_CAPSLOCK, true, .{ .caps = true });
+        try expectAppKey(&ap, .{}, K.KEY_CAPSLOCK, 0, K.KEY_CAPSLOCK, false, .{ .caps = true });
+        if (!ap.caps_lock) return error.AppCapsNotLocked;
+        try expectAppKey(&ap, .{}, K.KEY_CAPSLOCK, 1, K.KEY_CAPSLOCK, true, .{});
+        try expectAppKey(&ap, .{}, K.KEY_CAPSLOCK, 0, K.KEY_CAPSLOCK, false, .{});
+        // 한글을 켜 둬도 글자는 키로 간다 — 한/영 조합은 M4 전까지 app에서 안 돈다(결정 11).
+        ap.hangul_on = true;
+        try expectAppKey(&ap, .{}, K.KEY_R, 1, K.KEY_R, true, .{});
+        if (ap.preedit() != null) return error.AppKeyComposed;
+    }
+    std.debug.print("input_test: app 워크스페이스의 키는 evdev 코드와 수정키로 간다 OK\n", .{});
+
+    // 검사 91. Cmd(Super)와 R-KEY-1 표. 표의 chord는 compositor가 먹고(`.pane`), `Cmd+W` · `Cmd+T`와 표 밖의 Cmd
+    // 조합은 Super와 함께 클라이언트로 간다(요구사항 결정 3). 셸 경로와 같은 표를 보는지 — 셸에서 명령이 되는 조합
+    // 전부가 app에서도 같은 명령인지(`Cmd+W` · `Cmd+T`만 빼고) — 를 함께 본다. 표가 두 벌이면 이 대조가 어긋난다.
+    {
+        var ap: input.State = .{};
+        try expectAppKey(&ap, .{}, K.KEY_LEFTMETA, 1, K.KEY_LEFTMETA, true, .{ .super = true });
+        try expectAppPane(&ap, K.KEY_1, .workspace_1);
+        try expectAppPane(&ap, K.KEY_9, .workspace_9);
+        try expectAppPane(&ap, K.KEY_Q, .close_app);
+        try expectAppPane(&ap, K.KEY_D, .split_right);
+        // 삼킨 누름의 뗌은 키로 나간다 — 거르는 것은 보낸 누름을 아는 서버다(`wl_logic.Held`).
+        try expectAppKey(&ap, .{}, K.KEY_Q, 0, K.KEY_Q, false, .{ .super = true });
+        // `Cmd+W` · `Cmd+T`는 app의 것이다(요구사항 결정 3 — 브라우저의 탭 닫기 · 새 탭).
+        try expectAppKey(&ap, .{}, K.KEY_W, 1, K.KEY_W, true, .{ .super = true });
+        try expectAppKey(&ap, .{}, K.KEY_T, 1, K.KEY_T, true, .{ .super = true });
+        // 표 밖의 Cmd 조합 — 셸에서는 삼키는 것들이 Super와 함께 간다.
+        try expectAppKey(&ap, .{}, K.KEY_C, 1, K.KEY_C, true, .{ .super = true });
+        try expectAppKey(&ap, .{}, K.KEY_V, 1, K.KEY_V, true, .{ .super = true });
+        try expectAppKey(&ap, .{}, K.KEY_LEFT, 1, K.KEY_LEFT, true, .{ .super = true });
+        // Cmd+Ctrl+F(전체 화면)는 표다. app 워크스페이스에서는 `main.zig`가 아무것도 안 한다(늘 chrome 없음).
+        try expectAppKey(&ap, .{}, K.KEY_LEFTCTRL, 1, K.KEY_LEFTCTRL, true, .{ .ctrl = true, .super = true });
+        try expectAppPane(&ap, K.KEY_F, .fullscreen_toggle);
+        try expectAppKey(&ap, .{}, K.KEY_LEFTCTRL, 0, K.KEY_LEFTCTRL, false, .{ .super = true });
+        try expectAppKey(&ap, .{}, K.KEY_LEFTMETA, 0, K.KEY_LEFTMETA, false, .{});
+        // Cmd를 떼면 숫자는 키다.
+        try expectAppKey(&ap, .{}, K.KEY_1, 1, K.KEY_1, true, .{});
+
+        // 대조 — 수정키 조합 여덟(Cmd에 Shift · Ctrl · Option을 더하고 빼고) × 키 코드 1..KEY_MAX에서, 셸 경로가
+        // 패널 명령을 내는 누름이면 app 경로도 같은 명령이어야 한다(`Cmd+W` · `Cmd+T`는 클라이언트의 키). 그리고 app 경로가
+        // 명령을 내면 셸 경로도 같은 명령이다.
+        const extras = [_][]const u16{
+            &.{},                                 &.{K.KEY_LEFTSHIFT},                 &.{K.KEY_LEFTCTRL},                                   &.{K.KEY_LEFTALT}, &.{ K.KEY_LEFTSHIFT, K.KEY_LEFTCTRL },
+            &.{ K.KEY_LEFTSHIFT, K.KEY_LEFTALT }, &.{ K.KEY_LEFTCTRL, K.KEY_LEFTALT }, &.{ K.KEY_LEFTSHIFT, K.KEY_LEFTCTRL, K.KEY_LEFTALT },
+        };
+        var compared: usize = 0;
+        for (extras) |ex| {
+            var code: u16 = 1;
+            while (code < input.c.KEY_MAX) : (code += 1) {
+                // 수정키 자체 · 밝기 키는 표의 키가 아니다.
+                switch (code) {
+                    K.KEY_LEFTSHIFT, K.KEY_RIGHTSHIFT, K.KEY_LEFTCTRL, K.KEY_RIGHTCTRL, K.KEY_LEFTALT, K.KEY_RIGHTALT, K.KEY_LEFTMETA, K.KEY_RIGHTMETA, K.KEY_CAPSLOCK, K.KEY_BRIGHTNESSDOWN, K.KEY_BRIGHTNESSUP, K.KEY_F1, K.KEY_F2 => continue,
+                    else => {},
+                }
+                var sh: input.State = .{};
+                var ak: input.State = .{};
+                _ = sh.handleKey(K.KEY_LEFTMETA, 1, 0, .{});
+                _ = ak.appKey(K.KEY_LEFTMETA, 1, .{});
+                for (ex) |m| {
+                    _ = sh.handleKey(m, 1, 0, .{});
+                    _ = ak.appKey(m, 1, .{});
+                }
+                const shell_pane: ?input.Pane = switch (sh.handleKey(code, 1, 0, .{})) {
+                    .pane => |p| p,
+                    else => null,
+                };
+                const app_pane: ?input.Pane = switch (ak.appKey(code, 1, .{})) {
+                    .pane => |p| p,
+                    else => null,
+                };
+                const want: ?input.Pane = if (shell_pane == .close or shell_pane == .new_workspace) null else shell_pane;
+                if (want != app_pane) {
+                    std.debug.print("FAIL: Cmd+{any}+code {d}: shell {any}, app {any}\n", .{ ex, code, shell_pane, app_pane });
+                    return error.AppTableDrift;
+                }
+                if (app_pane != null) compared += 1;
+            }
+        }
+        // 표의 명령은 열일곱 키(숫자 아홉 · D · W와 T 빼고 [ ] R Q · Shift+D · Ctrl+F · Option+화살표 넷)이고 수정키
+        // 조합마다 갈래가 다르다. 셈이 0이면 대조가 아무것도 안 본 것이다.
+        if (compared < 20) {
+            std.debug.print("FAIL: the table comparison saw only {d} commands\n", .{compared});
+            return error.AppTableEmpty;
+        }
+        std.debug.print("input_test: shell and app agree on {d} table chords\n", .{compared});
+    }
+    std.debug.print("input_test: app 워크스페이스에서 표의 chord만 compositor가 먹는다 OK\n", .{});
+
+    // 검사 92. 맞바꿈(`keyboard=pc`)도 app에서 같다 — PC 키보드의 Alt 자리(56)가 Cmd(125)로 가고 Super다. 그래야
+    // 셸과 app에서 같은 손 위치가 Cmd이고, 클라이언트도 그 키를 Super로 받는다(보내는 코드도 맞바꾼 뒤의 것).
+    {
+        var ap: input.State = .{};
+        const pc_ctx: input.Context = .{ .swap_alt_meta = true };
+        try expectAppKey(&ap, pc_ctx, K.KEY_LEFTALT, 1, K.KEY_LEFTMETA, true, .{ .super = true });
+        try expectAppPaneCtx(&ap, pc_ctx, K.KEY_2, .workspace_2);
+        try expectAppKey(&ap, pc_ctx, K.KEY_LEFTALT, 0, K.KEY_LEFTMETA, false, .{});
+        try expectAppKey(&ap, pc_ctx, K.KEY_LEFTMETA, 1, K.KEY_LEFTALT, true, .{ .alt = true });
+        try expectAppKey(&ap, pc_ctx, K.KEY_LEFTMETA, 0, K.KEY_LEFTALT, false, .{});
+    }
+    std.debug.print("input_test: keyboard=pc의 맞바꿈이 app에서도 같다 OK\n", .{});
+
+    // 검사 93. `readKeysApp`이 키와 명령을 따로 순서대로 모으고 tap을 버린다. 한 read에 `Cmd 누름, 2 누름, 2 뗌,
+    // Cmd 뗌`이 오면 키는 셋(Cmd 누름 · 2 뗌 · Cmd 뗌)이고 명령은 `workspace_2` 하나다. app에서 누른 왼쪽 Ctrl을
+    // 셸에서 떼도 한/영이 안 뒤집힌다.
+    {
+        var ap: input.State = .{};
+        const evs = [_]input.c.struct_input_event{
+            keyEventAt(K.KEY_LEFTMETA, 1, 1_000_000),
+            keyEventAt(K.KEY_2, 1, 1_010_000),
+            keyEventAt(K.KEY_2, 0, 1_020_000),
+            keyEventAt(K.KEY_LEFTMETA, 0, 1_030_000),
+            keyEventAt(K.KEY_LEFTCTRL, 1, 1_040_000),
+        };
+        const fds = try feedEvents(&evs);
+        defer _ = close(fds[0]);
+        const got = input.readKeysApp(&ap, fds[0], .{});
+        if (got.gone or got.keys.len != 4 or got.panes.len != 1 or got.panes[0] != .workspace_2) {
+            std.debug.print("FAIL: readKeysApp keys={d} panes={any}\n", .{ got.keys.len, got.panes });
+            return error.AppBatch;
+        }
+        const want_codes = [_]u16{ K.KEY_LEFTMETA, K.KEY_2, K.KEY_LEFTMETA, K.KEY_LEFTCTRL };
+        const want_pressed = [_]bool{ true, false, false, true };
+        for (got.keys, want_codes, want_pressed) |k, wc, wp| {
+            if (k.code != wc or k.pressed != wp) {
+                std.debug.print("FAIL: readKeysApp key {d}/{} want {d}/{}\n", .{ k.code, k.pressed, wc, wp });
+                return error.AppBatchOrder;
+            }
+        }
+        // 셸로 돌아가 Ctrl을 뗀다 — app의 누름은 tap이 아니다.
+        try expect(&ap, K.KEY_LEFTCTRL, 0, "");
+        if (ap.hangul_on) return error.AppTapLeaked;
+    }
+    std.debug.print("input_test: readKeysApp이 키와 명령을 따로 모은다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
+}
+
+fn expectAppKey(state: *input.State, ctx: input.Context, raw: u16, value: i32, code: u16, pressed: bool, mods: input.AppMods) !void {
+    const got = state.appKey(raw, value, ctx);
+    switch (got) {
+        .key => |k| if (k.code == code and k.pressed == pressed and std.meta.eql(k.mods, mods)) return,
+        else => {},
+    }
+    std.debug.print("FAIL: appKey({d}, {d}) = {any}, want key {d} pressed={} mods={any}\n", .{ raw, value, got, code, pressed, mods });
+    return error.WrongAppKey;
+}
+
+fn expectAppPane(state: *input.State, code: u16, want: input.Pane) !void {
+    return expectAppPaneCtx(state, .{}, code, want);
+}
+
+fn expectAppPaneCtx(state: *input.State, ctx: input.Context, code: u16, want: input.Pane) !void {
+    const got = state.appKey(code, 1, ctx);
+    switch (got) {
+        .pane => |p| if (p == want) return,
+        else => {},
+    }
+    std.debug.print("FAIL: appKey({d}) = {any}, want pane {s}\n", .{ code, got, @tagName(want) });
+    return error.WrongAppPane;
 }

@@ -85,6 +85,9 @@ out · err, 양보 listen · guest, 링크 이벤트). LK가 링크 칸을 더�
 "아무것도 안 나간다"로 바꾼다. 게이트 체인은 안 바뀐다 — 체인이 치는 Cmd 조합 열아홉 가지(`rg -o 'meta_l-…'
 --glob '*/check.sh'`)는 전부 표에 있다(`Cmd+V` · `Cmd+←` · `Cmd+Backspace`는 바이트 표, `Cmd+5`는 없는 workspace 번호).
 
+구현(단계 C)에서 고친 단언은 셋이 아니라 여섯이었다 — 위 셋에 copy mode 검사 10의 모드 밖 `Cmd+C`(937행) · 검사 62의
+`Cmd+0`(1852행) · 검사 84의 `Cmd+Option+D`(1888행)가 더해진다. 모두 "표 밖 Cmd → 원래 키"를 단언하던 같은 성질이다.
+
 ### 7. `$XDG_RUNTIME_DIR`은 지금 없다(R-WY-3)
 
 저장소 어디에도 이 이름이 없다. terminal은 root로 돌고 셸만 자식에서 계정의 uid로 내려간다(`pty.zig:52-53`).
@@ -146,6 +149,7 @@ out · err, 양보 listen · guest, 링크 이벤트). LK가 링크 칸을 더�
     `wl_keyboard`로 간다(바이트로 번역하지 않는다, R-KEY-3). 한/영 조합은 M4(text-input) 전까지 app pane에서 안 돈다 —
     키가 그대로 간다. 셸 pane에서 표에 없는 Cmd 조합은 삼킨다(요구사항 결정 3, 확인 6 — `input_test`의 단언 셋이
     바뀌고 체인은 안 바뀐다).
+    표의 chord 중 `Cmd+W` · `Cmd+T`는 app에서 앱의 것이다(요구사항 결정 3 — 브라우저의 탭 닫기 · 새 탭, WY-M0 결과 3).
 12. 셸 경로 보호(R-WY-2). 클라이언트 소켓은 libwayland의 non-blocking 그대로이고, 보낼 것이 넘치면 libwayland가 그
     클라이언트를 끊는다. `Cmd+Q`는 `xdg_toplevel.close`와 `xdg_wm_base.ping`을 함께 보내고, 2초 안에 pong도 끝도 없으면
     그 클라이언트의 pid(`wl_client_get_credentials`)에 SIGKILL을 보낸다.
@@ -163,6 +167,11 @@ out · err, 양보 listen · guest, 링크 이벤트). LK가 링크 칸을 더�
 17. app 프레임은 render verify를 하지 않는다 — 그림자는 셸 화면만 흉내 낸다. 셸 프레임의 `verify>` 줄은 그대로라 루트
     게이트의 "verify 줄이 있다"는 선다. workspace를 옮기는 자리 넷은 `enterWorkspace(i)` 하나를 불러 격자(FU의
     workspace마다 값)를 다시 세운다.
+18. `tars-fullscreen`은 exec 전에 `WAYLAND_DISPLAY` · `XDG_RUNTIME_DIR`을 뺀다(WY-M0 루트 게이트, 2026-11-19 — 앞의 것만
+    빼면 libwayland가 `$XDG_RUNTIME_DIR/wayland-0`을 기본으로 찾아 그래도 붙었다). 그 문으로 띄우는 명령은
+    KMS에 직접 그리고, 양보한 동안 compositor는 그리지 않는다. 결정 3이 셸에 `WAYLAND_DISPLAY`를 준 뒤 SDL3(`tars-gpu-demo`)가
+    kmsdrm 대신 Wayland를 골라 우리 서버의 창이 됐다 — DY 판정 12a(자동 실행 데모가 그린다)가 빨갰다. 데모 쪽에서 드라이버를
+    못박는 대신 문 쪽에서 고치는 것은, `tars-fullscreen`을 거치는 모든 프로그램이 같은 처지이기 때문이다.
 
 ## Milestone
 
