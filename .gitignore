@@ -23,6 +23,8 @@ terminal/ghostty-src/
 # vendor/는 받는 것(stb 헤더 둘, WY-M0부터 wayland/의 xml 셋)이고 fonts/만 커밋한다(FR-M0). 디렉터리째 무시하면 `!`로 못 되살린다.
 terminal/vendor/*
 !terminal/vendor/fonts/
+# 키맵 텍스트(WY-M0, WY design 결정 6). 받는 것이 아니라 한 번 만들어 고정한 것이라 커밋한다 — 판은 terminal/build.zig.
+!terminal/vendor/keymap-us.xkb
 
 terminal/zig-out/
 terminal/zig-pkg/

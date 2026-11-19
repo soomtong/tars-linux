@@ -145,12 +145,22 @@ pub fn build(b: *std.Build) void {
     // WY-M0 단계 A: 링크만 한다 — 서버는 아직 안 띄우므로 동작은 그대로다(plan 할 일 1). 단계 B가 `src/wl/`에서
     // `@import("wayland").server`를 쓴다.
     //
-    // `needed`: 부르는 심볼이 하나도 없으면 링커가 DT_NEEDED를 버린다(단계 A 실측 — 옵션 없이 빌드한 terminal의
-    // NEEDED에 libwayland-server.so.0이 없었다). 그러면 copy_lib_deps가 그 라이브러리를 initrd에 싣지 않으므로 단계 A의
-    // 판정(initrd 목록)이 서지 않는다. 단계 B가 서버 함수를 부르면 이 옵션 없이도 남는다 — 그때 빼도 된다.
+    //
+    // 단계 A는 부르는 심볼이 없어 `.needed = true`로 DT_NEEDED를 강제했다. 단계 B부터 `src/wl/server.zig`가 서버 함수를
+    // 부르므로 그 옵션 없이 남는다.
     exe_mod.addImport("wayland", wayland_mod);
     exe_mod.addLibraryPath(amd64_libdir);
-    exe_mod.linkSystemLibrary("wayland-server", .{ .use_pkg_config = .no, .needed = true });
+    exe_mod.linkSystemLibrary("wayland-server", .{ .use_pkg_config = .no });
+    // 키맵 텍스트(WY design 결정 6 · 확인 3). `src/wl/server.zig`가 `@embedFile("keymap")`으로 받아 봉인한 memfd에 담고
+    // 모든 `wl_keyboard`에 준다. 텍스트는 고치지 않는다 — 판과 만든 명령이 여기다:
+    //
+    //   xkbcli compile-keymap --rules evdev --model pc105 --layout us
+    //
+    // trixie의 libxkbcommon-tools 1.7.0-2 · xkb-data 2.42-1, 2026-11-19. 64,754바이트,
+    // sha256 9927c7ab5c48297d65e2947bdbd75558e60ad40d8463020e850e99eaf0376582. 그 판은 26자를 넘는 keysym 이름 둘을
+    // 잘라 적는다(`<I618>` · `<I619>`의 XF86KbdInputAssist…) — 다시 읽으면 그 두 키가 NoSymbol이고 보통 타자와는
+    // 무관하다(확인 3). `keyboard=apple|pc` 교환은 서버 앞에서 끝나 있으므로 키맵은 하나다(R-WY-7).
+    exe_mod.addAnonymousImport("keymap", .{ .root_source_file = b.path("vendor/keymap-us.xkb") });
 
     // 이 의존도 게스트로 간다. 함께 옮기는 것이 공짜라는 것을 쟀다 —
     // exe_mod만 옮기면 11,218,920바이트에 clean 빌드 71.0초이고, 둘 다
@@ -579,6 +589,19 @@ pub fn build(b: *std.Build) void {
     // TR-M1에서 font_test가 들어오면서 stb_truetype까지 필요해졌다. 남은
     // 차이는 x86_64 terminal 본체와 pty_test를 안 만든다는 것뿐이다.
     // 두 vendor 트리가 없으면(prepare.sh를 안 돌렸으면) 여기서 막힌다.
+    // wl_logic_test도 호스트에서 돈다(WY-M0). Wayland 서버의 순수한 셋 — 배율 · 옮기기 · configure 순서. geometry_test와
+    // 같은 모양이다. libwayland는 안 부른다.
+    const wl_logic_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/wl_logic_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+    });
+    const wl_logic_test = b.addExecutable(.{
+        .name = "wl_logic_test",
+        .root_module = wl_logic_test_mod,
+    });
+    b.installArtifact(wl_logic_test);
+
     // yield_test도 호스트에서 돈다(DY-M0). `control_test`(init)와 같은 수법이다 — 양보의 상태
     // 규칙을 가짜 ops로 보고 fd는 안 연다. socket과 ioctl은 `display/check.sh`가 본다.
     const yield_test_mod = b.createModule(.{
@@ -617,6 +640,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(verify_test).step);
     test_step.dependOn(&b.addRunArtifact(dirty_test).step);
     test_step.dependOn(&b.addRunArtifact(yield_test).step);
+    test_step.dependOn(&b.addRunArtifact(wl_logic_test).step);
 
     // pty_test만 x86_64로 남는다. /usr/bin/fish를 exec하는데 그 fish는
     // 게스트용 x86_64라 호스트로 옮길 수 없다 — 빌드만 되고 아무도

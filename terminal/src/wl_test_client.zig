@@ -54,6 +54,8 @@ const Args = struct {
     width: u32 = 320,
     height: u32 = 200,
     ignore_close: bool = false,
+    /// configure의 크기로 버퍼를 다시 만든다(SDL처럼 구는 클라이언트를 흉내 낸다).
+    follow_size: bool = false,
 };
 
 fn parseSize(text: []const u8) ?[2]u32 {
@@ -72,6 +74,8 @@ fn parseArgs(argv: []const []const u8) ?Args {
         const a = argv[i];
         if (std.mem.eql(u8, a, "--ignore-close")) {
             args.ignore_close = true;
+        } else if (std.mem.eql(u8, a, "--follow-size")) {
+            args.follow_size = true;
         } else if (std.mem.eql(u8, a, "--color")) {
             i += 1;
             if (i == argv.len or argv[i].len != 6) return null;
@@ -89,10 +93,11 @@ fn parseArgs(argv: []const []const u8) ?Args {
 
 fn usage() u8 {
     writeAll(2,
-        \\usage: tars-wl-test [--color RRGGBB] [--size WxH] [--ignore-close]
+        \\usage: tars-wl-test [--color RRGGBB] [--size WxH] [--ignore-close] [--follow-size]
         \\  open one xdg_toplevel filled with one colour (default 3366CC, 320x200) and
         \\  print what the compositor sends, one line each. Ends on close, unless
-        \\  --ignore-close (then close and ping are ignored).
+        \\  --ignore-close (then close and ping are ignored). The buffer keeps its
+        \\  own size unless --follow-size (then it takes the configured size).
         \\
     );
     return EXIT_USAGE;
@@ -203,9 +208,11 @@ fn xdgSurfaceListener(xdg_surface: *xdg.Surface, event: xdg.Surface.Event, state
         .configure => |c| {
             xdg_surface.ackConfigure(c.serial);
             say("configure w={d} h={d}", .{ state.pending_w, state.pending_h });
-            // 0은 "클라이언트가 정하라"다 — 지금 크기를 지킨다.
+            // 기본은 제 크기(`--size`)를 지킨다. terminal은 화면 크기로 configure하는데(WY-M0 확정 4), 그것을 따르면
+            // 버퍼가 화면을 꽉 채워 서버의 정수 배율과 검정 둘레(확정 8)를 볼 수 없다. `--follow-size`면 따른다.
+            // 0은 "클라이언트가 정하라"다 — 그때도 지금 크기를 지킨다.
             var fresh = false;
-            if (state.pending_w > 0 and state.pending_h > 0) {
+            if (state.args.follow_size and state.pending_w > 0 and state.pending_h > 0) {
                 const w: u32 = @intCast(state.pending_w);
                 const h: u32 = @intCast(state.pending_h);
                 if (w != state.width or h != state.height) {
