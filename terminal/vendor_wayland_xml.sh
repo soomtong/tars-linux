@@ -5,6 +5,8 @@
 #   wayland.xml     libwayland 1.23.1(trixie libwayland-dev 1.23.1-3과 같은 판)
 #   xdg-shell.xml   wayland-protocols 1.44(trixie wayland-protocols 1.44-1과 같은 판)
 #   viewporter.xml  wayland-protocols 1.44 — M2(SDL3의 2단)가 generate한다. 지금은 받기만 한다
+#   xdg-decoration-unstable-v1.xml  wayland-protocols 1.44 — WY-M2(design 결정 25). 장식 관리자가 늘 server_side로 답해
+#                   SDL3가 libdecor 길로 가지 않는다
 #
 # sha256은 태그의 raw 파일과 Debian 패키지가 까는 파일(/usr/share/wayland/wayland.xml ·
 # /usr/share/wayland-protocols/stable/…)을 따로 재어 같은 값이었다(2026-11-19). 판을 올릴 때 함께 고친다.
@@ -34,3 +36,5 @@ fetch "https://gitlab.freedesktop.org/wayland/wayland-protocols/-/raw/${PROTOCOL
   xdg-shell.xml 9d9e27038ca722f159a361293f8c6cd270dab907ab52de5b8ecfbb8d6b9651c2
 fetch "https://gitlab.freedesktop.org/wayland/wayland-protocols/-/raw/${PROTOCOLS_TAG}/stable/viewporter/viewporter.xml" \
   viewporter.xml dcb12279a03746301fe490aaed4b38a403485a925abfce2ccfceb644e104fe71
+fetch "https://gitlab.freedesktop.org/wayland/wayland-protocols/-/raw/${PROTOCOLS_TAG}/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml" \
+  xdg-decoration-unstable-v1.xml 73101094eedd2295ac48972a2562d6f99881fee68f3d4d403675837434ab7c70

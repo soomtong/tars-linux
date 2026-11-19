@@ -104,11 +104,14 @@ pub fn build(b: *std.Build) void {
         .wayland_protocols = b.path("vendor/wayland"),
     });
     scanner.addCustomProtocol(b.path("vendor/wayland/xdg-shell.xml"));
+    // WY-M2(design 결정 25): 장식 관리자. 늘 server_side로 답한다 — 클라이언트가 장식을 안 그리고, SDL3는 libdecor를 안 탄다.
+    scanner.addCustomProtocol(b.path("vendor/wayland/xdg-decoration-unstable-v1.xml"));
     scanner.generate("wl_compositor", 4);
     scanner.generate("wl_shm", 1);
     scanner.generate("wl_output", 4);
     scanner.generate("wl_seat", 7);
     scanner.generate("xdg_wm_base", 5);
+    scanner.generate("zxdg_decoration_manager_v1", 1);
     const wayland_mod = b.createModule(.{ .root_source_file = scanner.result });
 
     // libwayland는 컨테이너의 x86_64 sysroot에 있다(Dockerfile 층 22 — dpkg -x로 푼 libwayland-dev:amd64의 무버전

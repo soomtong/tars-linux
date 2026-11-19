@@ -19,6 +19,10 @@ cd "$(dirname "$0")" || exit 1
 #   320x200을 4배로 화면 가득(at=0,0) 그리고, 상태 줄의 멈춘 상자가 실측 색이며, Ctrl(evdev 29)이 권총을 쏴 탄약 숫자가 바뀌고,
 #   Cmd+1 뒤의 셸이 답하고 Cmd+2로 돌아오며, Cmd+Q에 둠이 스스로 끝난다(pong · close를 포트가 받는다 — SIGKILL 없음).
 #
+# WY-M2(단계 B): 창 모드로 띄운 창은 셸 오른쪽 column이 된다(판정 16 · 17 · 22) — `wl> column`, pane 픽셀 크기의 configure
+#   (activated · tiled), 포커스 slot이 창이면 키가 그 창으로, Cmd+[로 셸에 오면 activated를 잃고 keyboard leave, Cmd+R의 새
+#   configure, Cmd+Q에 slot이 닫히고 셸이 전체 폭을 되찾는다. 자기 workspace를 보는 판정 2~8은 `--fullscreen`으로 띄운다.
+#
 # 부팅 1은 NIC 없음, 디스크 없음(plan). 디스크가 없으니 셸은 root(fish)이고 소켓은 `/run/user/0`이다. 키보드는 QEMU의
 # PS/2라 기본값(auto)이 pc로 읽는다 — Cmd가 Alt 자리다(`keyboard=pc`의 맞바꿈, KK design 결정 3). 그래서 이 체인의
 # Cmd는 `alt-`다(input 체인 판정 10 · 12와 같은 모양). monitor 포트는 45508 — 예약 범위(RP-M0)에서 45507 다음 빈 자리다.
@@ -114,7 +118,7 @@ count_log() {
   tlog | grep -acE -- "$1"
 }
 
-# 글자열을 sendkey 이름으로 친다(소문자 · 숫자 · 공백 · `-` · `/` · `.` · `>` · `$` · `&`만).
+# 글자열을 sendkey 이름으로 친다(소문자 · 숫자 · 공백 · `-` · `/` · `.` · `>` · `$` · `&` · `(` · `)`만).
 type_text() {
   local text="$1" i ch keys=()
   for (( i = 0; i < ${#text}; i++ )); do
@@ -127,6 +131,8 @@ type_text() {
       '>') keys+=(shift-dot) ;;
       '$') keys+=(shift-4) ;;
       '&') keys+=(shift-7) ;;
+      '(') keys+=(shift-9) ;;
+      ')') keys+=(shift-0) ;;
       _) keys+=(shift-minus) ;;
       [A-Z]) keys+=("shift-${ch,,}") ;;
       *) keys+=("$ch") ;;
@@ -225,8 +231,9 @@ wait_for_screen 'w1 wayland-0 /run/user/0' ||
 echo "(1): the socket is /run/user/0/wayland-0 and the shell knows it"
 
 # ── 판정 2: 클라이언트가 workspace 2가 되고 그 색이 가운데에 ─────────────────
-echo "=== (2) tars-wl-test opens workspace 2, its colour scaled 4x in the middle ==="
-type_text 'tars-wl-test --color 3366CC --size 300x200 > /tmp/wl.log &'
+# WY-M2: 창 모드의 창은 셸 오른쪽 column이 된다. 자기 workspace(ws=2)를 보는 판정 2~8은 `--fullscreen`을 붙인다(plan 확정 14).
+echo "=== (2) tars-wl-test --fullscreen opens workspace 2, its colour scaled 4x in the middle ==="
+type_text 'tars-wl-test --fullscreen --color 3366CC --size 300x200 > /tmp/wl.log &'
 type_keys ret
 wait_for_log 'terminal: wl> client pid=[0-9]+' || report_failure "no 'wl> client' line"
 wait_for_log 'terminal: wl> toplevel id=1 ws=2' || report_failure "no 'wl> toplevel id=1 ws=2'"
@@ -328,7 +335,7 @@ echo "(7): close reached the client, it left by itself, the workspace is gone"
 
 # ── 판정 8: close를 무시하는 클라이언트는 2초 뒤 SIGKILL ─────────────────────
 echo "=== (8) tars-wl-test --ignore-close, Cmd+Q, 2 s, SIGKILL ==="
-type_text 'tars-wl-test --ignore-close --color 3366CC --size 300x200 > /tmp/wl2.log &'
+type_text 'tars-wl-test --fullscreen --ignore-close --color 3366CC --size 300x200 > /tmp/wl2.log &'
 type_keys ret
 wait_for_log 'terminal: wl> toplevel id=2 ws=2' || report_failure "the second client got no workspace (no 'wl> toplevel id=2 ws=2')"
 wait_for_count 'terminal: pane> ws=2/2 app id=2' 1 || report_failure "the second client did not come to the front"
@@ -354,6 +361,84 @@ type_text 'cat /tmp/wl2.log'
 type_keys ret
 wait_for_screen 'wl-test> close' || report_failure "the ignoring client's log has no 'wl-test> close'"
 echo "(8): the client that ignored close was killed ${WAITED_MS} ms after the ping"
+
+# ── 판정 16: 창 모드의 창은 셸 오른쪽 column이다(WY-M2) ──────────────────
+#
+# 셸 하나(ws=1/1)에서 `--follow-size`로 띄운다 — configure의 크기를 따라 column을 3366CC로 채운다. 화면은 여백 20 · 격자
+# 155 × 47(셀 8 × 16)이고 두 column이 반씩이다: 셸 0..76열, 구분선 77열, 창 78..154열. 창의 사각형은 x 20 + 78 × 8 = 644,
+# y 20, 77 × 8 = 616 × 47 × 16 = 752다. 포커스는 새 column으로 가고(Cmd+D와 같은 길) 키는 그 창의 것이다. 포인터는
+# 단계 C라 포커스는 키로 옮긴다 — Cmd+[ · Cmd+](이 체인의 Cmd는 alt).
+echo "=== (16) a windowed tars-wl-test opens as a column right of the shell ==="
+type_text 'tars-wl-test --follow-size --color 3366CC > /tmp/wl3.log &'
+type_keys ret
+wait_for_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1' || report_failure "(16) no 'wl> column id=… slot=1 ws=1'"
+COL_ID="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+' | tail -n 1 | sed 's/.*id=//')"
+wait_for_log "terminal: wl> configure id=${COL_ID} w=616 h=752 act=1" ||
+  report_failure "(16) no 'wl> configure id=${COL_ID} w=616 h=752 act=1' (the right half, focused)"
+wait_for_log "terminal: pane> ws=1/1 panes=2 focus=1 slot=1 app id=${COL_ID} rect=78,0 77x47 " ||
+  report_failure "(16) the pane> line does not show the window as slot 1 on the right half"
+if tlog | grep -aE "terminal: wl> toplevel id=${COL_ID} " >/dev/null; then
+  report_failure "(16) the windowed client got its own workspace"
+fi
+# 키가 창으로 간다 — 포커스 slot이 창이다.
+type_keys a
+wait_for_log "terminal: wl> key code=30 state=1 to=${COL_ID}" || report_failure "(16) a did not reach the focused column window"
+# 셸로 포커스를 옮긴다 — 창은 activated를 잃고 키보드 leave를 받는다.
+type_keys alt-bracket_left
+wait_for_log "terminal: wl> configure id=${COL_ID} w=616 h=752 act=0" || report_failure "(16) Cmd+[ did not take activated away"
+wait_for_log 'terminal: pane> ws=1/1 panes=2 focus=0 rect=0,0 77x47 ' || report_failure "(16) Cmd+[ did not focus the shell on the left half"
+sleep 0.5
+SHOT16="${SCREENS_DIR}/column.ppm"
+screendump "$SHOT16" || report_failure "(16) screendump did not write ${SHOT16}"
+for at in "900 300" "1100 600"; do
+  # shellcheck disable=SC2086
+  got="$(ppm_ink "$SHOT16" $at 32 32)"
+  [ "$got" = "bg=3366cc ink=0" ] || report_failure "(16) the right column at ${at} is not the window's colour (${got})"
+done
+# 왼쪽 반 첫 행(프롬프트)에 글자가 있다.
+# shellcheck disable=SC2086
+got="$(ppm_ink "$SHOT16" 20 20 160 16)"
+case "$got" in
+  *" ink=0") report_failure "(16) the left half has no prompt on its first row (${got})" ;;
+esac
+type_text 'cat /tmp/wl3.log'
+type_keys ret
+wait_for_screen 'wl-test> configure w=616 h=752 states=4,5,6,7,8' ||
+  report_failure "(16) the client did not get 616x752 with activated and the four tiled states"
+# enter · leave · a의 누름과 뗌은 앞 클라이언트의 로그(판정 3)에도 있어 화면 글자로는 못 가른다 — 이 로그의 줄 수를 센다.
+# `type_text`에 `=`가 없어 정규식의 `.`로 그 자리를 맞춘다.
+type_text 'echo c16-(grep -c enter /tmp/wl3.log)-(grep -c leave /tmp/wl3.log)-(grep -c code.30 /tmp/wl3.log)'
+type_keys ret
+wait_for_screen 'c16-1-1-2' || report_failure "(16) the client's log does not have one enter, one leave and a's press and release"
+echo "(16): the window is slot 1 on the right half (616x752, tiled), took a, and left when Cmd+[ focused the shell"
+
+# ── 판정 17: Cmd+R로 폭이 바뀌면 configure가 다시 간다 ─────────────────────
+#
+# 창 column에 포커스를 두고 Cmd+R — half 다음은 full(SW-M3의 순환)이라 창이 격자 전체 폭 155 × 8 = 1240이 된다.
+echo "=== (17) Cmd+R on the window's column sends a new configure ==="
+type_keys alt-bracket_right
+wait_for_log "terminal: wl> configure id=${COL_ID} w=616 h=752 act=1" || report_failure "(17) Cmd+] did not give activated back"
+type_keys alt-r
+wait_for_log "terminal: wl> configure id=${COL_ID} w=1240 h=752 act=1" ||
+  report_failure "(17) Cmd+R did not send 'wl> configure id=${COL_ID} w=1240 h=752 act=1'"
+wait_for_log "terminal: pane> ws=1/1 panes=2 focus=1 slot=1 app id=${COL_ID} rect=0,0 155x47 " ||
+  report_failure "(17) the pane> line did not follow the full-width column"
+echo "(17): Cmd+R widened the window's column to 1240 and the client was told"
+
+# ── 판정 22: 창 slot의 Cmd+Q — 닫히고 column이 당겨진다 ─────────────────────
+echo "=== (22) Cmd+Q on the window's slot closes it and the shell takes the whole width ==="
+type_keys alt-q
+wait_for_log "terminal: wl> close id=${COL_ID}" || report_failure "(22) Cmd+Q sent no 'wl> close id=${COL_ID}'"
+wait_for_log "terminal: wl> unmap id=${COL_ID} ws=1 slot=1" || report_failure "(22) the slot was not removed"
+wait_for_log 'terminal: pane> ws=1/1 panes=1 focus=0 rect=0,0 155x47 ' || report_failure "(22) the shell did not take the whole width back"
+# 판정 8의 SIGKILL 한 줄 말고는 없어야 한다 — 이 창은 close에 스스로 끝났다.
+sleep 2.5
+KILLS="$(count_log 'terminal: wl> kill ')"
+[ "$KILLS" -eq 1 ] || report_failure "(22) the closed column window was killed (wl> kill lines ${KILLS}, want the one from (8))"
+type_text 'echo c22-(grep -c w.1240 /tmp/wl3.log)-(grep -c close /tmp/wl3.log)'
+type_keys ret
+wait_for_screen 'c22-1-1' || report_failure "(22) the client's log does not have the 1240 configure and the close"
+echo "(22): Cmd+Q closed the window, its column went and the shell is whole again"
 
 # ── 판정 9: render verify ───────────────────────────────────────────────
 #

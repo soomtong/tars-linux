@@ -4,6 +4,7 @@
 //! 여섯이다. (1) 정수 배율과 가운데 자리(`fit`), (2) 그 자리로 옮기는 가장 가까운 픽셀 늘리기(`blit`),
 //! (3) xdg toplevel의 configure 순서(`onCommit`), (4) `wl_keyboard.modifiers`의 비트(`modifierMask`, 단계 C),
 //! (5) 클라이언트에 누름을 보낸 키의 목록(`Held`, 단계 C), (6) `Cmd+Q`의 2초 기한(`Deadline`, 단계 C).
+//! WY-M2가 둘을 더했다 — pane 사각형 안의 자리(`fitIn`)와 configure의 states(`toplevelStates`).
 
 const std = @import("std");
 
@@ -40,6 +41,19 @@ pub fn fit(fb_w: u32, fb_h: u32, buf_w: u32, buf_h: u32) ?Fit {
         .ox = if (sw > fb_w) (sw - fb_w) / 2 else 0,
         .oy = if (sh > fb_h) (sh - fb_h) / 2 else 0,
     };
+}
+
+/// 사각형 하나(픽셀). strip의 pane이 프레임버퍼에서 차지하는 자리다(WY-M2).
+pub const Area = struct { x: u32, y: u32, w: u32, h: u32 };
+
+/// `fit`을 화면 전체 대신 사각형 `a` 안에서 한다(WY-M2 확정 5, design 결정 22). 돌려준 `x` · `y`는 프레임버퍼
+/// 좌표다 — `blit`이 그대로 쓴다. configure를 따른 클라이언트는 1배로 사각형을 채우고, 따르지 않는 클라이언트(RESIZABLE이
+/// 아닌 SDL 창)는 정수 배로 늘려 가운데에 서거나, 사각형보다 크면 가운데가 잘려 보인다.
+pub fn fitIn(a: Area, buf_w: u32, buf_h: u32) ?Fit {
+    var f = fit(a.w, a.h, buf_w, buf_h) orelse return null;
+    f.x += a.x;
+    f.y += a.y;
+    return f;
 }
 
 // ── 옮기기 ─────────────────────────────────────────────────────────────
@@ -112,6 +126,47 @@ pub fn onCommit(phase: Phase, acked: bool, has_buffer: bool) Step {
             .{ .action = .map, .next = .mapped },
         .mapped => .{ .action = .update, .next = .mapped },
     };
+}
+
+// ── configure의 states(WY-M2 확정 4, design 결정 21 · 22) ────────────────
+
+/// 창이 놓인 자리. 자기 workspace(첫 commit 전에 `set_fullscreen` — 둠)이거나 strip의 column이다.
+pub const Place = enum { workspace, column };
+
+/// `xdg_toplevel.state`의 값(xdg-shell.xml). `tiled_*`는 toplevel 판 2부터다.
+pub const STATE_FULLSCREEN: u32 = 2;
+pub const STATE_ACTIVATED: u32 = 4;
+pub const STATE_TILED_LEFT: u32 = 5;
+pub const STATE_TILED_RIGHT: u32 = 6;
+pub const STATE_TILED_TOP: u32 = 7;
+pub const STATE_TILED_BOTTOM: u32 = 8;
+pub const TILED_SINCE: u32 = 2;
+
+/// configure에 실을 states. 자기 workspace는 fullscreen과 activated(WY-M0 그대로 — 늘 앞이다). column은 activated(키보드
+/// 포커스일 때)와 네 변의 tiled(판 2+)다 — tiled가 있어야 SDL3가 창을 떠 있는 것(floating)으로 보지 않고 크기를 따른다
+/// (조사 1절, `SDL_waylandwindow.c:775-801`). 돌려준 조각은 `out` 안이다.
+pub fn toplevelStates(place: Place, activated: bool, version: u32, out: *[6]u32) []u32 {
+    var n: usize = 0;
+    switch (place) {
+        .workspace => {
+            out[0] = STATE_FULLSCREEN;
+            out[1] = STATE_ACTIVATED;
+            n = 2;
+        },
+        .column => {
+            if (activated) {
+                out[n] = STATE_ACTIVATED;
+                n += 1;
+            }
+            if (version >= TILED_SINCE) {
+                for ([_]u32{ STATE_TILED_LEFT, STATE_TILED_RIGHT, STATE_TILED_TOP, STATE_TILED_BOTTOM }) |st| {
+                    out[n] = st;
+                    n += 1;
+                }
+            }
+        },
+    }
+    return out[0..n];
 }
 
 // ── 수정키 비트(design 결정 6, 확인 3) ──────────────────────────────────

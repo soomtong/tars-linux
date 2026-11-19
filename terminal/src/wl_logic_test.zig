@@ -130,5 +130,38 @@ pub fn main() !void {
         if (!d.pong(9) or d.expired(10_000)) return error.WrongDeadline;
     }
     std.debug.print("wl_logic_test: deadline 9 cases\n", .{});
+
+    // WY-M2: pane 사각형 안의 자리(fitIn). 오른쪽 column 하나를 흉내 낸 사각형(x 632, 616 × 752)이다 — 셀 크기와는
+    // 무관하게 사각형 산수만 본다.
+    {
+        const right: logic.Area = .{ .x = 632, .y = 0, .w = 616, .h = 752 };
+        // configure를 따른 버퍼 — 1배로 사각형을 채운다.
+        if (!std.meta.eql(logic.fitIn(right, 616, 752), logic.Fit{ .k = 1, .x = 632, .y = 0, .w = 616, .h = 752, .ox = 0, .oy = 0 }))
+            return error.WrongFitIn;
+        // 따르지 않은 작은 버퍼(SDL의 RESIZABLE 아닌 창 300x200) — 2배 600x400, 사각형 안 가운데.
+        if (!std.meta.eql(logic.fitIn(right, 300, 200), logic.Fit{ .k = 2, .x = 632 + 8, .y = 176, .w = 600, .h = 400, .ox = 0, .oy = 0 }))
+            return error.WrongFitIn;
+        // 사각형보다 큰 버퍼(화면 크기 640x480보다 넓은 창) — 1배, 가운데가 잘린다.
+        if (!std.meta.eql(logic.fitIn(right, 640, 480), logic.Fit{ .k = 1, .x = 632, .y = 136, .w = 616, .h = 480, .ox = 12, .oy = 0 }))
+            return error.WrongFitIn;
+        // 화면 전체의 사각형이면 fit과 같다.
+        if (!std.meta.eql(logic.fitIn(.{ .x = 0, .y = 0, .w = 1280, .h = 800 }, 300, 200), logic.fit(1280, 800, 300, 200)))
+            return error.WrongFitIn;
+        if (logic.fitIn(right, 0, 10) != null or logic.fitIn(.{ .x = 0, .y = 0, .w = 0, .h = 10 }, 1, 1) != null)
+            return error.WrongFitIn;
+    }
+    std.debug.print("wl_logic_test: fitIn 5 cases\n", .{});
+
+    // WY-M2: configure의 states. 자기 workspace는 fullscreen · activated, column은 activated(포커스일 때) + tiled 넷(판 2+).
+    {
+        var buf: [6]u32 = undefined;
+        if (!std.mem.eql(u32, logic.toplevelStates(.workspace, false, 5, &buf), &.{ 2, 4 })) return error.WrongStates;
+        if (!std.mem.eql(u32, logic.toplevelStates(.column, true, 5, &buf), &.{ 4, 5, 6, 7, 8 })) return error.WrongStates;
+        if (!std.mem.eql(u32, logic.toplevelStates(.column, false, 5, &buf), &.{ 5, 6, 7, 8 })) return error.WrongStates;
+        // 판 1에는 tiled가 없다.
+        if (!std.mem.eql(u32, logic.toplevelStates(.column, true, 1, &buf), &.{4})) return error.WrongStates;
+        if (logic.toplevelStates(.column, false, 1, &buf).len != 0) return error.WrongStates;
+    }
+    std.debug.print("wl_logic_test: states 5 cases\n", .{});
     std.debug.print("wl_logic_test: all checks passed\n", .{});
 }

@@ -1800,6 +1800,13 @@ fn paneClip(rect: layout.Rect) image.Clip {
     };
 }
 
+/// 창 slot이 프레임버퍼에서 차지하는 사각형(WY-M2 확정 4 · 5). 셸 패널의 칸과 같은 자리(`paneOrigin`)에 `cols × CELL_W`,
+/// `rows × ROW_HEIGHT` — configure의 크기와 같다. 오른쪽 구분선 칸은 들지 않는다(`renderBackdrop`이 그린다).
+fn appArea(rect: layout.Rect) wl_logic.Area {
+    const o = paneOrigin(rect);
+    return .{ .x = o.x, .y = o.y, .w = @as(u32, rect.cols) * CELL_W, .h = @as(u32, rect.rows) * ROW_HEIGHT };
+}
+
 /// HP-M1. 사용자 셸이 받는 것(design 결정 8 · 12). 시작 때 한 번 짓는다 — fork 뒤의 자식에서
 /// `setenv`(malloc)를 부르지 않으려는 것이다. 글자는 프로세스 수명 내내 산다.
 ///
@@ -1961,7 +1968,7 @@ const PaneSig = struct {
     panes: usize,
     focus: u4,
     rect: layout.Rect,
-    /// 포커스 slot이 app 창이면 그 번호(WY-M2 확정 2). 그때 `rect`는 0이다 — 줄에 안 찍는다.
+    /// 포커스 slot이 app 창이면 그 번호(WY-M2 확정 2).
     app: ?u32 = null,
 };
 
@@ -1969,8 +1976,11 @@ const PaneSig = struct {
 ///
 ///   terminal: pane> ws=1/1 panes=2 focus=1 rect=78,0 77x47 sep ink=752
 ///
-/// 포커스 slot이 app 창이면 `rect=…` 자리가 `slot=<n> app id=<toplevel>`이다(WY-M2 확정 2). 셸 slot의 줄은
-/// 글자 하나 안 바뀐다 — 체인이 그 모양을 본다.
+/// 포커스 slot이 app 창이면 `rect=…` 앞에 `slot=<n> app id=<toplevel>`이 선다(WY-M2 확정 2):
+///
+///   terminal: pane> ws=1/1 panes=2 focus=1 slot=1 app id=1 rect=78,0 77x47 sep ink=752
+///
+/// 사각형은 strip에서 구한다(`whole`) — 창이 `Cmd+R`로 넓어져도 줄이 다시 찍힌다. 셸 slot의 줄은 글자 하나 안 바뀐다.
 ///
 /// `sep ink`는 프레임버퍼 전체에서 `SEPARATOR` 픽셀 수다. CI의 `copy ink`와
 /// 같은 자리다 — 배치가 맞아도 구분선을 안 그리면 0이고, 글자만 보는 판정은
@@ -1987,10 +1997,13 @@ const PaneSig = struct {
 fn dumpPane(
     fb: drm.Framebuffer,
     ws: *const ShellWs,
+    whole: layout.Rect,
     current: usize,
     total: usize,
     last: *?PaneSig,
 ) void {
+    var rs: [layout.MAX_LEAVES]layout.Rect = undefined;
+    ws.strip.rects(whole, &rs);
     const sig: PaneSig = .{
         .ws = current,
         .total = total,
@@ -1998,7 +2011,7 @@ fn dumpPane(
         .focus = ws.focus,
         .rect = switch (ws.panes[ws.focus].?) {
             .shell => |p| p.rect,
-            .app => .{ .col = 0, .row = 0, .cols = 0, .rows = 0 },
+            .app => rs[ws.focus],
         },
         .app = switch (ws.panes[ws.focus].?) {
             .shell => null,
@@ -2019,8 +2032,9 @@ fn dumpPane(
         }
     }
     if (sig.app) |id| {
-        logline.print("terminal: pane> ws={d}/{d} panes={d} focus={d} slot={d} app id={d} sep ink={d}\n", .{
-            current + 1, sig.total, sig.panes, sig.focus, sig.focus, id, ink,
+        logline.print("terminal: pane> ws={d}/{d} panes={d} focus={d} slot={d} app id={d} rect={d},{d} {d}x{d} sep ink={d}\n", .{
+            current + 1,  sig.total,    sig.panes,     sig.focus,     sig.focus, id,
+            sig.rect.col, sig.rect.row, sig.rect.cols, sig.rect.rows, ink,
         });
         return;
     }
@@ -4100,6 +4114,9 @@ const App = struct {
     last_app_fit: ?wl_logic.Fit = null,
     /// 지난 프레임이 그린 app 창. 셸 프레임이면 null이다 — 다른 창이나 셸에서 오면 통째로 칠한다.
     last_app: ?u32 = null,
+    /// 앞 셸 워크스페이스의 app slot 중 commit이 와서 다시 옮길 것(WY-M2 확정 5). slot 번호다. 셸 프레임이 옮기고
+    /// 비운다 — 통째 프레임은 이것과 상관없이 보이는 app slot을 다 옮긴다.
+    app_dirty: std.StaticBitSet(layout.MAX_LEAVES) = .empty,
 
     // ── Wayland ────────────────────────────────────────────────────────
     /// terminal 안의 서버(WY design 결정 1). 못 띄웠으면 null이고 terminal은 WY 전과 같다(`wl> off`).
@@ -4763,8 +4780,12 @@ const App = struct {
             .shell => |*sh| sh,
             .app => |a| return self.readKeyboardApp(fd, slot, a.toplevel),
         };
-        // app slot: 아무것도 안 한다 — WY-M2 단계 B(포커스 slot이 창이면 `readKeyboardApp`의 길, 할 일 2).
-        const focus = ws.panes[ws.focus].?.asPane() orelse return .open;
+        // 포커스 slot이 창이면 키는 그 창의 것이다(WY-M2 할 일 2) — app workspace와 같은 길(`readKeyboardApp`). 표의
+        // chord는 compositor가 먹고(`Cmd+]` · `Cmd+D` · `Cmd+R` …), `Cmd+W` · `Cmd+T`는 앱으로 간다(요구사항 결정 3).
+        const focus = switch (ws.panes[ws.focus].?) {
+            .shell => |*p| p,
+            .app => |a| return self.readKeyboardApp(fd, slot, a.toplevel),
+        };
 
         // DECCKM은 셸이 언제든 켜고 끌 수 있으므로(프롬프트를 그릴 때
         // smkx, 외부 명령을 실행하기 전에 rmkx 하는 식으로 오간다)
@@ -4858,18 +4879,41 @@ const App = struct {
         return .open;
     }
 
-    /// 키보드 포커스를 앞 워크스페이스에 맞춘다(WY-M0, plan 확정 10). app이면 그 창, 셸이면 없음 — 서버가 옛 창에
-    /// `leave`, 새 창에 `enter`를 보낸다. 앞이 바뀌는 자리(키 · 새 창 · 사라진 창)가 모두 이 바퀴의 `readWayland` 앞이라
-    /// 바퀴에 한 번, 그 뒤에 부른다.
+    /// 키보드 포커스를 앞 워크스페이스에 맞춘다(WY-M0, plan 확정 10). app workspace면 그 창, 셸 workspace면 포커스
+    /// slot이 창일 때 그 창(WY-M2 확정 9), 아니면 없음 — 서버가 옛 창에 `leave`, 새 창에 `enter`를 보낸다. 앞이나
+    /// 포커스가 바뀌는 자리(키 · 새 창 · 사라진 창)가 모두 이 바퀴의 `readWayland` 앞이라 바퀴에 한 번, 그 뒤에 부른다.
+    /// 그다음 column 창의 크기를 맞춘다(`syncColumns`) — 막 연 창의 첫 configure가 포커스(`activated`)를 담고 나간다.
     fn syncFocus(self: *App) void {
         const srv = self.wl orelse return;
         // 워크스페이스가 하나도 안 남았으면(끝나는 바퀴) 앞이 없다.
         const front = self.workspaces[self.current] orelse return;
         const want: ?u32 = switch (front) {
             .app => |a| a.toplevel,
-            .shell => null,
+            .shell => |sh| switch (sh.panes[sh.focus].?) {
+                .app => |a| a.toplevel,
+                .shell => null,
+            },
         };
         srv.setFocus(want, wlMask(self.key_state.appMods()));
+        self.syncColumns(srv);
+    }
+
+    /// 모든 셸 워크스페이스의 app slot에 그 pane의 픽셀 크기를 알린다(WY-M2 확정 4, design 결정 22). 서버가 지난번 보낸
+    /// configure와 같으면 거른다 — 그래서 바퀴마다 불러도 바뀐 것만 나간다. 크기가 바뀌는 자리(`applyLayout` — 분할 ·
+    /// 닫기 · `Cmd+R` · 전체 화면 · 새 column)가 모두 이 바퀴의 이 자리 앞이다. 화면 밖 column의 창도 크기는 있다(SW 결정 15).
+    fn syncColumns(self: *App, srv: *wls.Server) void {
+        for (&self.workspaces) |*slot| {
+            const w = if (slot.*) |*w| w.asShell() orelse continue else continue;
+            var rs: [layout.MAX_LEAVES]layout.Rect = undefined;
+            w.strip.rects(self.wholeFor(w.fullscreen), &rs);
+            for (w.panes, 0..) |maybe, leaf| {
+                const a = switch (maybe orelse continue) {
+                    .app => |a| a,
+                    .shell => continue,
+                };
+                srv.configureColumn(a.toplevel, @as(u32, rs[leaf].cols) * CELL_W, @as(u32, rs[leaf].rows) * ROW_HEIGHT);
+            }
+        }
     }
 
     /// 바퀴 2의 머리. 키보드 칸을 순서대로 본다(KH design 결정 4 · 5).
@@ -5179,7 +5223,11 @@ const App = struct {
             if (cmd == .close_app) {
                 switch (self.workspaces[self.current].?) {
                     .app => |a| if (self.wl) |srv| srv.close(a.toplevel, self.nowMs()),
-                    .shell => {},
+                    // 셸 workspace의 포커스 slot이 창이면 그 창(WY-M2). 셸 패널이면 삼킨다.
+                    .shell => |*sh| switch (sh.panes[sh.focus].?) {
+                        .app => |a| if (self.wl) |srv| srv.close(a.toplevel, self.nowMs()),
+                        .shell => {},
+                    },
                 }
                 continue;
             }
@@ -5713,13 +5761,14 @@ const App = struct {
         /// `: not found` 열하나는 그보다 짧으므로 이 크기가 둘 다 덮는다.
         prompt_buf: [173]u8 = undefined,
         status_buf: [status.MAX_LEN]u8 = undefined,
-        focus: *Pane = undefined,
+        /// 포커스 셸 패널. 셸 workspace의 포커스 slot이 창이면 null이다(WY-M2) — 그 프레임에는 패널의 덤프가 없다.
+        focus: ?*Pane = null,
         /// 그린 셸 워크스페이스(`render`가 채운다). app 프레임이면 안 쓴다.
         shell: *ShellWs = undefined,
         /// app 프레임이면 그 toplevel(WY-M0). `dumpFrame`이 덤프를 가른다.
         app: ?u32 = null,
-        cells: []vt.CellGlyph = undefined,
-        imgs: []vt.ImagePlacement = undefined,
+        cells: []vt.CellGlyph = &.{},
+        imgs: []vt.ImagePlacement = &.{},
         prompt: ?Prompt = null,
         prompt_ink: ?PromptInk = null,
         status_line: Status = undefined,
@@ -5744,8 +5793,9 @@ const App = struct {
             .shell => |*sh| sh,
             .app => |a| return self.renderApp(frame, want, a.toplevel),
         };
-        // app slot: 아무것도 안 한다 — WY-M2 단계 B(포커스 slot이 창인 셸 프레임, 결정 23).
-        const focus = ws.panes[ws.focus].?.asPane() orelse return;
+        // 포커스 slot이 창이면 포커스 셸 패널이 없다(WY-M2). 그 프레임은 다른 패널 · 창 · 상태 줄만 그리고, 프롬프트 ·
+        // 커서 · 조합 오버레이가 없다(셸 패널의 것이다). 덤프는 `dumpFrame`이 가른다.
+        const focus: ?*Pane = ws.panes[ws.focus].?.asPane();
         frame.focus = focus;
         frame.shell = ws;
 
@@ -5778,8 +5828,30 @@ const App = struct {
             try drawPeek(self.fb, &self.cache, &ws.strip, self.whole, self.peek);
             clips.all();
         }
+        // 창 slot(WY-M2 확정 5, design 결정 23). 통째 프레임이면 보이는 창 전부, 아니면 commit이 온 창만 다시 옮긴다.
+        // 화면 밖 column의 창은 안 옮기고 frame `done`도 안 간다 — 그 창은 스스로 멈춘다(결정 10).
+        var painted: [layout.MAX_LEAVES]?u32 = @splat(null);
+        if (self.wl) |srv| {
+            var rs: [layout.MAX_LEAVES]layout.Rect = undefined;
+            ws.strip.rects(self.whole, &rs);
+            for (ws.panes, 0..) |maybe, leaf| {
+                const a = switch (maybe orelse continue) {
+                    .app => |a| a,
+                    .shell => continue,
+                };
+                if (!ws.strip.visible(@intCast(leaf), self.whole)) continue;
+                if (!full and !self.app_dirty.isSet(leaf)) continue;
+                const area = appArea(rs[leaf]);
+                // 둘레는 검정이다(WY design 결정 9) — 창이 pane보다 작거나 버퍼가 없으면 그 자리가 보인다.
+                self.fb.fillRect(area.x, area.y, area.w, area.h, APP_BACKDROP);
+                _ = srv.paint(a.toplevel, self.fb.pixels, self.fb.pitch, area);
+                clips.push(area.x, area.y, area.w, area.h);
+                painted[leaf] = a.toplevel;
+            }
+        }
+        self.app_dirty = .empty;
         for (&ws.panes, 0..) |*slot, leaf| {
-            // app slot: 아무것도 안 한다 — WY-M2 단계 B(창을 그 사각형에 옮긴다, 결정 23).
+            // 창 slot은 위에서 옮겼다.
             const p = if (slot.*) |*sl| sl.asPane() orelse continue else continue;
             if (leaf == ws.focus) continue;
             // 화면 밖 column의 pane은 안 그린다(SW-M2, design 결정 15). 그 사각형은
@@ -5793,16 +5865,17 @@ const App = struct {
             // 넘기는 이유는 그 판단을 `vt.zig` 한 자리에 두기 위해서다.
             try self.paintPane(&ws.strip, p, @intCast(leaf), full, p_cells, p.screen.images(&self.img_buf), false, &clips);
         }
-        focus.screen.focused = true;
-
-        // 증분 호출(DR-M3). 이 프레임의 첫 `cells()`여야 한다 — 비트를 끄기 때문이다. verify의 fresh
-        // 호출은 이 뒤다.
-        frame.cells = try focus.screen.cellsReuse(focus.cells_buf[focus.shown ^ 1], prevOf(focus));
+        if (focus) |f| {
+            f.screen.focused = true;
+            // 증분 호출(DR-M3). 이 프레임의 첫 `cells()`여야 한다 — 비트를 끄기 때문이다. verify의 fresh
+            // 호출은 이 뒤다.
+            frame.cells = try f.screen.cellsReuse(f.cells_buf[f.shown ^ 1], prevOf(f));
+        }
 
         // 프롬프트 문자열을 여기서 만든다. `vt.zig`는 앞의 `/`를 모른다 —
         // 그것은 표현이지 상태가 아니고, TR-M0이 색을 vt.zig에서 확정해 넘긴
         // 것과 반대 방향의 같은 경계다(모양은 main.zig가 정한다).
-        frame.prompt = if (promptText(focus.screen, &frame.prompt_buf)) |t| .{
+        frame.prompt = if (focus) |f| if (promptText(f.screen, &frame.prompt_buf)) |t| Prompt{
             .text = t,
             // 프롬프트가 열려 있을 때만 조합을 붙인다(SH-M2). 닫힌 뒤의
             // 오버레이는 지난 검색의 결과 표시이고, 그 위에 조합을 그리면
@@ -5810,13 +5883,13 @@ const App = struct {
             //
             // `findNeedle()`이 열림의 진실이다 — `promptText`가 갈래를 가를
             // 때 보는 값과 같은 것이라 둘이 어긋날 수 없다.
-            .edit = if (focus.screen.findNeedle() != null) self.key_state.preedit() else null,
-            .rect = focus.rect,
+            .edit = if (f.screen.findNeedle() != null) self.key_state.preedit() else null,
+            .rect = f.rect,
             // `cells()` 뒤에 읽어야 한다 — `state.colors`는 update()가
             // 채운다(vt.zig의 defaultFg 주석).
-            .fg = focus.screen.defaultFg(),
-            .bg = focus.screen.defaultBg(),
-        } else null;
+            .fg = f.screen.defaultFg(),
+            .bg = f.screen.defaultBg(),
+        } else null else null;
 
         // 상태 줄을 여기서 만든다. `prompt`와 같은 자리이고 같은 이유다 —
         // 모양은 `main.zig`가 정하고 그리는 함수는 "한 줄을 준 색으로 쓴다"
@@ -5826,7 +5899,7 @@ const App = struct {
         // 않으므로(CI design 결정 4) 여기서 bool 하나로 넘긴다. 갱신 경로는
         // 새로 없다 — copy 명령은 전부 `runCopies`에서 `needs_redraw`를
         // 켜고, 이 자리는 그 프레임 안이다.
-        const copy_active = focus.screen.copyActive();
+        const copy_active = if (focus) |f| f.screen.copyActive() else false;
         // 워크스페이스가 둘 이상일 때만 번호를 단다(WP design 결정 8). 하나뿐인
         // 화면은 M1과 글자도 픽셀도 같아야 한다 — hangul 체인의 `text=`와
         // `ink fg=` 기준값이 그대로 서는 것이 그 판정이다.
@@ -5865,8 +5938,10 @@ const App = struct {
 
         // `images()`의 데이터는 다음 `feed`까지만 유효하다. 이 자리는 feed와
         // render 사이라 안전하다.
-        frame.imgs = focus.screen.images(&self.img_buf);
-        try self.paintPane(&ws.strip, focus, ws.focus, full, frame.cells, frame.imgs, frame.prompt != null, &clips);
+        if (focus) |f| {
+            frame.imgs = f.screen.images(&self.img_buf);
+            try self.paintPane(&ws.strip, f, ws.focus, full, frame.cells, frame.imgs, frame.prompt != null, &clips);
+        }
         self.last_current = self.current;
         self.last_strip = ws.strip;
         self.last_app = null;
@@ -5879,6 +5954,11 @@ const App = struct {
         // 화살표가 실제 fb에 오르기 전에 한다.
         const verified = try self.verifyFrame(frame, ws);
         try presentFrame(self.fb, &self.sprite, want, &clips);
+        // 옮긴 창의 frame 콜백에 `done`(결정 10) — 이 프레임을 낸 뒤다.
+        if (self.wl) |srv| {
+            const ms: u32 = @truncate(@as(u64, @intCast(self.nowMs())));
+            for (painted) |maybe| if (maybe) |id| srv.presented(id, ms);
+        }
         // clip의 판정은 `present` 뒤다 — 화면 흉내가 이 프레임의 clip을 받은 뒤에 fb와 비교한다.
         const clipped = self.verifyClips(&clips);
         frame.frame_us = @divTrunc(frame_start.untilNow(self.io, .awake).nanoseconds, 1000);
@@ -5975,11 +6055,12 @@ const App = struct {
             self.fb.fill(APP_BACKDROP);
             clips.all();
         }
-        const fit = srv.paint(id, self.fb.pixels, self.fb.pitch, self.fb.width, self.fb.height);
+        const screen_area: wl_logic.Area = .{ .x = 0, .y = 0, .w = self.fb.width, .h = self.fb.height };
+        const fit = srv.paint(id, self.fb.pixels, self.fb.pitch, screen_area);
         if (!full and !std.meta.eql(fit, before)) {
             // 창의 크기나 자리가 바뀌었다. 칠한 위에 둘레를 다시 검정으로 — 통째로 칠하고 다시 옮긴다.
             self.fb.fill(APP_BACKDROP);
-            _ = srv.paint(id, self.fb.pixels, self.fb.pitch, self.fb.width, self.fb.height);
+            _ = srv.paint(id, self.fb.pixels, self.fb.pitch, screen_area);
             clips.all();
         } else if (fit) |f| clips.push(f.x, f.y, f.w, f.h);
         self.last_app_fit = fit;
@@ -6014,7 +6095,7 @@ const App = struct {
     ///
     /// commit의 다시 그리기는 PTY 출력과 같은 하한을 따른다(`output_pending`, RS-M2) — 클라이언트가 frame 콜백마다
     /// commit하면(tars-wl-test가 그렇다) 하한이 없을 때 terminal이 CPU 하나를 다 쓴다.
-    fn readWayland(self: *App) enum { keep, quit } {
+    fn readWayland(self: *App) !enum { keep, quit } {
         const srv = self.wl orelse return .keep;
         // `Cmd+Q`의 기한(확정 11)이 지났으면 SIGKILL. 끝은 다음 `dispatch`가 소켓이 닫힌 것으로 안다.
         srv.expire(self.nowMs());
@@ -6022,37 +6103,101 @@ const App = struct {
         // 앞 워크스페이스가 이 바퀴에 바뀌었으면(키 · 새 창 · 사라진 창) 키보드 포커스를 옮긴다.
         defer self.syncFocus();
         for (srv.takeEvents()) |e| switch (e) {
-            .toplevel => |id| {
-                const n = workspaceCount(&self.workspaces);
-                if (n == MAX_WORKSPACES) {
-                    srv.refuse(id);
-                    continue;
-                }
-                self.workspaces[n] = .{ .app = .{ .toplevel = id } };
-                logline.print("terminal: wl> toplevel id={d} ws={d}\n", .{ id, n + 1 });
-                self.enterWorkspace(n);
-            },
+            .toplevel => |o| try self.openApp(srv, o),
             .gone => |id| {
-                const wi = for (self.workspaces, 0..) |slot, i| {
-                    const w = slot orelse continue;
-                    switch (w) {
-                        .app => |a| if (a.toplevel == id) break i,
-                        .shell => {},
-                    }
-                } else continue;
-                logline.print("terminal: wl> unmap id={d} ws={d}\n", .{ id, wi + 1 });
-                self.removeWorkspace(wi);
+                const at = self.findApp(id) orelse continue;
+                switch (at) {
+                    .workspace => |wi| {
+                        logline.print("terminal: wl> unmap id={d} ws={d}\n", .{ id, wi + 1 });
+                        self.removeWorkspace(wi);
+                    },
+                    .slot => |sl| {
+                        logline.print("terminal: wl> unmap id={d} ws={d} slot={d}\n", .{ id, sl.ws + 1, sl.leaf });
+                        try self.closeSlot(sl.ws, sl.leaf);
+                    },
+                }
                 if (workspaceCount(&self.workspaces) == 0) return .quit;
                 self.needs_redraw = true;
             },
-            .commit => |id| switch (self.workspaces[self.current].?) {
-                .app => |a| if (a.toplevel == id) {
+            // 앞에 보이는 창의 commit만 다음 프레임을 부른다. 셸 워크스페이스의 slot이면 그 slot을 표시해 둔다 —
+            // 셸 프레임은 바뀐 slot만 다시 옮긴다(확정 5).
+            .commit => |id| switch (self.findApp(id) orelse continue) {
+                .workspace => |wi| if (wi == self.current) {
                     self.output_pending = true;
                 },
-                .shell => {},
+                .slot => |sl| if (sl.ws == self.current) {
+                    self.app_dirty.set(sl.leaf);
+                    self.output_pending = true;
+                },
             },
         };
         return .keep;
+    }
+
+    /// 창 하나가 어디 있는가(WY-M2). 자기 workspace이거나 셸 workspace의 slot이다.
+    const AppAt = union(enum) { workspace: usize, slot: struct { ws: usize, leaf: u4 } };
+
+    fn findApp(self: *const App, id: u32) ?AppAt {
+        for (self.workspaces, 0..) |slot, wi| {
+            switch (slot orelse continue) {
+                .app => |a| if (a.toplevel == id) return .{ .workspace = wi },
+                .shell => |sh| for (sh.panes, 0..) |maybe, leaf| switch (maybe orelse continue) {
+                    .app => |a| if (a.toplevel == id) return .{ .slot = .{ .ws = wi, .leaf = @intCast(leaf) } },
+                    .shell => {},
+                },
+            }
+        }
+        return null;
+    }
+
+    /// 창이 첫 commit을 했다 — 자리를 정한다(WY-M2 확정 3, design 결정 21).
+    ///
+    /// - 첫 commit 전에 `set_fullscreen`을 보낸 창(둠), 또는 앞이 app workspace면: 끝에 자기 workspace(WY-M0의 길).
+    ///   아홉이면 거절한다.
+    /// - 아니면 앞 셸 workspace의 포커스 column 오른쪽에 새 column(R-WIN-1) — `Cmd+D`(split_right)와 같은 길이고 포커스가
+    ///   그 slot으로 간다. strip이 받지 않으면(slot 여덟, 또는 가를 수 없이 좁다) 거절한다.
+    ///
+    /// column의 configure는 이 바퀴 끝의 `syncFocus` → `syncColumns`가 보낸다 — 포커스를 먼저 옮겨 `activated`를 한 번에 싣는다.
+    fn openApp(self: *App, srv: *wls.Server, o: wls.Opened) !void {
+        const front = &self.workspaces[self.current].?;
+        const ws = switch (front.*) {
+            .shell => |*sh| if (o.fullscreen) null else sh,
+            .app => null,
+        } orelse {
+            const n = workspaceCount(&self.workspaces);
+            if (n == MAX_WORKSPACES) return srv.refuse(o.id);
+            self.workspaces[n] = .{ .app = .{ .toplevel = o.id } };
+            logline.print("terminal: wl> toplevel id={d} ws={d}\n", .{ o.id, n + 1 });
+            srv.placeWorkspace(o.id);
+            self.enterWorkspace(n);
+            return;
+        };
+        const leaf = ws.strip.split(ws.focus, .right, self.whole) orelse return srv.refuse(o.id);
+        _ = try applyLayout(self.allocator, ws, self.whole);
+        ws.panes[leaf] = .{ .app = .{ .toplevel = o.id } };
+        ws.focus = leaf;
+        try self.revealFocus(ws);
+        logline.print("terminal: wl> column id={d} slot={d} ws={d}\n", .{ o.id, leaf, self.current + 1 });
+        self.needs_redraw = true;
+    }
+
+    /// 셸 workspace `wi`의 app slot `leaf`를 닫는다(WY-M2) — 창이 사라졌다. 셸 패널의 EOF 닫기(`readPanes`)와 같은
+    /// 길이다: 포커스를 물려주고(`heir`), strip에서 지우고, column이 당겨진다(R-WIN-5). 마지막 slot이었으면 workspace가
+    /// 사라진다(셸이 남았으면 그 workspace는 산다 — design 결정 16의 연장).
+    fn closeSlot(self: *App, wi: usize, leaf: u4) !void {
+        const w = self.workspaces[wi].?.asShell().?;
+        const whole = self.wholeFor(w.fullscreen);
+        w.panes[leaf] = null;
+        self.app_dirty.unset(leaf);
+        if (w.focus == leaf) w.focus = w.strip.heir(leaf);
+        w.strip.remove(leaf, whole);
+        if (w.strip.count() == 0) {
+            logline.print("terminal: pane> workspace closed ws={d}\n", .{wi + 1});
+            self.removeWorkspace(wi);
+            return;
+        }
+        _ = w.strip.reveal(w.focus, whole);
+        _ = try applyLayout(self.allocator, w, whole);
     }
 
     /// 패널 하나를 그린다(DR-M2) — 통째(`renderPane`) 또는 dirty 행만(`renderRows`). `cells`는
@@ -6141,6 +6286,24 @@ const App = struct {
             try renderPane(v.fb, &self.cache, fresh, imgs, p.screen.defaultBg(), p.rect, p.screen.cursorMark());
         }
         _ = try renderOverlay(v.fb, &self.cache, frame.prompt, frame.status_line);
+        // 창 slot은 그림자가 흉내 내지 않는다(WY design 결정 17, WY-M2 확정 6). 보이는 창의 사각형을 실제 fb에서 그림자로
+        // 옮겨 비교에서 뺀다 — 그 사각형 밖(구분선 · 이웃 패널)은 그대로 비교된다.
+        var rs: [layout.MAX_LEAVES]layout.Rect = undefined;
+        ws.strip.rects(self.whole, &rs);
+        for (ws.panes, 0..) |maybe, leaf| {
+            switch (maybe orelse continue) {
+                .app => {},
+                .shell => continue,
+            }
+            if (!ws.strip.visible(@intCast(leaf), self.whole)) continue;
+            const area = appArea(rs[leaf]);
+            var y: usize = area.y;
+            while (y < area.y + area.h) : (y += 1) {
+                const off = y * @as(usize, self.fb.pitch) + @as(usize, area.x) * 4;
+                const len = @as(usize, area.w) * 4;
+                @memcpy(v.fb.pixels[off..][0..len], self.fb.pixels[off..][0..len]);
+            }
+        }
         const report = verify.compare(
             self.fb.pixels,
             v.fb.pixels,
@@ -6172,6 +6335,15 @@ const App = struct {
         }
     }
 
+    /// 글리프 캐시가 자랐으면 한 줄(`font>`).
+    fn dumpGlyphs(self: *App) void {
+        if (self.cache.count() == self.last_glyph_count) return;
+        self.last_glyph_count = self.cache.count();
+        logline.print("terminal: font> {d} glyph(s) cached, {d} bitmap bytes\n", .{
+            self.last_glyph_count, self.cache.bitmap_bytes,
+        });
+    }
+
     /// 바퀴 10. 그린 프레임의 덤프 열셋. 순서가 게이트의 계약이다 — `dumpCursor`는
     /// `dumpInk` 뒤 · `dumpScroll` 앞, `dumpPointerAt`이 맨 뒤.
     fn dumpFrame(self: *App, frame: *const Frame, p: Pointers) void {
@@ -6181,7 +6353,16 @@ const App = struct {
             dumpPointerAt(self.fb, &self.pointer_state, p.round, &self.sprite, p.before_spot);
             return;
         }
-        const focus = frame.focus;
+        // 포커스 slot이 창인 셸 프레임(WY-M2): 패널의 덤프(이미지 · 화면 · 하이라이트 · 오버레이 · 프롬프트 잉크 · 스타일 ·
+        // 잉크 · 커서 · 스크롤)는 없다 — 그 패널이 없다. 상태 줄 · `pane>` · `strip>` · 글리프 · 화살표 줄은 같다.
+        const focus = frame.focus orelse {
+            dumpStatus(self.fb, frame.status_line, frame.status_changed);
+            dumpPane(self.fb, frame.shell, self.whole, self.current, workspaceCount(&self.workspaces), &self.last_pane);
+            dumpStrip(self.fb, frame.shell, self.whole, self.peek, &self.last_strip_sig);
+            self.dumpGlyphs();
+            dumpPointerAt(self.fb, &self.pointer_state, p.round, &self.sprite, p.before_spot);
+            return;
+        };
         const cells = frame.cells;
         const frame_us = frame.frame_us;
         dumpImages(self.fb, frame.imgs, focus.screen.images_dropped, frame_us, focus.rect);
@@ -6191,7 +6372,7 @@ const App = struct {
         dumpOverlay(frame.prompt);
         dumpPromptInk(self.fb, frame.prompt_ink, frame.prompt);
         dumpStatus(self.fb, frame.status_line, frame.status_changed);
-        dumpPane(self.fb, frame.shell, self.current, workspaceCount(&self.workspaces), &self.last_pane);
+        dumpPane(self.fb, frame.shell, self.whole, self.current, workspaceCount(&self.workspaces), &self.last_pane);
         dumpStrip(self.fb, frame.shell, self.whole, self.peek, &self.last_strip_sig);
         // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
         // 기본 색을 여기 상수로 다시 적지 않고 `focus.screen`에서 얻는 이유는
@@ -6210,12 +6391,7 @@ const App = struct {
         // `last_frame`이 이 줄을 담으려면 `screen>` 뒤여야 한다.
         dumpCursor(self.fb, focus.screen, focus.rect);
         dumpScroll(focus.screen);
-        if (self.cache.count() != self.last_glyph_count) {
-            self.last_glyph_count = self.cache.count();
-            logline.print("terminal: font> {d} glyph(s) cached, {d} bitmap bytes\n", .{
-                self.last_glyph_count, self.cache.bitmap_bytes,
-            });
-        }
+        self.dumpGlyphs();
         // 덤프들 뒤다. 게이트는 이 줄이 보이면 같은 프레임의 `scroll>`이 이미
         // 찍혔다고 읽는다(pointer/check.sh 검사 11).
         dumpPointerAt(self.fb, &self.pointer_state, p.round, &self.sprite, p.before_spot);
@@ -6264,7 +6440,7 @@ const App = struct {
         self.readYield();
         // Wayland는 양보 뒤 · 그리기 앞(WY design 결정 4) — 창의 commit이 같은 바퀴의 프레임에 담긴다. 셸도 창도
         // 안 남으면 끝난다(결정 16).
-        if (self.readWayland() == .quit) return false;
+        if (try self.readWayland() == .quit) return false;
         // 양보 중에는 그리지 않는다(DY design 결정 5). present 두 자리(`decideFrame`의 화살표 ·
         // `render`)를 여기서 함께 막는다 — 놓은 fd의 present는 `EACCES`이고 `try`라 terminal이 죽는다.
         // 출력은 vt에 계속 쌓이고, 그릴 일은 `needs_redraw`로 남겨 복귀의 통째 그리기가 담는다.

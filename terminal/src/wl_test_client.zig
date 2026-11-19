@@ -3,6 +3,8 @@
 //! xdg_toplevel 하나를 열고 한 색으로 채운 ARGB8888(알파 FF) `wl_shm` 버퍼를 붙인다. 받은 configure · keymap · key ·
 //! modifiers · close · frame을 표준 출력에 한 줄씩 찍는다 — `wayland` 체인이 그 줄을 읽어 판정한다. `close`를 받으면
 //! 끝난다. `--ignore-close`이면 close를 무시하고 `xdg_wm_base.ping`에 답하지 않는다(서버의 SIGKILL 판정용, 확정 11).
+//! WY-M2: 기본은 창 모드라 서버가 셸 오른쪽 column에 연다. `--fullscreen`이면 첫 commit 전에 `set_fullscreen`을 보내
+//! 자기 workspace를 받는다(WY-M0 · 둠의 길). configure 줄에 states를, 키보드의 `enter` · `leave`를 줄로 찍는다.
 //!
 //! 바인딩은 terminal의 서버와 같은 스캐너가 만든 것이다(`build.zig`의 `wayland` 모듈 — 서버는 `server`, 이쪽은
 //! `client` 이름공간). libwayland-client는 동적으로 링크하고 `make_initrd.sh`의 `copy_lib_deps`가 따라 싣는다.
@@ -56,6 +58,8 @@ const Args = struct {
     ignore_close: bool = false,
     /// configure의 크기로 버퍼를 다시 만든다(SDL처럼 구는 클라이언트를 흉내 낸다).
     follow_size: bool = false,
+    /// 첫 commit 전에 `set_fullscreen`(WY-M2 확정 12) — 서버가 자기 workspace를 준다.
+    fullscreen: bool = false,
 };
 
 fn parseSize(text: []const u8) ?[2]u32 {
@@ -76,6 +80,8 @@ fn parseArgs(argv: []const []const u8) ?Args {
             args.ignore_close = true;
         } else if (std.mem.eql(u8, a, "--follow-size")) {
             args.follow_size = true;
+        } else if (std.mem.eql(u8, a, "--fullscreen")) {
+            args.fullscreen = true;
         } else if (std.mem.eql(u8, a, "--color")) {
             i += 1;
             if (i == argv.len or argv[i].len != 6) return null;
@@ -93,11 +99,13 @@ fn parseArgs(argv: []const []const u8) ?Args {
 
 fn usage() u8 {
     writeAll(2,
-        \\usage: tars-wl-test [--color RRGGBB] [--size WxH] [--ignore-close] [--follow-size]
+        \\usage: tars-wl-test [--color RRGGBB] [--size WxH] [--ignore-close] [--follow-size] [--fullscreen]
         \\  open one xdg_toplevel filled with one colour (default 3366CC, 320x200) and
         \\  print what the compositor sends, one line each. Ends on close, unless
         \\  --ignore-close (then close and ping are ignored). The buffer keeps its
         \\  own size unless --follow-size (then it takes the configured size).
+        \\  --fullscreen asks for fullscreen before the first commit (its own
+        \\  workspace); without it the window opens as a column right of the shell.
         \\
     );
     return EXIT_USAGE;
@@ -124,6 +132,9 @@ const State = struct {
     /// toplevel.configure가 준 크기. xdg_surface.configure(묶음의 끝)에서 적용한다.
     pending_w: i32 = 0,
     pending_h: i32 = 0,
+    /// 같은 configure의 states(`4,5,6,7,8` 모양 — xdg_toplevel.state의 값). 비었으면 `-`.
+    pending_states: [48]u8 = undefined,
+    pending_states_len: usize = 0,
     configured: bool = false,
     frames: u32 = 0,
     running: bool = true,
@@ -207,7 +218,8 @@ fn xdgSurfaceListener(xdg_surface: *xdg.Surface, event: xdg.Surface.Event, state
     switch (event) {
         .configure => |c| {
             xdg_surface.ackConfigure(c.serial);
-            say("configure w={d} h={d}", .{ state.pending_w, state.pending_h });
+            const st = if (state.pending_states_len == 0) "-" else state.pending_states[0..state.pending_states_len];
+            say("configure w={d} h={d} states={s}", .{ state.pending_w, state.pending_h, st });
             // 기본은 제 크기(`--size`)를 지킨다. terminal은 화면 크기로 configure하는데(WY-M0 확정 4), 그것을 따르면
             // 버퍼가 화면을 꽉 채워 서버의 정수 배율과 검정 둘레(확정 8)를 볼 수 없다. `--follow-size`면 따른다.
             // 0은 "클라이언트가 정하라"다 — 그때도 지금 크기를 지킨다.
@@ -232,6 +244,12 @@ fn toplevelListener(_: *xdg.Toplevel, event: xdg.Toplevel.Event, state: *State) 
         .configure => |c| {
             state.pending_w = c.width;
             state.pending_h = c.height;
+            var n: usize = 0;
+            for (c.states.slice(u32), 0..) |v, i| {
+                const part = std.fmt.bufPrint(state.pending_states[n..], "{s}{d}", .{ if (i == 0) "" else ",", v }) catch break;
+                n += part.len;
+            }
+            state.pending_states_len = n;
         },
         .close => {
             say("close", .{});
@@ -278,6 +296,9 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, _: *State) void {
         },
         .key => |k| say("key code={d} state={d}", .{ k.key, @backingInt(k.state) }),
         .modifiers => |m| say("mods depressed=0x{x}", .{m.mods_depressed}),
+        // 키보드 포커스(WY-M2 확정 9) — column 창은 포커스 slot이 될 때 enter, 셸로 옮기면 leave.
+        .enter => say("enter", .{}),
+        .leave => say("leave", .{}),
         else => {},
     }
 }
@@ -328,6 +349,8 @@ fn run(args: Args) !u8 {
     toplevel.setListener(*State, toplevelListener, &state);
     toplevel.setTitle("tars-wl-test");
     toplevel.setAppId("tars-wl-test");
+    // 첫 commit 전이라 서버가 자리를 정할 때 본다(WY-M2 확정 3).
+    if (args.fullscreen) toplevel.setFullscreen(null);
     // 첫 commit은 버퍼 없이 — 서버가 첫 configure를 보내게 한다(xdg-shell의 순서).
     surface.commit();
 

@@ -20,6 +20,7 @@ const linux = std.os.linux;
 const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const xdg = wayland.server.xdg;
+const zxdg = wayland.server.zxdg;
 const logic = @import("../wl_logic.zig");
 const logline = @import("../logline.zig");
 
@@ -29,6 +30,8 @@ const COMPOSITOR_VERSION = 4;
 const OUTPUT_VERSION = 4;
 const SEAT_VERSION = 7;
 const WM_BASE_VERSION = 5;
+/// 장식 관리자(WY-M2, design 결정 25). 판 1뿐이다.
+const DECORATION_VERSION = 1;
 
 /// 키 반복(design 결정 6 — terminal의 반복 설정과 같은 값). terminal은 반복을 스스로 안 하고 커널 evdev의
 /// 자동 반복을 받는다. 그 기본값이 지연 250ms · 간격 33ms(초당 약 30)이다.
@@ -48,12 +51,21 @@ const F_SEAL_WRITE = 0x8;
 
 /// App이 바퀴마다 꺼내는 일(`takeEvents`).
 pub const Event = union(enum) {
-    /// toplevel이 생겼다 — App이 끝에 workspace를 만들거나, 아홉이면 `refuse`한다.
-    toplevel: u32,
+    /// toplevel이 첫 commit을 했다(WY-M2 확정 3) — App이 자리를 정해 `placeWorkspace`나 `placeColumn`을 부르거나, 자리가
+    /// 없으면 `refuse`한다. 만들 때가 아니라 첫 commit 때 내는 것은 `set_fullscreen`이 그 사이에 오기 때문이다(xdg-shell:
+    /// 클라이언트는 역할을 만든 뒤 상태를 정하고 첫 commit으로 configure를 청한다). 둠은 그렇게 자기 workspace를 고른다.
+    toplevel: Opened,
     /// toplevel이 사라졌다(클라이언트가 지웠거나 끝났다) — 그 workspace가 닫힌다.
     gone: u32,
     /// 보이는 내용이 바뀌었거나 frame 콜백을 기다린다 — 그 workspace가 앞이면 다시 그린다.
     commit: u32,
+};
+
+/// 첫 commit에 정해진 것(`Event.toplevel`).
+pub const Opened = struct {
+    id: u32,
+    /// 첫 commit 전에 `set_fullscreen`을 받았다(design 결정 21).
+    fullscreen: bool,
 };
 
 pub const Server = struct {
@@ -129,6 +141,7 @@ pub const Server = struct {
         _ = try wl.Global.create(display, wl.Output, OUTPUT_VERSION, *Server, self, bindOutput);
         _ = try wl.Global.create(display, wl.Seat, SEAT_VERSION, *Server, self, bindSeat);
         _ = try wl.Global.create(display, xdg.WmBase, WM_BASE_VERSION, *Server, self, bindWmBase);
+        _ = try wl.Global.create(display, zxdg.DecorationManagerV1, DECORATION_VERSION, *Server, self, bindDecorationManager);
 
         if (setenv("WAYLAND_DISPLAY", "wayland-0", 1) != 0) return error.SetenvFailed;
         logline.print("terminal: wl> listen path={s}/wayland-0\n", .{dir});
@@ -172,6 +185,7 @@ pub const Server = struct {
     pub fn setFocus(self: *Server, want: ?u32, mods: logic.Mask) void {
         self.mods = mods;
         if (self.focused == want) return;
+        const old_id = self.focused;
         if (self.focused) |old| if (self.find(old)) |t| if (surfaceOf(t)) |sr| {
             const serial = self.display.nextSerial();
             var it = self.keyboards.iterator(.forward);
@@ -180,6 +194,10 @@ pub const Server = struct {
         self.focused = want;
         self.held.clear();
         self.sent_mods = null;
+        // column 창의 `activated`는 키보드 포커스다(확정 4). 바뀐 둘에 크기는 그대로 configure를 다시 보낸다 —
+        // 아직 한 번도 안 보냈으면(막 연 창) 첫 configure가 `configureColumn`에서 이 값으로 나간다.
+        if (old_id) |o| if (self.find(o)) |t| self.resendColumn(t);
+        if (want) |w| if (self.find(w)) |t| self.resendColumn(t);
         const t = self.find(want orelse return) orelse return;
         const sr = surfaceOf(t) orelse return;
         var it = self.keyboards.iterator(.forward);
@@ -259,16 +277,44 @@ pub const Server = struct {
         }
     }
 
-    /// workspace가 아홉이라 받을 자리가 없다(확정 12) — close를 보낸다.
+    /// 받을 자리가 없다(workspace 아홉, 또는 strip의 slot 여덟 — 확정 3) — close를 보낸다.
     pub fn refuse(self: *Server, id: u32) void {
         const t = self.find(id) orelse return;
         t.resource.sendClose();
         logline.print("terminal: wl> toplevel refused id={d}\n", .{id});
     }
 
-    /// toplevel `id`의 버퍼를 프레임버퍼에 옮긴다(확정 8). 그린 사각형을 돌려준다. 버퍼가 없거나 받지 않는
-    /// 형식이면 null이다 — 그 자리는 부르는 쪽이 검정으로 둔다.
-    pub fn paint(self: *Server, id: u32, dst: [*]u8, pitch: u32, fb_w: u32, fb_h: u32) ?logic.Fit {
+    /// 창이 자기 workspace를 받았다(WY-M0의 길 — 둠, 앞이 app workspace일 때). 화면 크기 · fullscreen · activated의
+    /// configure 하나를 보낸다. 그 뒤로 크기가 안 바뀐다.
+    pub fn placeWorkspace(self: *Server, id: u32) void {
+        const t = self.find(id) orelse return;
+        t.place = .workspace;
+        t.area_w = self.fb_w;
+        t.area_h = self.fb_h;
+        sendConfigure(t, self.fb_w, self.fb_h, true);
+    }
+
+    /// 창이 strip의 column이다(확정 4, design 결정 22). `w` × `h`는 pane의 픽셀 크기다. App이 바퀴마다 모든 app slot에
+    /// 부른다 — 크기나 `activated`가 지난번 보낸 것과 같으면 아무것도 안 보낸다. `activated`는 키보드 포커스다(`setFocus`).
+    pub fn configureColumn(self: *Server, id: u32, w: u32, h: u32) void {
+        const t = self.find(id) orelse return;
+        t.place = .column;
+        t.area_w = w;
+        t.area_h = h;
+        self.resendColumn(t);
+    }
+
+    /// column 창의 configure를 지금 값(크기 · 포커스)으로. 지난번 것과 같으면 보내지 않는다.
+    fn resendColumn(self: *Server, t: *Toplevel) void {
+        if (t.place != .column or t.area_w == 0 or t.area_h == 0) return;
+        const want: Toplevel.Sent = .{ .w = t.area_w, .h = t.area_h, .act = self.focused == t.id };
+        if (t.sent) |was| if (std.meta.eql(was, want)) return;
+        sendConfigure(t, want.w, want.h, want.act);
+    }
+
+    /// toplevel `id`의 버퍼를 프레임버퍼의 사각형 `area` 안에 옮긴다(확정 8, WY-M2 확정 5). 그린 사각형을 돌려준다.
+    /// 버퍼가 없거나 받지 않는 형식이면 null이다 — 그 자리는 부르는 쪽이 검정으로 둔다.
+    pub fn paint(self: *Server, id: u32, dst: [*]u8, pitch: u32, area: logic.Area) ?logic.Fit {
         const t = self.find(id) orelse return null;
         const xs = t.xdg orelse return null;
         const s = xs.surface orelse return null;
@@ -277,7 +323,7 @@ pub const Server = struct {
         if (!logic.formatOk(shm.getFormat())) return null;
         const w: u32 = @intCast(shm.getWidth());
         const h: u32 = @intCast(shm.getHeight());
-        const f = logic.fit(fb_w, fb_h, w, h) orelse return null;
+        const f = logic.fitIn(area, w, h) orelse return null;
         // 클라이언트가 풀을 줄였으면 읽기가 SIGBUS다 — libwayland이 그 틈을 막는다(begin · end).
         shm.beginAccess();
         defer shm.endAccess();
@@ -479,7 +525,9 @@ fn commit(s: *Surface) void {
     const step = logic.onCommit(xs.phase, xs.acked, s.current != null);
     switch (step.action) {
         .unconfigured_buffer => return xs.resource.postError(.unconfigured_buffer, "buffer before the first ack_configure"),
-        .send_configure => sendConfigure(t),
+        // 첫 commit — 자리는 App이 정한다(`Event.toplevel`). configure는 App이 `placeWorkspace` · `configureColumn`으로
+        // 같은 바퀴에 보낸다(이 dispatch 뒤 `takeEvents`, 바퀴 끝의 flush).
+        .send_configure => s.srv.push(.{ .toplevel = .{ .id = t.id, .fullscreen = t.want_fullscreen } }),
         .wait => {},
         .map, .update => {
             if (changed) logCommit(t, s);
@@ -493,7 +541,7 @@ fn commit(s: *Surface) void {
 fn logCommit(t: *Toplevel, s: *Surface) void {
     const buf = s.current orelse return;
     const shm = wl.shm.Buffer.get(@ptrCast(buf)) orelse return;
-    const f = logic.fit(s.srv.fb_w, s.srv.fb_h, @intCast(shm.getWidth()), @intCast(shm.getHeight())) orelse return;
+    const f = logic.fit(t.area_w, t.area_h, @intCast(shm.getWidth()), @intCast(shm.getHeight())) orelse return;
     const sig: Toplevel.Sig = .{ .w = shm.getWidth(), .h = shm.getHeight(), .fit = f };
     if (t.last) |l| if (std.meta.eql(l, sig)) return;
     t.last = sig;
@@ -675,8 +723,17 @@ const Toplevel = struct {
     /// `Cmd+Q`의 2초 기한(단계 C)과 그때 잰 클라이언트의 pid.
     deadline: logic.Deadline = .{},
     pid: i32 = 0,
+    /// 첫 commit 전에 `set_fullscreen`을 받았다(WY-M2 확정 3). `unset_fullscreen`이 지운다.
+    want_fullscreen: bool = false,
+    /// 놓인 자리와 그 크기(픽셀) — App이 정한다(`placeWorkspace` · `configureColumn`). 놓이기 전에는 null · 0이다.
+    place: ?logic.Place = null,
+    area_w: u32 = 0,
+    area_h: u32 = 0,
+    /// 마지막으로 보낸 configure(column의 같은 것 거르기).
+    sent: ?Sent = null,
 
     const Sig = struct { w: i32, h: i32, fit: logic.Fit };
+    const Sent = struct { w: u32, h: u32, act: bool };
 };
 
 fn xdgSurfaceRequest(res: *xdg.Surface, req: xdg.Surface.Request, xs: *XdgSurface) void {
@@ -699,7 +756,6 @@ fn xdgSurfaceRequest(res: *xdg.Surface, req: xdg.Surface.Request, xs: *XdgSurfac
             xs.srv.next_id += 1;
             xs.toplevel = t;
             tr.setHandler(*Toplevel, toplevelRequest, toplevelDestroyed, t);
-            xs.srv.push(.{ .toplevel = t.id });
         },
         // popup은 M5(R-WY-14). 만들자마자 닫혔다고 알린다.
         .get_popup => |r| {
@@ -727,30 +783,64 @@ fn xdgSurfaceDestroyed(_: *xdg.Surface, xs: *XdgSurface) void {
     xs.srv.allocator.destroy(xs);
 }
 
-/// 처음이자 유일한 configure(확정 4 — 풀스크린 = 자기 workspace). 크기는 화면, 상태는 fullscreen과 activated다.
-/// 장식은 없다(app workspace는 늘 chrome 없음).
-fn sendConfigure(t: *Toplevel) void {
+/// configure 하나(WY-M0 확정 4 · WY-M2 확정 4). 자리(`t.place`)가 states를 고른다(`logic.toplevelStates` — 자기
+/// workspace는 fullscreen · activated, column은 activated와 tiled 넷). 장식은 없다 — 장식 관리자가 늘 server_side라고
+/// 답하고 서버는 아직 그리지 않는다(design 결정 25). `wm_capabilities`는 첫 configure에만.
+fn sendConfigure(t: *Toplevel, w: u32, h: u32, act: bool) void {
     const xs = t.xdg orelse return;
-    if (t.resource.getVersion() >= 5) {
+    const place = t.place orelse return;
+    if (t.sent == null and t.resource.getVersion() >= 5) {
         var caps = [_]u32{@intCast(@backingInt(xdg.Toplevel.WmCapabilities.fullscreen))};
         var arr: wl.Array = .{ .size = @sizeOf(@TypeOf(caps)), .alloc = @sizeOf(@TypeOf(caps)), .data = &caps };
         t.resource.sendWmCapabilities(&arr);
     }
-    var states = [_]u32{
-        @intCast(@backingInt(xdg.Toplevel.State.fullscreen)),
-        @intCast(@backingInt(xdg.Toplevel.State.activated)),
-    };
-    var arr: wl.Array = .{ .size = @sizeOf(@TypeOf(states)), .alloc = @sizeOf(@TypeOf(states)), .data = &states };
-    t.resource.sendConfigure(@intCast(t.srv.fb_w), @intCast(t.srv.fb_h), &arr);
+    var buf: [6]u32 = undefined;
+    const states = logic.toplevelStates(place, act, t.resource.getVersion(), &buf);
+    var arr: wl.Array = .{ .size = states.len * @sizeOf(u32), .alloc = states.len * @sizeOf(u32), .data = states.ptr };
+    t.resource.sendConfigure(@intCast(w), @intCast(h), &arr);
     xs.resource.sendConfigure(t.srv.display.nextSerial());
+    t.sent = .{ .w = w, .h = h, .act = act };
+    logline.print("terminal: wl> configure id={d} w={d} h={d} act={d}\n", .{ t.id, w, h, @intFromBool(act) });
 }
 
-/// 창 메뉴 · 옮기기 · 크기 · 최대화 · 최소화 · 전체 화면 요청은 받기만 한다 — 창은 늘 자기 workspace를
-/// 채운다(확정 4). 제목과 app id는 아직 안 쓴다.
-fn toplevelRequest(res: *xdg.Toplevel, req: xdg.Toplevel.Request, _: *Toplevel) void {
+/// 창 메뉴 · 옮기기 · 크기 · 최대화 · 최소화 요청은 받기만 한다 — 크기는 서버가 정한다(자기 workspace는 화면, column은
+/// pane). 전체 화면은 첫 commit 전의 것만 뜻이 있다(WY-M2 확정 3) — 그 뒤의 것은 받기만 한다(풀스크린으로 옮기기는
+/// 결정 1의 다음 milestone 거리). 제목과 app id는 아직 안 쓴다.
+fn toplevelRequest(res: *xdg.Toplevel, req: xdg.Toplevel.Request, t: *Toplevel) void {
     switch (req) {
         .destroy => res.destroy(),
+        .set_fullscreen => t.want_fullscreen = true,
+        .unset_fullscreen => t.want_fullscreen = false,
         else => {},
+    }
+}
+
+// ── zxdg_decoration_manager_v1(WY-M2, design 결정 25) ───────────────────
+
+fn bindDecorationManager(client: *wl.Client, _: *Server, version: u32, id: u32) void {
+    const m = zxdg.DecorationManagerV1.create(client, version, id) catch return client.postNoMemory();
+    m.setHandler(?*anyopaque, decorationManagerRequest, null, null);
+}
+
+/// 창마다 장식 객체 하나. 늘 `server_side`라고 답한다 — 클라이언트(SDL3 · libdecor)는 장식을 안 그리고, 서버는 아직
+/// 장식을 그리지 않는다(M5). 답은 다음 `xdg_surface.configure`와 함께 적용된다 — 장식 객체는 보통 첫 commit 전에 생기고,
+/// 그 첫 configure는 App이 자리를 정할 때 나간다.
+fn decorationManagerRequest(m: *zxdg.DecorationManagerV1, req: zxdg.DecorationManagerV1.Request, _: ?*anyopaque) void {
+    switch (req) {
+        .destroy => m.destroy(),
+        .get_toplevel_decoration => |r| {
+            const d = zxdg.ToplevelDecorationV1.create(m.getClient(), m.getVersion(), r.id) catch return m.postNoMemory();
+            d.setHandler(?*anyopaque, decorationRequest, null, null);
+            d.sendConfigure(.server_side);
+        },
+    }
+}
+
+fn decorationRequest(d: *zxdg.ToplevelDecorationV1, req: zxdg.ToplevelDecorationV1.Request, _: ?*anyopaque) void {
+    switch (req) {
+        .destroy => d.destroy(),
+        // 클라이언트가 바라는 것과 상관없이 server_side다(design 결정 25, R-WY-12).
+        .set_mode, .unset_mode => d.sendConfigure(.server_side),
     }
 }
 
