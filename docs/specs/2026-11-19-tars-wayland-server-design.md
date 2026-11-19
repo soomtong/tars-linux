@@ -173,6 +173,28 @@ out · err, 양보 listen · guest, 링크 이벤트). LK가 링크 칸을 더�
     kmsdrm 대신 Wayland를 골라 우리 서버의 창이 됐다 — DY 판정 12a(자동 실행 데모가 그린다)가 빨갰다. 데모 쪽에서 드라이버를
     못박는 대신 문 쪽에서 고치는 것은, `tars-fullscreen`을 거치는 모든 프로그램이 같은 처지이기 때문이다.
 
+WY-M2를 열며(2026-11-20, 조사 `wy-impl` — SDL 3.2.10 · Mesa 25.0.7 소스, 근거는 plan WY-M2의 확인 절):
+
+19. 로드맵의 WY-M2를 둘로 자른다 — WY-M2는 column과 포인터, WY-M3(새)은 배율(결정 5). 둘은 서로 기대지 않는다: SDL3는 배율
+    없이도 논리 크기 버퍼로 column에 선다. 뒤 번호(클립보드 · 한글 · 장식)가 하나씩 밀린다.
+20. app은 strip의 slot이다 — `ShellWs.panes`의 칸이 `Slot = union(enum) { shell: Pane, app: AppPane }`이 된다. strip의 규칙(한도 8 ·
+    column당 3 · 이웃 · viewport · `Cmd+R` · 닫히면 당겨짐)이 app에 그대로 온다. 결정 15의 "null을 푸는 자리를 컴파일 오류로"가
+    slot 단으로 내려온다. 별도 목록(셸 목록 + app 목록)은 둘이 어긋나는 panic 길을 다시 열어 버렸다. `AppWs`(자기 workspace의 창)는
+    그대로 둔다 — 합치기는 WY-M0 · M1의 길을 다시 여는 일이라 이 milestone 밖이다.
+21. 어디에 여는가: 첫 commit 전에 `set_fullscreen`을 보낸 창은 지금처럼 자기 workspace(결정 7, 둠). 아니면 앞이 셸 workspace일 때
+    포커스 column 오른쪽에 새 column(R-WIN-1), 앞이 app workspace면 자기 workspace. 자리가 없으면(slot 8) `close`로 거절.
+    app slot은 strip에서 여느 slot이다 — 그 위의 `Cmd+D`는 오른쪽에 셸 column, `Cmd+Shift+D`는 그 column 아래에 셸.
+22. app slot의 configure는 pane 픽셀 크기와 `activated` · `tiled_*`(판 2+)다. 크기가 바뀌는 자리는 `applyLayout` 하나라 거기서
+    다시 보낸다. 다른 크기의 버퍼(RESIZABLE이 아닌 SDL 창)는 `fit`으로 pane 안 가운데에 정수 배로(1보다 크면 자른다).
+23. app slot은 셸 프레임 안에서 그 사각형만 칠하고(같은 clip 목록), render verify는 app slot을 건너뛴다(결정 17의 연장).
+24. `wl_pointer`(seat 7 그대로): PD-M4의 `.child` 길을 탄다 — app slot은 늘 `.child`, 첫 누름이 포커스를 옮긴다(클릭 포커스,
+    R-WIN-6). surface 좌표는 `fit`을 거꾸로. 휠은 `axis` + `axis_discrete` + `frame`. 버튼을 쥔 동안은 leave를 미룬다(implicit grab).
+    화살표는 terminal이 계속 그리고 `set_cursor(NULL)`일 때만 그 surface 위에서 숨긴다. 커서 surface의 그림은 합성하지 않는다.
+25. `zxdg_decoration_manager_v1`을 내고 늘 `server_side`로 답한다(그리는 것은 M5). 없으면 SDL3가 libdecor fallback을 타는데 그 길은
+    우리 서버에서 증명된 적이 없다.
+26. Wayland 위의 SDL 앱은 GPU가 아니라 llvmpipe(CPU)로 `wl_shm`에 그린다 — Mesa의 EGL Wayland drm 길은 `zwp_linux_dmabuf_v1`나
+    `wl_drm`을 요구하고 없으면 swrast로 떨어진다(실기 i915에서도). GPU가 필요한 프로그램은 DY 길(`tars-fullscreen`)이다. dmabuf는 위험으로 남긴다.
+
 ## Milestone
 
 로드맵의 WY-M0을 둘로 나눈다. 서버 뼈대 · 키 · workspace · 보호만으로도 milestone 하나의 크기이고, 둠은 별도
@@ -182,7 +204,8 @@ out · err, 양보 listen · guest, 링크 이벤트). LK가 링크 칸을 더�
 |---|---|---|
 | WY-M0 | 서버 뼈대(결정 1~6) · app workspace(7) · FU를 workspace마다로(8) · 합성(9) · frame(10) · 키(11) · 보호(12) · `tars-wl-test`(13). 새 체인 `wayland` | `tars-wl-test`의 색이 화면 좌표에, 친 키가 클라이언트 로그에, `Cmd+1` · `Cmd+2` 왕복, 셸에서 표에 없는 Cmd가 안 들어감, 클라이언트를 SIGSTOP해도 셸이 친 글자를 그림, `Cmd+Q` → 2초 → SIGKILL, 루트 게이트 |
 | WY-M1 | `tars-doom`의 `doomgeneric_wayland.c` · devlayer 묶음 `doom`(Freedoom) | 둠 첫 맵의 좌표 색, 녹화 A |
-| WY-M2 | `wl_pointer` · 클릭 포커스 · column으로 열기(SW와 만남) · 배율(결정 5) · `wp_viewporter` 등 SDL3의 2단 | SDL3 프로그램이 수정 없이 셸 오른쪽 column에 뜸(gpu 묶음 부팅), `hidpi` 체인에 app pane 검사 |
-| WY-M3 | 클립보드 `wl_data_device` | 테스트 클라이언트와 셸 사이 양방향 붙여넣기 |
-| WY-M4 | 한글 `text-input-v3` | 조합 · 확정, 두 번 찍히지 않음. 녹화 B |
-| WY-M5 | `xdg-decoration` · 서버 쪽 장식 · `xdg_popup` · damage 부분 blit · 호환 모드 | popup 위치, 장식의 좌표 색, 호환 모드의 키 판정 |
+| WY-M2 | app이 strip의 column(결정 20~23) · `wl_pointer` · 클릭 포커스(24) · decoration server_side(25) · `tars-gpu-demo --window` | SDL3 프로그램이 수정 없이 셸 오른쪽 column에 뜸(gpu 묶음 부팅), `tars-wl-test`의 포인터 · 클릭 포커스 · `Cmd+R` configure |
+| WY-M3 | 배율(결정 5) — `wl_output` 물리 mode + scale, `wl_compositor` 6 · `preferred_buffer_scale`, `set_buffer_scale`, 필요하면 `wp_viewporter` 최소 | `hidpi` 체인에 app pane 검사(`tars-wl-test --buffer-scale`) |
+| WY-M4 | 클립보드 `wl_data_device` | 테스트 클라이언트와 셸 사이 양방향 붙여넣기 |
+| WY-M5 | 한글 `text-input-v3` | 조합 · 확정, 두 번 찍히지 않음. 녹화 B |
+| WY-M6 | `xdg-decoration` · 서버 쪽 장식 · `xdg_popup` · damage 부분 blit · 호환 모드 | popup 위치, 장식의 좌표 색, 호환 모드의 키 판정 |
