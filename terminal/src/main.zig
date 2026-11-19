@@ -1725,12 +1725,36 @@ const Workspace = union(enum) {
 /// pane이 없다는 뜻이다.
 const ShellWs = struct {
     strip: layout.Strip,
-    panes: [layout.MAX_LEAVES]?Pane,
+    panes: [layout.MAX_LEAVES]?Slot,
     /// 키보드가 가는 패널의 slot 번호(결정 4).
     focus: u4,
     /// 전체 화면(FU)은 workspace마다의 값이다(WY design 결정 8). 앞에 오면 격자가 이 값으로 다시 선다
     /// (`App.enterWorkspace`). 바꾸는 것은 `App.setFullscreen` 하나다.
     fullscreen: bool,
+};
+
+/// strip의 칸 하나(WY design 결정 20). 셸 패널이거나 Wayland 클라이언트의 창이다.
+///
+/// 결정 15가 workspace 단에 둔 union을 slot 단으로 내린 것이다 — 칸을 여는 자리는 `asPane()`의 null(app)을 스스로
+/// 다뤄야 컴파일된다. 셸 패널만 아는 자리에 app 칸이 흘러들어 panic하는 길이 타입으로 막힌다. 사각형은 strip이 안다
+/// (`AppPane`에 없다).
+const Slot = union(enum) {
+    shell: Pane,
+    app: AppPane,
+
+    /// 셸 패널이면 그것, app 창이면 null. 이름이 `shell()`이 아닌 것은 Zig가 필드와 같은 이름의 선언을 거절해서다
+    /// (`Workspace.asShell()`과 같은 모양).
+    fn asPane(self: *Slot) ?*Pane {
+        return switch (self.*) {
+            .shell => |*p| p,
+            .app => null,
+        };
+    }
+};
+
+/// strip 칸에 선 Wayland 창(WY design 결정 20). 서버는 창을 번호로만 부른다 — `AppWs`와 같다.
+const AppPane = struct {
+    toplevel: u32,
 };
 
 /// Wayland 클라이언트의 창 하나(WY design 결정 7 · 15). 늘 chrome이 없고 화면 전체가 그 창이다. 창은 서버가
@@ -1902,7 +1926,8 @@ fn applyLayout(alloc: std.mem.Allocator, ws: *ShellWs, whole: layout.Rect) ![lay
     var rs: [layout.MAX_LEAVES]layout.Rect = undefined;
     ws.strip.rects(whole, &rs);
     for (&ws.panes, 0..) |*slot, leaf| {
-        const p = if (slot.*) |*p| p else continue;
+        // app slot: 아무것도 안 한다 — WY-M2 단계 B(크기가 바뀌면 configure를 다시 보낸다, 결정 22).
+        const p = if (slot.*) |*sl| sl.asPane() orelse continue else continue;
         const r = rs[leaf];
         if (std.meta.eql(p.rect, r)) continue;
         if (p.rect.cols == r.cols and p.rect.rows == r.rows) {
@@ -1936,11 +1961,16 @@ const PaneSig = struct {
     panes: usize,
     focus: u4,
     rect: layout.Rect,
+    /// 포커스 slot이 app 창이면 그 번호(WY-M2 확정 2). 그때 `rect`는 0이다 — 줄에 안 찍는다.
+    app: ?u32 = null,
 };
 
 /// 패널 배치를 한 줄로 찍는다(WP design 결정 7).
 ///
 ///   terminal: pane> ws=1/1 panes=2 focus=1 rect=78,0 77x47 sep ink=752
+///
+/// 포커스 slot이 app 창이면 `rect=…` 자리가 `slot=<n> app id=<toplevel>`이다(WY-M2 확정 2). 셸 slot의 줄은
+/// 글자 하나 안 바뀐다 — 체인이 그 모양을 본다.
 ///
 /// `sep ink`는 프레임버퍼 전체에서 `SEPARATOR` 픽셀 수다. CI의 `copy ink`와
 /// 같은 자리다 — 배치가 맞아도 구분선을 안 그리면 0이고, 글자만 보는 판정은
@@ -1966,7 +1996,14 @@ fn dumpPane(
         .total = total,
         .panes = ws.strip.count(),
         .focus = ws.focus,
-        .rect = ws.panes[ws.focus].?.rect,
+        .rect = switch (ws.panes[ws.focus].?) {
+            .shell => |p| p.rect,
+            .app => .{ .col = 0, .row = 0, .cols = 0, .rows = 0 },
+        },
+        .app = switch (ws.panes[ws.focus].?) {
+            .shell => null,
+            .app => |a| a.toplevel,
+        },
     };
     if (last.*) |l| {
         if (std.meta.eql(l, sig)) return;
@@ -1980,6 +2017,12 @@ fn dumpPane(
         while (x < fb.width) : (x += 1) {
             if (fb.getPixel(x, y) & 0x00FFFFFF == SEPARATOR) ink += 1;
         }
+    }
+    if (sig.app) |id| {
+        logline.print("terminal: pane> ws={d}/{d} panes={d} focus={d} slot={d} app id={d} sep ink={d}\n", .{
+            current + 1, sig.total, sig.panes, sig.focus, sig.focus, id, ink,
+        });
+        return;
     }
     logline.print("terminal: pane> ws={d}/{d} panes={d} focus={d} rect={d},{d} {d}x{d} sep ink={d}\n", .{
         current + 1,  sig.total,    sig.panes,     sig.focus,
@@ -2147,7 +2190,8 @@ fn paneByShell(workspaces: *[MAX_WORKSPACES]?Workspace, pid: std.c.pid_t) ?PaneR
     for (workspaces, 0..) |*slot, wi| {
         const w = if (slot.*) |*w| w.asShell() orelse continue else continue;
         for (&w.panes, 0..) |*pane_slot, leaf| {
-            const p = if (pane_slot.*) |*p| p else continue;
+            // app slot에는 셸이 없다.
+            const p = if (pane_slot.*) |*sl| sl.asPane() orelse continue else continue;
             if (p.session.child_pid == pid) return .{ .pane = p, .ws = wi, .leaf = @intCast(leaf) };
         }
     }
@@ -3638,7 +3682,8 @@ const PointerWire = struct {
     fn target(self: *const PointerWire) pointer.Target {
         const leaf = self.gesture.held() orelse return .gone;
         if (self.gesture_ws.* != self.current or self.ws.focus != leaf) return .gone;
-        const p = self.ws.panes[leaf] orelse return .gone;
+        // app slot: 아무것도 안 한다 — WY-M2 단계 C(누른 칸이 창이면 우리 제스처의 대상이 아니다).
+        const p = if (self.ws.panes[leaf]) |*sl| sl.asPane() orelse return .gone else return .gone;
         return if (p.screen.copyActive()) .copy else .normal;
     }
 
@@ -3646,7 +3691,8 @@ const PointerWire = struct {
     fn paneAt(self: *const PointerWire, x: u32, y: u32) ?pointer.Pane {
         const gc = gridCell(x, y, self.cols, self.rows) orelse return null;
         const h = self.ws.strip.hit(self.whole, gc.col, gc.row) orelse return null;
-        const p = &self.ws.panes[h.leaf].?;
+        // app slot: 아무것도 안 한다 — WY-M2 단계 C(`pointer.Pane`에 app이 더해진다, 확정 8). 지금은 여백처럼 null.
+        const p = self.ws.panes[h.leaf].?.asPane() orelse return null;
         return .{
             .leaf = h.leaf,
             .wants = p.screen.mouseWanted(),
@@ -3714,7 +3760,8 @@ const PointerWire = struct {
     /// 쓰는 상수 넷으로 그 끝을 구한다(design 결정 5와 같은 이유). 인코더가
     /// 보낼 것이 없다고 하면(모드가 그 사건을 원하지 않는다) 아무것도 안 한다.
     fn reportTo(self: *PointerWire, leaf: u4, action: vt.Screen.MouseAction, button: ?vt.Screen.MouseButton, x: u32, y: u32) void {
-        const p = if (self.ws.panes[leaf]) |*pane| pane else return;
+        // app slot: 아무것도 안 한다 — WY-M2 단계 C(vt 인코더 대신 서버의 wl_pointer로).
+        const p = if (self.ws.panes[leaf]) |*sl| sl.asPane() orelse return else return;
         var rs: [layout.MAX_LEAVES]layout.Rect = undefined;
         self.ws.strip.rects(self.whole, &rs);
         const o = paneOrigin(rs[leaf]);
@@ -3753,7 +3800,8 @@ const PointerWire = struct {
         self.gesture_ws.* = self.current;
         // 늘리기(SE design 결정 3) — Shift를 누른 채 남은 선택이 있는 패널을 눌렀다.
         // 두 사실을 여기서 합쳐 넘긴다(`pointer.zig`는 둘 다 못 본다).
-        const linger = if (hit) |h| self.ws.panes[h.leaf].?.screen.hasLinger() else false;
+        // app slot에는 남은 선택이 없다(WY-M2 단계 C가 app 칸의 누름을 이 길 앞에서 가른다).
+        const linger = if (hit) |h| if (self.ws.panes[h.leaf].?.asPane()) |p| p.screen.hasLinger() else false else false;
         const intents = self.gesture.press(hit, self.ws.focus, .{
             .t_us = t_us,
             .x = x,
@@ -3807,7 +3855,8 @@ const PointerWire = struct {
     fn wheel(self: *PointerWire, notches: i32, x: u32, y: u32) !void {
         if (self.gesture.wheel(notches, self.target())) |its| return self.run(its);
         const pane = self.paneAt(x, y) orelse return;
-        const p = &self.ws.panes[pane.leaf].?;
+        // app slot: 아무것도 안 한다 — WY-M2 단계 C(app 칸은 `paneAt`이 아직 null이다).
+        const p = self.ws.panes[pane.leaf].?.asPane() orelse return;
         switch (pointer.wheelRoute(pane, self.mods.shift)) {
             .ignore => {},
             .scroll => {
@@ -3844,7 +3893,8 @@ const PointerWire = struct {
                 // 먼저 온다 — 확정 → 포커스 이동 → 선택이 design 결정 6의
                 // 순서다.
                 .cancel => {
-                    const fp = &self.ws.panes[self.ws.focus].?;
+                    // app slot: 아무것도 안 한다 — WY-M2 단계 C(창에는 조합 · copy mode가 없다).
+                    const fp = self.ws.panes[self.ws.focus].?.asPane() orelse continue;
                     const composing = self.key_state.preedit() != null;
                     const bytes = self.key_state.forceMode(.normal);
                     if (bytes.len > 0) pty.write(fp.session.master_fd, bytes);
@@ -3870,7 +3920,8 @@ const PointerWire = struct {
                 // 이미 이리로 옮겼다.
                 .select_start => |st| {
                     const at = st.at;
-                    const p = &self.ws.panes[at.leaf].?;
+                    // app slot: 아무것도 안 한다 — WY-M2 단계 C.
+                    const p = self.ws.panes[at.leaf].?.asPane() orelse continue;
                     const composing = self.key_state.preedit() != null;
                     const bytes = self.key_state.forceMode(.copy);
                     if (bytes.len > 0) pty.write(p.session.master_fd, bytes);
@@ -3883,13 +3934,16 @@ const PointerWire = struct {
                     self.redraw = true;
                 },
                 .select_to => |at| {
-                    const p = &self.ws.panes[at.leaf].?;
+                    // app slot: 아무것도 안 한다 — WY-M2 단계 C.
+                    const p = self.ws.panes[at.leaf].?.asPane() orelse continue;
                     try p.screen.copyPointTo(at.col, at.row);
                     dumpCopy(p.screen, "point");
                     self.redraw = true;
                 },
                 .scroll => |s| {
-                    self.ws.panes[s.leaf].?.screen.scrollByRows(-WHEEL_ROWS * @as(isize, s.notches));
+                    // app slot: 아무것도 안 한다 — WY-M2 단계 C.
+                    const p = self.ws.panes[s.leaf].?.asPane() orelse continue;
+                    p.screen.scrollByRows(-WHEEL_ROWS * @as(isize, s.notches));
                     self.redraw = true;
                 },
                 // 뗌 = 복사(design 결정 6). 키보드의 `y`와 같은 줄 둘이 같은
@@ -3898,7 +3952,8 @@ const PointerWire = struct {
                 // 삼켜진다(pointer/check.sh 검사 18). `y`와 다른 것 하나 — 선택은
                 // 화면에 남는다(SE design 결정 1). 다음 누름이 지운다.
                 .copy => |leaf| {
-                    const p = &self.ws.panes[leaf].?;
+                    // app slot: 아무것도 안 한다 — WY-M2 단계 C.
+                    const p = self.ws.panes[leaf].?.asPane() orelse continue;
                     try self.clips.release(p);
                     dumpCopy(p.screen, "yank");
                     _ = self.key_state.forceMode(.normal);
@@ -3909,7 +3964,8 @@ const PointerWire = struct {
                 // 포커스다. 실제로 지운 패널마다 `copy> deselect` 한 줄이고 지울
                 // 것이 없는 클릭은 조용하다(`copy>` 줄을 세는 검사가 안 흔들리게).
                 .deselect => for (&self.ws.panes) |*slot| {
-                    const p = if (slot.*) |*p| p else continue;
+                    // app slot에는 선택이 없다.
+                    const p = if (slot.*) |*sl| sl.asPane() orelse continue else continue;
                     if (!p.screen.clearLinger()) continue;
                     logline.print("terminal: copy> deselect\n", .{});
                     self.redraw = true;
@@ -3922,7 +3978,8 @@ const PointerWire = struct {
                 // 앵커를 두고 단어 · 줄로 다시 짓는다(ER design 결정 4).
                 .select_extend => |e| {
                     const at = e.at;
-                    const p = &self.ws.panes[at.leaf].?;
+                    // app slot: 아무것도 안 한다 — WY-M2 단계 C.
+                    const p = self.ws.panes[at.leaf].?.asPane() orelse continue;
                     try p.screen.copyExtendAt(at.col, at.row, if (e.unit) |u| unitKind(u) else null);
                     if (!p.screen.copyActive()) continue;
                     const composing = self.key_state.preedit() != null;
@@ -4488,7 +4545,7 @@ const App = struct {
         var boot_rects: [layout.MAX_LEAVES]layout.Rect = undefined;
         boot.strip.rects(self.whole, &boot_rects);
         const first = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, boot_rects[0], self.accountPtr(), self.cursor_shape);
-        boot.panes[0] = first;
+        boot.panes[0] = .{ .shell = first };
         // 경로까지 찍는다. 게이트가 "화면의 셸도 바뀌었는가"를 볼 수 있는 유일한
         // 줄이다. 앞부분("terminal: spawned child pid ")은 terminal/check.sh가
         // 개수를 세는 마커라 그대로 둔다.
@@ -4628,10 +4685,15 @@ const App = struct {
                 .app => continue,
             };
             for (w.panes) |maybe| {
-                if (maybe) |pane| {
-                    pane.screen.deinit();
-                    pane.clip.deinit();
-                    freePaneBuffers(self.allocator, &pane);
+                const sl = maybe orelse continue;
+                switch (sl) {
+                    .shell => |pane| {
+                        pane.screen.deinit();
+                        pane.clip.deinit();
+                        freePaneBuffers(self.allocator, &pane);
+                    },
+                    // app slot: 아무것도 안 한다 — 창은 서버의 것이다(서버가 끝날 때 함께 간다).
+                    .app => {},
                 }
             }
         }
@@ -4662,7 +4724,8 @@ const App = struct {
         for (&self.workspaces, 0..) |*slot, wi| {
             const w = if (slot.*) |*w| w.asShell() orelse continue else continue;
             for (&w.panes, 0..) |*pane_slot, leaf| {
-                const pane = if (pane_slot.*) |*pane| pane else continue;
+                // app slot에는 PTY가 없다 — 창의 fd는 서버의 이벤트 루프 하나다(`pty_end + 5`).
+                const pane = if (pane_slot.*) |*sl| sl.asPane() orelse continue else continue;
                 self.fds[self.nfds] = .{ .fd = pane.session.master_fd, .events = c.POLLIN, .revents = 0 };
                 self.fd_panes[self.nfds - self.pty_base] = .{ .pane = pane, .ws = wi, .leaf = @intCast(leaf) };
                 self.nfds += 1;
@@ -4700,7 +4763,8 @@ const App = struct {
             .shell => |*sh| sh,
             .app => |a| return self.readKeyboardApp(fd, slot, a.toplevel),
         };
-        const focus = &ws.panes[ws.focus].?;
+        // app slot: 아무것도 안 한다 — WY-M2 단계 B(포커스 slot이 창이면 `readKeyboardApp`의 길, 할 일 2).
+        const focus = ws.panes[ws.focus].?.asPane() orelse return .open;
 
         // DECCKM은 셸이 언제든 켜고 끌 수 있으므로(프롬프트를 그릴 때
         // smkx, 외부 명령을 실행하기 전에 rmkx 하는 식으로 오간다)
@@ -5090,7 +5154,11 @@ const App = struct {
     /// column 맨 위 pane의 PTY master에 전경 프로세스 그룹을 묻는다(`pty.foregroundName`).
     fn peekName(self: *const App, ws: *const ShellWs) ?PeekName {
         const leaf = ws.strip.peek(self.whole) orelse return null;
-        const p = ws.panes[leaf] orelse return null;
+        const p = switch (ws.panes[leaf] orelse return null) {
+            .shell => |p| p,
+            // app slot: 아무것도 안 한다 — WY-M2 단계 B(빈 공간에 띄울 이름은 셸의 전경 프로세스다).
+            .app => return null,
+        };
         var n: PeekName = .{};
         n.len = @intCast(pty.foregroundName(p.session.master_fd, &n.bytes));
         return n;
@@ -5132,7 +5200,7 @@ const App = struct {
                     // 그 줄의 개수로 "init이 terminal을 되살렸다"를 판정하므로,
                     // 분할이 그 줄을 찍으면 그 판정이 거짓 초록이 된다.
                     // `pane>` 줄이 대신한다.
-                    ws.panes[leaf] = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, rs[leaf], self.accountPtr(), self.cursor_shape);
+                    ws.panes[leaf] = .{ .shell = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, rs[leaf], self.accountPtr(), self.cursor_shape) };
                     ws.focus = leaf;
                     // 셋째 column부터 새 column은 화면 밖에 선다(SW design 결정 13).
                     // 포커스가 거기 갔으니 viewport를 옮긴다.
@@ -5141,7 +5209,8 @@ const App = struct {
                 // 보내기만 한다(결정 5). 셸이 끝나면 아래 EOF 경로가
                 // 닫는다 — `exit`를 친 것과 같은 길이다.
                 .close => {
-                    const fp = &ws.panes[ws.focus].?;
+                    // app slot: 아무것도 안 한다 — WY-M2 단계 B(창의 `Cmd+W`는 앱의 것이다, 요구사항 결정 3).
+                    const fp = ws.panes[ws.focus].?.asPane() orelse continue;
                     pty.hangup(fp.session);
                     logline.print("terminal: pane> hangup leaf={d} pid={d}\n", .{
                         ws.focus, fp.session.child_pid,
@@ -5211,7 +5280,7 @@ const App = struct {
                 // 않는 것은 앞이 app일 수 있어서다 — app은 값이 없다.
                 const on = self.fullscreen_default;
                 self.workspaces[n] = .{ .shell = .{ .strip = layout.Strip.init(), .panes = @splat(null), .focus = 0, .fullscreen = on } };
-                self.workspaces[n].?.asShell().?.panes[0] = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, self.wholeFor(on), self.accountPtr(), self.cursor_shape);
+                self.workspaces[n].?.asShell().?.panes[0] = .{ .shell = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, self.wholeFor(on), self.accountPtr(), self.cursor_shape) };
                 // 이 배치의 뒤 명령(같은 read에 실려 온 Cmd+D 등)이 새 워크스페이스에 간다 — 위 머리가 명령마다
                 // 앞을 다시 구한다.
                 self.enterWorkspace(n);
@@ -5247,7 +5316,11 @@ const App = struct {
                             logline.print("terminal: dictate> ignored on an app workspace\n", .{});
                             continue;
                         };
-                        const tp = &ws.panes[ws.focus].?;
+                        // app slot: 아무것도 안 한다 — WY-M2 단계 B(받아쓴 글자를 넣을 셸이 없다).
+                        const tp = ws.panes[ws.focus].?.asPane() orelse {
+                            logline.print("terminal: dictate> ignored on an app pane\n", .{});
+                            continue;
+                        };
                         if (passwordPrompt(tp.session.master_fd)) {
                             logline.print("terminal: dictate> refused password at=start ws={d} leaf={d}\n", .{ self.current + 1, ws.focus });
                             self.dict.setNotice(.password);
@@ -5671,7 +5744,8 @@ const App = struct {
             .shell => |*sh| sh,
             .app => |a| return self.renderApp(frame, want, a.toplevel),
         };
-        const focus = &ws.panes[ws.focus].?;
+        // app slot: 아무것도 안 한다 — WY-M2 단계 B(포커스 slot이 창인 셸 프레임, 결정 23).
+        const focus = ws.panes[ws.focus].?.asPane() orelse return;
         frame.focus = focus;
         frame.shell = ws;
 
@@ -5705,7 +5779,8 @@ const App = struct {
             clips.all();
         }
         for (&ws.panes, 0..) |*slot, leaf| {
-            const p = if (slot.*) |*p| p else continue;
+            // app slot: 아무것도 안 한다 — WY-M2 단계 B(창을 그 사각형에 옮긴다, 결정 23).
+            const p = if (slot.*) |*sl| sl.asPane() orelse continue else continue;
             if (leaf == ws.focus) continue;
             // 화면 밖 column의 pane은 안 그린다(SW-M2, design 결정 15). 그 사각형은
             // 크기만 뜻이 있고 위치는 격자 왼쪽 끝이라 그리면 보이는 pane을 덮는다.
@@ -6055,7 +6130,8 @@ const App = struct {
         // 사이에 이름이 바뀌면 그림자만 새 이름이 되어 `mismatch`가 된다.
         try drawPeek(v.fb, &self.cache, &ws.strip, self.whole, self.peek);
         for (&ws.panes, 0..) |*slot, leaf| {
-            const p = if (slot.*) |*p| p else continue;
+            // app slot은 그림자가 흉내 내지 않는다(WY design 결정 17 · 확정 6) — 단계 B가 그 사각형을 비교에서 뺀다.
+            const p = if (slot.*) |*sl| sl.asPane() orelse continue else continue;
             // 실제 경로와 같이 화면 밖 pane은 건너뛴다(SW-M2). 그림자가 그리면 실제
             // 화면과 갈려 `mismatch`가 된다.
             if (!ws.strip.visible(@intCast(leaf), self.whole)) continue;
