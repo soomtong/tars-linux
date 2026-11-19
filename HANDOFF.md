@@ -1,4 +1,4 @@
-# HANDOFF: App Layer(0.3) — WY-M2 단계 C 진행 중(B `ee8557c`), tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) — WY-M2 끝(`939ffad`), 다음 WY-M3(배율). tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
 
 ## 목표
 
@@ -22,6 +22,10 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 실제 파일과 대조한다. 기억 `feedback_herdr_subagents`.
 
 ## 완료된 작업 (2026-11-19~20, WY-M0 단계 C · WY-M1 착수 — 이 세션)
+
+- [x] WY-M2(design 결정 19~26 `94074a9`, 로드맵 3판 — 배율은 WY-M3으로): A `04c2897` slot union, B `ee8557c` column으로 열기 ·
+      configure · 합성 · decoration, C `939ffad` `wl_pointer` · 클릭 포커스 · 커서 숨김 · `tars-gpu-demo --window`(SDL3 → Wayland → llvmpipe,
+      TCG 1.5~4.6 fps). 루트 게이트 35/35 첫 판(`out/gate-logs/20261119-190930`). plan 결과 1~6과 남은 걱정 셋
 
 - [x] WY-M1 `28786a0`: 묶음 `doom`(tars-doom 0.1.0 + Freedoom 0.13.0 Phase 1, hook `freedoom`, standalone, 기본 `DEV_LAYERS`, 약 9 MiB),
       체인 `wayland` 부팅 2(판정 10~15 — HEALTH 글자판 색, `sendkey ctrl 300`으로 탄약 50→49, `Cmd+1`·`Cmd+2`, `Cmd+Q`에 둠이 스스로 끝남),
@@ -99,15 +103,9 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
       `devlayer/cache/<sha256>`에 손으로 두었다 — 캐시 없는 기계에서는 release 전까지 `make dev-layers`가 받기에서 멈춘다.
       release 방법 두 갈래: (가) 태그 push → Actions가 빌드 · 업로드(sha256이 바뀌어 manifest를 고치고 wayland 체인 한 번), (나) 로컬 tarball을
       `gh release create`로 올림(sha256 그대로). Actions workflow가 태그에서 함께 돌면 자산이 겹치니 (나)면 workflow를 고르게 손본다
-- [ ] WY-M2(plan `docs/plans/2026-11-20-tars-wayland-server-wy-m2.md`, design 결정 19~26 `94074a9` — WY-M2를 column · 포인터와 배율(WY-M3)로
-      나눴다, 로드맵 3판): 단계 A `04c2897`(slot union, 판정 · `pane>` diff 0). 단계 B `ee8557c`(column으로 열기 · configure · 합성 · verify 건너뛰기 ·
-      decoration). 단계 C를 `wy-impl`이 하는 중(맡김 `wy-m2/task-c.md`, 보고 `wy-m2/report-c.md`) — 단계 C(포인터 · `tars-wl-test` 포인터 줄 · `tars-gpu-demo --window` · display 판정 16a~d) → 루트 게이트
-
-- [x] (끝) WY-M0 단계 B의 남은 확인: 수동 부팅으로 `tars-wl-test`가 새 workspace에 창으로 뜨는지(서브에이전트가 하던 중에 멈췄다).
-      단계 C의 체인 `wayland`가 같은 것을 보므로 거기서 봐도 된다. 보고 파일 `phase-b.md`는 안 쓰였다 — diff는 lead가 대조했다
-      (지운 줄은 리팩터의 옛 판, `fullscreen>` 줄 글자 그대로, 마지막 셸 규칙 `paneCount == 1 and appCount == 0`, 마지막 app이 끝나면 quit)
-- [x] (끝, `6185c0f`) WY-M0 단계 C(plan 할 일 6~8): 키 갈래 · 키맵 · 셸에서 표에 없는 Cmd 삼키기(`input_test` 단언 셋) · `Cmd+Q` · ping · SIGKILL ·
-      체인 `wayland`(plan의 판정 1~9) · `CHAINS` · 도움말. 그다음 lead: 체인 · verify grep · 루트 게이트(35체인) · 결과 절 · commit
+- [ ] WY-M3(배율, design 결정 5 · 19): 아직 조사 전. 조사 거리는 WY-M2 조사(`wy-m2/research.md`) 4절 — `wl_output` 물리 mode + scale,
+      `wl_compositor` 6 · `preferred_buffer_scale` · `surface.enter`, `set_buffer_scale`, present 단계에서 물리 fb로 1:1, hidpi 체인의
+      `tars-wl-test --buffer-scale N --checker`. SDL3는 `SDL_WINDOW_HIGH_PIXEL_DENSITY` 창만 배율을 쓴다
 - [ ] 소개 페이지(`gh-pages`의 `data.js`)에 SW를 안 올렸다 — 사이트는 `main` 줄 기준(`commits`가 `rev-list --count main`)이고 SW는
       `app-layer-0-3`에만 있다. 0.3 줄이 `main`에 들어갈 때 올린다(사용자가 먼저 원하면 그때)
 - [ ] `app-layer-0-3`의 이 세션 commit들(`cac1858`부터)은 push하지 않았다 — 사용자가 원하면 push

@@ -2,7 +2,7 @@
 
 Date: 2026-11-20
 Design: `docs/specs/2026-11-19-tars-wayland-server-design.md`(결정 19~26)
-Status: plan. 브랜치 `app-layer-0-3`.
+Status: 끝(2026-11-20). 브랜치 `app-layer-0-3`.
 
 ## 확인(조사 `wy-impl`, 세션 scratchpad `wy-m2/research.md` — SDL 3.2.10 · Mesa 25.0.7을 `apt-get source`로)
 
@@ -98,4 +98,24 @@ display 부팅 3(base · gpu, 판정 16a~16d를 더함):
 
 ## 결과
 
-(구현 뒤에 쓴다.)
+구현은 `wy-impl`(Herdr, Opus), lead는 대조 · 게이트 · commit.
+
+1. 단계 A `04c2897`: `Slot` union. 고르는 함수는 `Slot.asPane()` — Zig 0.17.1이 필드 `shell`과 같은 이름의 선언을 거절해 plan의
+   `Slot.shell()`을 못 썼다. 다섯 체인 + terminal의 `pane>` 줄이 HEAD와 diff 0(`screen>`은 치는 중 프레임 · 자동 제안 같은 타이밍 차이만).
+2. 단계 B `ee8557c`: 서버의 `toplevel` 일을 첫 commit으로 미뤘다 — xdg-shell 순서상 `set_fullscreen`은 역할과 첫 commit 사이에 온다(둠).
+   configure는 `applyLayout`에서가 아니라 바퀴마다 `syncColumns`가 모든 app slot에 크기를 알리고 서버가 같은 값을 거른다(부르는 자리가
+   열 곳 가까이라 한 길로). verify는 보이는 창 사각형을 실제 fb에서 그림자로 복사해 비교에서 뺀다. 포커스 slot이 창인 셸 프레임은
+   `screen>` 덤프가 없다 — 체인은 셸 글자를 볼 때 포커스를 셸에 둔다. 덤프 줄 `pane> … slot=<n> app id=<t> rect=…`.
+3. 단계 C `939ffad`: `wl_pointer`(enter · leave · motion · button · axis · frame, 버튼 grab 동안 leave 미룸), 클릭 포커스는 PD-M4의
+   `Grab` → `handOff` 길 그대로, `set_cursor(NULL)`이면 화살표를 안 그림. 자기 workspace 창에도 `wireAppPointer`로 포인터.
+   `tars-gpu-demo --window WxH`(`SDL_WINDOW_RESIZABLE`).
+4. SDL3 실측: SDL은 렌더러가 GL 창을 바라 창을 한 번 만들었다 지우고 다시 짓는다(`column id=1` → `unmap` → `column id=2`) — 오른쪽이 한 번
+   깜빡인다. configure를 따라 `616x752` 버퍼를 냈다. llvmpipe → `wl_shm`, QEMU TCG에서 1.5~4.6 fps(KMSDRM 판정 13은 2.2).
+5. 판정 순서는 16 · 18~21 · 17 · 22 — 17(`Cmd+R` 전체 폭)이 셸을 화면 밖으로 밀어 클릭 판정을 앞에 뒀다. 체인 둘(wayland 부팅 1 ·
+   display 부팅 3)에 USB 마우스를 붙였다. display 16a는 처음에 "검정 → 색"으로도 통과하는 약한 판정이었다 — 두 장 모두 검정이 아니고
+   `wl> commit … buf=616x752`가 있어야 하는 것으로 조였다.
+6. 체인 단독 PASS: wayland 373초 · display 464초 · pointer · pane · fullscreen · hidpi, verify mismatch 0. 루트 게이트 35/35 첫 판
+   PASS(prebuild 351초 + lanes 1,560초, `out/gate-logs/20261119-190930`, 잘린 줄 0). WY-M2 체인 96초.
+
+남은 걱정: (1) SDL의 창 다시 짓기 깜빡임 — 첫 commit 뒤 한 바퀴 기다려 자리를 정하면 줄일 수 있다. (2) vsync SDL 창은 숨은 동안 `done`을
+못 받아 swap에서 멈추고 ping에도 못 답할 수 있다 — 숨은 창의 `Cmd+Q`는 SIGKILL이 된다(체인은 보이는 창만 본다). (3) 커서 이미지 합성 없음.
