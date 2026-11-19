@@ -1,4 +1,4 @@
-# HANDOFF: App Layer(0.3) — WY-M0 끝(`6185c0f`), WY-M1(둠) 진행 중(2026-11-20). 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) — WY-M1(둠) 끝(`28786a0`), tars-doom release 대기 · WY-M2 조사 중(2026-11-20). 브랜치 `app-layer-0-3`
 
 ## 목표
 
@@ -22,6 +22,10 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 실제 파일과 대조한다. 기억 `feedback_herdr_subagents`.
 
 ## 완료된 작업 (2026-11-19~20, WY-M0 단계 C · WY-M1 착수 — 이 세션)
+
+- [x] WY-M1 `28786a0`: 묶음 `doom`(tars-doom 0.1.0 + Freedoom 0.13.0 Phase 1, hook `freedoom`, standalone, 기본 `DEV_LAYERS`, 약 9 MiB),
+      체인 `wayland` 부팅 2(판정 10~15 — HEALTH 글자판 색, `sendkey ctrl 300`으로 탄약 50→49, `Cmd+1`·`Cmd+2`, `Cmd+Q`에 둠이 스스로 끝남),
+      devtools 묶음 수 14. 루트 게이트 35/35 첫 판(`out/gate-logs/20261119-155133`, lanes 1,552초). plan 결과 1~6
 
 - [x] WY-M0 단계 C `6185c0f`(서브에이전트 `wy-impl`, Herdr pane `w3J:pA`, Opus): R-KEY-1 표를 `input.State.tableChord` 하나로 —
       셸 `chord`와 app `appKey`가 같이 본다. 셸에서 표 밖 Cmd는 삼킨다(`input_test` 단언 여섯). app에는 evdev 코드 + modifiers, `Held`가
@@ -90,9 +94,12 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 
 ## 남은 작업
 
-- [ ] WY-M1 단계 A 빌드 확인 + 단계 B(묶음 `doom` · 체인 `wayland` 부팅 2 · 도움말)를 `wy-impl`이 하는 중 — 보고는 세션 scratchpad
-      `wy-m1/report-b.md`. 그다음 lead: 대조 · 루트 게이트 · commit. tars-doom의 commit · push · `v0.1.0` release는 사용자에게 묻고 한다
-      (밖으로 나가는 일). release 뒤 manifest의 sha256을 GitHub digest로 바꾼다(로컬 tarball과 다를 수 있다)
+- [ ] tars-doom: 브랜치 `wayland`의 로컬 commit `5179493`(포트)을 push하고 `v0.1.0` release를 낼지 사용자에게 묻는 중(밖으로 나가는 일).
+      지금 manifest의 tars-doom sha256 `0da0b4a7…`은 `5179493`을 로컬 컨테이너(`scripts/build-local.sh 0.1.0`)로 구운 것이고 그 tarball을
+      `devlayer/cache/<sha256>`에 손으로 두었다 — 캐시 없는 기계에서는 release 전까지 `make dev-layers`가 받기에서 멈춘다.
+      release 방법 두 갈래: (가) 태그 push → Actions가 빌드 · 업로드(sha256이 바뀌어 manifest를 고치고 wayland 체인 한 번), (나) 로컬 tarball을
+      `gh release create`로 올림(sha256 그대로). Actions workflow가 태그에서 함께 돌면 자산이 겹치니 (나)면 workflow를 고르게 손본다
+- [ ] WY-M2 조사(`wy-impl`, 세션 scratchpad `wy-m2/research.md`) → plan → 구현
 
 - [x] (끝) WY-M0 단계 B의 남은 확인: 수동 부팅으로 `tars-wl-test`가 새 workspace에 창으로 뜨는지(서브에이전트가 하던 중에 멈췄다).
       단계 C의 체인 `wayland`가 같은 것을 보므로 거기서 봐도 된다. 보고 파일 `phase-b.md`는 안 쓰였다 — diff는 lead가 대조했다
