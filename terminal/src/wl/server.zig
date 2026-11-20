@@ -33,6 +33,15 @@ const SEAT_VERSION = 7;
 const WM_BASE_VERSION = 5;
 /// 장식 관리자(WY-M2, design 결정 25). 판 1뿐이다.
 const DECORATION_VERSION = 1;
+/// 클립보드(WY-M4, design 결정 32). 판 2 — 판 3의 새 요청은 전부 drag-and-drop 액션이다.
+const DATA_DEVICE_MANAGER_VERSION = 2;
+
+/// 파이프의 깃발(값은 asm-generic/fcntl.h — x86_64도 같다). 받기의 읽기 끝만 비블록이다 — epoll이 깨운 만큼만 읽는다.
+/// `pipe2`에 O_NONBLOCK을 주면 클라이언트가 받는 쓰기 끝까지 비블록이 되어, EAGAIN을 다루지 않는 클라이언트가 64 KiB를
+/// 넘는 글을 조용히 잘라 쓴다. 그래서 쓰기 끝은 보통 파이프로 두고 읽기 끝에만 `F_SETFL`로 건다.
+const O_NONBLOCK: usize = 0o4000;
+const O_CLOEXEC: c_int = 0o2000000;
+const F_SETFL = 4;
 
 /// 키 반복(design 결정 6 — terminal의 반복 설정과 같은 값). terminal은 반복을 스스로 안 하고 커널 evdev의
 /// 자동 반복을 받는다. 그 기본값이 지연 250ms · 간격 33ms(초당 약 30)이다.
@@ -60,6 +69,10 @@ pub const Event = union(enum) {
     gone: u32,
     /// 보이는 내용이 바뀌었거나 frame 콜백을 기다린다 — 그 workspace가 앞이면 다시 그린다.
     commit: u32,
+    /// 클라이언트의 selection을 서버 사본으로 다 받았다(WY-M4, design 결정 33). App이 `clipboard()`를 읽어
+    /// `clipboard=shared`면 셸 클립보드에 넣는다(결정 37). 바이트를 싣지 않는 것은 사본의 주인이 서버라서다 — App은
+    /// 꺼낸 그 바퀴에 복사한다.
+    selection,
 };
 
 /// 첫 commit에 정해진 것(`Event.toplevel`).
@@ -108,6 +121,17 @@ pub const Server = struct {
     ptr_under: ?u32 = null,
     ptr_x: u32 = 0,
     ptr_y: u32 = 0,
+    /// 클립보드(WY-M4). 모든 `wl_data_device` — offer(단계 B)는 키보드처럼 클라이언트로 골라 보낸다.
+    data_devices: wl.list.Head(wl.DataDevice, null) = undefined,
+    /// `set_selection`을 받아들이는 조건(design 결정 36) — 가장 최근에 키보드 포커스를 가졌던 클라이언트.
+    gate: logic.SelectionGate = .{},
+    /// 지금 selection을 쥔 클라이언트 source. 바뀌면 옛것에 `cancelled`. source가 사라지면 소멸 처리기가 null로 둔다.
+    sel_source: ?*Source = null,
+    /// 서버 사본(design 결정 33) — 클라이언트에서 다 받은 바이트. 셸 클립보드와 따로 드는 것은 `clipboard=pane`에서도
+    /// 클라이언트끼리의 클립보드가 서야 해서다(결정 37). 단계 B에서 셸의 복사도 여기로 온다.
+    clip: ?[]u8 = null,
+    /// 진행 중인 받기(하나뿐 — 새 `set_selection`이 오면 옛것을 버린다).
+    intake: ?*Intake = null,
 
     /// 소켓을 연다(design 결정 3, 확정 4). `/run/user/<uid>`(0700, 그 계정의 것)를 만들고 `XDG_RUNTIME_DIR`을 거기로
     /// 둔 뒤 `wayland-0`을 열고, 소켓과 lock의 주인을 계정으로 바꾼다. 성공하면 `WAYLAND_DISPLAY=wayland-0`도 둔다 —
@@ -156,12 +180,14 @@ pub const Server = struct {
         self.keyboards.init();
         self.outputs.init();
         self.pointers.init();
+        self.data_devices.init();
         display.addClientCreatedListener(&self.client_created);
         _ = try wl.Global.create(display, wl.Compositor, COMPOSITOR_VERSION, *Server, self, bindCompositor);
         _ = try wl.Global.create(display, wl.Output, OUTPUT_VERSION, *Server, self, bindOutput);
         _ = try wl.Global.create(display, wl.Seat, SEAT_VERSION, *Server, self, bindSeat);
         _ = try wl.Global.create(display, xdg.WmBase, WM_BASE_VERSION, *Server, self, bindWmBase);
         _ = try wl.Global.create(display, zxdg.DecorationManagerV1, DECORATION_VERSION, *Server, self, bindDecorationManager);
+        _ = try wl.Global.create(display, wl.DataDeviceManager, DATA_DEVICE_MANAGER_VERSION, *Server, self, bindDataDeviceManager);
 
         if (setenv("WAYLAND_DISPLAY", "wayland-0", 1) != 0) return error.SetenvFailed;
         logline.print("terminal: wl> listen path={s}/wayland-0\n", .{dir});
@@ -188,6 +214,11 @@ pub const Server = struct {
         const out = self.events.items;
         self.events.items.len = 0;
         return out;
+    }
+
+    /// 서버 사본(WY-M4). `Event.selection`을 꺼낸 바퀴에 읽는다 — 다음 `dispatch`가 바꿀 수 있다.
+    pub fn clipboard(self: *const Server) ?[]const u8 {
+        return self.clip;
     }
 
     fn push(self: *Server, e: Event) void {
@@ -220,6 +251,8 @@ pub const Server = struct {
         if (want) |w| if (self.find(w)) |t| self.resendColumn(t);
         const t = self.find(want orelse return) orelse return;
         const sr = surfaceOf(t) orelse return;
+        // 이 클라이언트가 가장 최근의 포커스다 — 셸로 가도 남는다(design 결정 36).
+        self.gate.focus(@intFromPtr(sr.getClient()));
         var it = self.keyboards.iterator(.forward);
         while (it.next()) |kb| if (kb.getClient() == sr.getClient()) self.enterKeyboard(kb, sr);
         self.sent_mods = mods;
@@ -493,6 +526,120 @@ pub const Server = struct {
         var it = s.frames.safeIterator(.forward);
         while (it.next()) |cb| cb.destroySendDone(ms);
     }
+
+    // ── 클립보드: 앱 → 셸(WY-M4 단계 A, design 결정 33 · 36) ──
+
+    /// 클라이언트의 첫 toplevel 번호. 로그의 `from=` · `id=`다 — 창이 없는 클라이언트면 0.
+    fn toplevelOf(self: *const Server, client: *wl.Client) u32 {
+        for (self.toplevels.items) |t| if (t.resource.getClient() == client) return t.id;
+        return 0;
+    }
+
+    /// `set_selection`(xml: "copy data to the selection"). 받아들이면 그 자리에서 mime을 고르고 `send`로 파이프를 건넨다 —
+    /// 즉시 받기(design 결정 33). 셸에서 붙일 때 받으면 셸의 `Cmd+V`가 비동기가 된다.
+    fn setSelection(self: *Server, dev: *wl.DataDevice, source: ?*Source, serial: u32) void {
+        const client = dev.getClient();
+        const from = self.toplevelOf(client);
+        const src = source orelse {
+            // selection을 비운다. 지금 source의 주인일 때만 받는다. 서버 사본은 그대로다 — 셸 클립보드에는 "지우기"가 없다.
+            const cur = self.sel_source orelse return;
+            if (cur.resource.getClient() != client) return;
+            cur.resource.sendCancelled();
+            self.sel_source = null;
+            if (self.intake) |in| if (in.source == cur) self.endIntake(.dropped);
+            logline.print("terminal: wl> selection cleared id={d}\n", .{from});
+            return;
+        };
+        if (src.used) return dev.postError(.used_source, "wl_data_source was already used for a selection");
+        src.used = true;
+        // serial 값은 보지 않는다(결정 36) — 로그에만 남긴다.
+        if (!self.gate.allows(@intFromPtr(client))) {
+            logline.print("terminal: wl> selection refused id={d} serial={d}\n", .{ from, serial });
+            // 받지 않은 source다 — 클라이언트가 selection을 쥐었다고 믿지 않게 곧바로 거둔다.
+            src.resource.sendCancelled();
+            return;
+        }
+        // 옛 source는 바뀌었다(xml `cancelled`의 첫 까닭). 옛 받기는 버린다 — 진행 중 받기는 하나다.
+        if (self.sel_source) |old| if (old != src) old.resource.sendCancelled();
+        self.sel_source = src;
+        self.endIntake(.dropped);
+        const mime = logic.pickMime(src.mimes.items) orelse {
+            logline.print("terminal: wl> selection ignored mimes={d} id={d}\n", .{ src.mimes.items.len, from });
+            return;
+        };
+        var fds: [2]c_int = undefined;
+        if (pipe2(&fds, O_CLOEXEC) != 0) {
+            logline.print("terminal: wl> selection pipe failed\n", .{});
+            return;
+        }
+        if (linux.errno(linux.fcntl(fds[0], F_SETFL, O_NONBLOCK)) != .SUCCESS) {
+            _ = linux.close(fds[0]);
+            _ = linux.close(fds[1]);
+            logline.print("terminal: wl> selection pipe failed\n", .{});
+            return;
+        }
+        src.resource.sendSend(mime, fds[1]);
+        // libwayland은 이벤트를 만들 때(marshal) fd를 복제한다 — 우리 쓰기 끝은 곧바로 닫는다. 안 닫으면 클라이언트가
+        // 쓰고 닫아도 쓰기 끝이 하나 남아 EOF가 영영 안 온다(plan 실측 1).
+        _ = linux.close(fds[1]);
+        self.startIntake(src, fds[0]) catch {
+            _ = linux.close(fds[0]);
+            logline.print("terminal: wl> selection intake failed\n", .{});
+            return;
+        };
+        logline.print("terminal: wl> selection from={d} mime={s} serial={d}\n", .{ from, mime, serial });
+    }
+
+    /// 읽기 끝과 2초 기한을 서버의 epoll에 싣는다(design 결정 33) — `main.zig`의 poll에 칸을 더하지 않는다.
+    fn startIntake(self: *Server, src: *Source, read_fd: i32) !void {
+        const in = try self.allocator.create(Intake);
+        errdefer self.allocator.destroy(in);
+        in.* = .{ .srv = self, .source = src, .fd = read_fd, .readable = undefined, .timer = undefined };
+        in.readable = try self.loop.addFd(*Intake, read_fd, .{ .readable = true }, intakeReadable, in);
+        errdefer in.readable.remove();
+        in.timer = try self.loop.addTimer(*Intake, intakeTimeout, in);
+        errdefer in.timer.remove();
+        try in.timer.timerUpdate(logic.SELECTION_TIMEOUT_MS);
+        self.intake = in;
+    }
+
+    const Outcome = enum { done, too_big, timeout, failed, dropped };
+
+    /// 진행 중인 받기를 끝낸다. `done`이면 받은 것이 서버 사본이 되고 `Event.selection`이 쌓인다. 나머지는 버리고 사본은
+    /// 그대로다. 받기가 없으면 아무것도 안 한다.
+    ///
+    /// fd 콜백 · 타이머 콜백 안에서 불려도 된다 — libwayland은 지운 source를 dispatch가 끝난 뒤에 해제한다. `addFd`는
+    /// 받은 fd를 복제해 epoll에 싣고 `remove`가 그 복제를 닫으므로, 원래 fd는 여기서 닫는다.
+    fn endIntake(self: *Server, how: Outcome) void {
+        const in = self.intake orelse return;
+        self.intake = null;
+        in.readable.remove();
+        in.timer.remove();
+        _ = linux.close(in.fd);
+        defer self.allocator.destroy(in);
+        defer in.buf.deinit(self.allocator);
+        switch (how) {
+            .done => {
+                // 아무것도 안 쓴 source(실패한 클라이언트)가 클립보드를 비우지 않게 한다.
+                if (in.buf.items.len == 0) {
+                    logline.print("terminal: wl> selection empty\n", .{});
+                    return;
+                }
+                const bytes = in.buf.toOwnedSlice(self.allocator) catch {
+                    logline.print("terminal: wl> selection dropped (no memory)\n", .{});
+                    return;
+                };
+                if (self.clip) |old| self.allocator.free(old);
+                self.clip = bytes;
+                logline.print("terminal: wl> selection len={d}\n", .{bytes.len});
+                self.push(.selection);
+            },
+            .too_big => logline.print("terminal: wl> selection too-big\n", .{}),
+            .timeout => logline.print("terminal: wl> selection timeout\n", .{}),
+            .failed => logline.print("terminal: wl> selection read failed\n", .{}),
+            .dropped => logline.print("terminal: wl> selection dropped\n", .{}),
+        }
+    }
 };
 
 /// 봉인한 memfd 하나에 키맵 텍스트와 NUL을 쓴다(design 결정 6). 크기는 NUL까지다 — 클라이언트(libxkbcommon)가
@@ -519,6 +666,8 @@ extern "c" fn chown(path: [*:0]const u8, owner: u32, group: u32) c_int;
 extern "c" fn chmod(path: [*:0]const u8, mode: c_uint) c_int;
 extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int) c_int;
 extern "c" fn unsetenv(name: [*:0]const u8) c_int;
+/// 클립보드의 파이프(WY-M4). Zig의 `linux.pipe2`는 깃발이 packed struct라 다른 extern들과 같은 모양으로 둔다.
+extern "c" fn pipe2(fds: *[2]c_int, flags: c_int) c_int;
 
 // ── 클라이언트 ─────────────────────────────────────────────────────────
 
@@ -537,9 +686,11 @@ fn clientCreated(listener: *wl.Listener(*wl.Client), client: *wl.Client) void {
     client.addDestroyListener(&rec.destroy);
 }
 
-fn clientGone(listener: *wl.Listener(*wl.Client), _: *wl.Client) void {
+fn clientGone(listener: *wl.Listener(*wl.Client), client: *wl.Client) void {
     const rec: *ClientRec = @fieldParentPtr("destroy", listener);
     logline.print("terminal: wl> gone pid={d}\n", .{rec.pid});
+    // 포인터는 다음 클라이언트가 다시 쓸 수 있다 — 끝난 클라이언트를 "가장 최근 포커스"로 남기지 않는다(WY-M4).
+    rec.srv.gate.forget(@intFromPtr(client));
     listener.link.remove();
     rec.srv.allocator.destroy(rec);
 }
@@ -1084,4 +1235,131 @@ fn toplevelDestroyed(_: *xdg.Toplevel, t: *Toplevel) void {
     };
     srv.push(.{ .gone = t.id });
     srv.allocator.destroy(t);
+}
+
+// ── wl_data_device_manager · wl_data_device · wl_data_source(WY-M4, design 결정 32 · 33) ──
+
+/// 클라이언트의 source 하나. offer된 mime을 든다 — `logic.pickMime`이 그중에서 고른다. 서버가 source를 가리키는 자리는
+/// `Server.sel_source`와 `Intake.source` 둘이고 둘 다 약한 참조다 — source가 사라지면 `sourceDestroyed`가 지운다.
+const Source = struct {
+    srv: *Server,
+    resource: *wl.DataSource,
+    mimes: std.ArrayList([]const u8) = .empty,
+    /// `set_selection`에 한 번 쓰였다(xml: 다시 쓰면 `used_source`).
+    used: bool = false,
+};
+
+/// 진행 중인 받기 하나(design 결정 33). 파이프의 읽기 끝(비블록)과 2초 기한이 서버의 epoll에 실려 있다.
+const Intake = struct {
+    srv: *Server,
+    /// 쓰는 source. 받는 중에 사라지면 null이 되고 읽기는 계속한다 — 끝난 클라이언트의 쓰기 끝은 커널이 닫으므로 EOF가
+    /// 오고, 받은 만큼을 쓴다(plan 확정 2 — `wl-copy`처럼 쓰고 곧 끝나는 프로그램과 가를 길이 없다).
+    source: ?*Source,
+    fd: i32,
+    readable: *wl.EventSource,
+    timer: *wl.EventSource,
+    buf: std.ArrayList(u8) = .empty,
+};
+
+fn bindDataDeviceManager(client: *wl.Client, srv: *Server, version: u32, id: u32) void {
+    const m = wl.DataDeviceManager.create(client, version, id) catch return client.postNoMemory();
+    m.setHandler(*Server, dataDeviceManagerRequest, null, srv);
+}
+
+fn dataDeviceManagerRequest(m: *wl.DataDeviceManager, req: wl.DataDeviceManager.Request, srv: *Server) void {
+    const client = m.getClient();
+    switch (req) {
+        .create_data_source => |r| {
+            const res = wl.DataSource.create(client, m.getVersion(), r.id) catch return m.postNoMemory();
+            const s = srv.allocator.create(Source) catch {
+                res.destroy();
+                return m.postNoMemory();
+            };
+            s.* = .{ .srv = srv, .resource = res };
+            res.setHandler(*Source, sourceRequest, sourceDestroyed, s);
+        },
+        // seat은 하나다(`seat0`) — 어느 seat을 줘도 같은 장치다.
+        .get_data_device => |r| {
+            const dev = wl.DataDevice.create(client, m.getVersion(), r.id) catch return m.postNoMemory();
+            dev.setHandler(*Server, dataDeviceRequest, dataDeviceDestroyed, srv);
+            srv.data_devices.append(dev);
+        },
+    }
+}
+
+fn dataDeviceRequest(dev: *wl.DataDevice, req: wl.DataDevice.Request, srv: *Server) void {
+    switch (req) {
+        .set_selection => |r| srv.setSelection(dev, if (r.source) |res| sourceOf(res) else null, r.serial),
+        // drag-and-drop은 범위 밖이다(design 결정 32) — 받기만 하고 source를 곧바로 거둔다. origin · icon에 역할을 주지 않는다.
+        .start_drag => |r| if (r.source) |res| res.sendCancelled(),
+        .release => dev.destroy(),
+    }
+}
+
+fn dataDeviceDestroyed(dev: *wl.DataDevice, _: *Server) void {
+    dev.getLink().remove();
+}
+
+/// source resource의 우리 칸. `create_data_source`가 `setHandler`로 붙인 것이다.
+fn sourceOf(res: *wl.DataSource) *Source {
+    return @ptrCast(@alignCast(res.getUserData().?));
+}
+
+fn sourceRequest(res: *wl.DataSource, req: wl.DataSource.Request, s: *Source) void {
+    switch (req) {
+        .offer => |r| {
+            const m = s.srv.allocator.dupe(u8, std.mem.span(r.mime_type)) catch return res.postNoMemory();
+            s.mimes.append(s.srv.allocator, m) catch {
+                s.srv.allocator.free(m);
+                return res.postNoMemory();
+            };
+        },
+        .destroy => res.destroy(),
+    }
+}
+
+fn sourceDestroyed(_: *wl.DataSource, s: *Source) void {
+    const srv = s.srv;
+    if (srv.sel_source == s) srv.sel_source = null;
+    if (srv.intake) |in| if (in.source == s) {
+        in.source = null;
+    };
+    for (s.mimes.items) |m| srv.allocator.free(m);
+    s.mimes.deinit(srv.allocator);
+    srv.allocator.destroy(s);
+}
+
+/// 읽기 끝이 읽힌다. 비블록이라 EAGAIN까지 다 읽고 돌아간다. 0이면 EOF — 받기가 끝났다.
+fn intakeReadable(fd: c_int, _: wl.EventMask, in: *Intake) c_int {
+    const srv = in.srv;
+    var chunk: [16384]u8 = undefined;
+    while (true) {
+        const n = linux.read(fd, &chunk, chunk.len);
+        switch (linux.errno(n)) {
+            .SUCCESS => {},
+            .INTR => continue,
+            .AGAIN => return 0,
+            else => {
+                srv.endIntake(.failed);
+                return 0;
+            },
+        }
+        if (n == 0) {
+            srv.endIntake(.done);
+            return 0;
+        }
+        if (in.buf.items.len + n > logic.SELECTION_MAX_BYTES) {
+            srv.endIntake(.too_big);
+            return 0;
+        }
+        in.buf.appendSlice(srv.allocator, chunk[0..n]) catch {
+            srv.endIntake(.failed);
+            return 0;
+        };
+    }
+}
+
+fn intakeTimeout(in: *Intake) c_int {
+    in.srv.endIntake(.timeout);
+    return 0;
 }

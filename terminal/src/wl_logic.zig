@@ -8,6 +8,8 @@
 //! (단계 C): 화면 좌표 → surface 좌표(`surfacePoint`), enter · leave와 버튼 grab(`PointerFocus`), 휠의 axis 값(`axisFor`).
 //! WY-M3(design 결정 28 · 29)이 버퍼 배율을 더했다 — surface 크기(`surfaceSize`), 버퍼 배율의 규칙(`scaleOk`), `blit`의 솎기(`bs`).
 //! 단계 B(결정 30)는 물리 합성의 셈 — 잘라 옮기기(`blitClip`), 교집합(`intersect`), × 배율(`scaleFit` · `scaleArea`).
+//! WY-M4(design 결정 33 · 34 · 36)가 클립보드의 셋을 더했다 — 받을 mime 고르기(`pickMime`), `set_selection`을 받아들이는
+//! 조건(`SelectionGate`), 받는 한도(`SELECTION_MAX_BYTES` · `SELECTION_TIMEOUT_MS`).
 
 const std = @import("std");
 
@@ -399,5 +401,58 @@ pub const Deadline = struct {
         if (now_ms < at) return false;
         self.at = null;
         return true;
+    }
+};
+
+// ── 클립보드(WY-M4, design 결정 33 · 34 · 36) ──────────────────────────────
+
+/// 서버가 내는 텍스트 mime(design 결정 34). 어느 것을 청해도 같은 바이트다. `STRING`은 X11에서 Latin-1이라는 뜻이라 안 낸다.
+/// 내는 것은 단계 B(offer)이고, 이 순서가 `offer` 이벤트의 순서다.
+pub const OFFER_MIMES = [_][:0]const u8{ "text/plain;charset=utf-8", "text/plain", "UTF8_STRING", "TEXT" };
+
+/// 클라이언트 source에서 받을 때의 우선순위(design 결정 34). `UTF8_STRING`이 둘째인 것은 그 이름이 인코딩을 못박기
+/// 때문이다 — 맨 `text/plain`은 인코딩을 말하지 않는다.
+pub const PICK_ORDER = [_][:0]const u8{ "text/plain;charset=utf-8", "UTF8_STRING", "text/plain", "TEXT" };
+
+/// source가 offer한 mime 중 받을 것 하나. 우선순위가 높은 것부터 보고, 하나도 없으면(이미지만 있는 source 등) null이다.
+/// 돌려주는 것은 `PICK_ORDER`의 상수다 — source의 문자열은 source와 함께 사라지므로 그것을 들고 있지 않는다.
+pub fn pickMime(offered: []const []const u8) ?[:0]const u8 {
+    for (PICK_ORDER) |want| {
+        for (offered) |m| if (std.mem.eql(u8, m, want)) return want;
+    }
+    return null;
+}
+
+/// 받는 한도(design 결정 33). 넘으면 통째로 버리고 클립보드는 그대로 둔다. 1 MiB는 PTY에 bracketed paste로 넣기에
+/// 이미 넉넉하다 — 브라우저가 페이지 전체를 복사하는 경우를 막는 상한이다.
+pub const SELECTION_MAX_BYTES: usize = 1 << 20;
+
+/// 받는 기한(design 결정 33). `Cmd+Q`의 기한(`KILL_AFTER_MS`)과 같은 2초 — 클라이언트가 멈춰도(SIGSTOP) 읽기가 영영
+/// 매달리지 않는다.
+pub const SELECTION_TIMEOUT_MS: i32 = 2000;
+
+/// `set_selection`을 받아들이는 조건(design 결정 36). serial 값은 보지 않는다 — SDL은 serial 0을 보내는 길이 있다.
+/// 받아들이는 것은 "지금 또는 가장 최근에 키보드 포커스를 가졌던 클라이언트"다. 포커스가 셸로 가도(null) `last`는 남는다 —
+/// `Cmd+C` 바로 뒤의 `Cmd+1`은 `leave`가 `set_selection`보다 먼저 갈 수 있기 때문이다. 포커스가 있으면 `last`가 곧 지금
+/// 클라이언트이므로 칸 하나로 둘을 함께 본다.
+///
+/// 클라이언트는 수(`usize` — 서버가 `wl_client` 포인터를 넣는다)로만 안다. 포인터는 클라이언트가 끝난 뒤 다시 쓰일 수
+/// 있으므로, 끝난 클라이언트는 `forget`으로 지운다.
+pub const SelectionGate = struct {
+    last: ?usize = null,
+
+    /// 키보드 포커스가 `client`로 갔다(null이면 셸 — `last`는 그대로).
+    pub fn focus(self: *SelectionGate, client: ?usize) void {
+        if (client) |c| self.last = c;
+    }
+
+    /// 클라이언트가 끝났다.
+    pub fn forget(self: *SelectionGate, client: usize) void {
+        if (self.last == client) self.last = null;
+    }
+
+    /// `client`의 `set_selection`을 받아들이는가. 포커스를 가져 본 적 없는 클라이언트(배경 프로세스)는 안 된다.
+    pub fn allows(self: SelectionGate, client: usize) bool {
+        return self.last == client;
     }
 };

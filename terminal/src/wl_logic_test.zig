@@ -332,5 +332,62 @@ pub fn main() !void {
         if (!std.meta.eql(logic.axisFor(-2), logic.Axis{ .value = 5120, .discrete = 2 })) return error.WrongAxis;
     }
     std.debug.print("wl_logic_test: axis 2 cases\n", .{});
+
+    // 클립보드(WY-M4) — 받을 mime 고르기(design 결정 34).
+    {
+        const Case = struct { offered: []const []const u8, want: ?[]const u8 };
+        const cases = [_]Case{
+            // SDL3 3.2.10이 텍스트를 내는 다섯(`SDL_waylandclipboard.c` text_mime_types) — 첫째가 이긴다.
+            .{ .offered = &.{ "text/plain;charset=utf-8", "text/plain", "TEXT", "UTF8_STRING", "STRING" }, .want = "text/plain;charset=utf-8" },
+            // 순서는 source가 아니라 우선순위가 정한다 — `UTF8_STRING`이 맨 `text/plain`보다 앞이다.
+            .{ .offered = &.{ "TEXT", "text/plain", "UTF8_STRING" }, .want = "UTF8_STRING" },
+            .{ .offered = &.{ "STRING", "text/plain" }, .want = "text/plain" },
+            .{ .offered = &.{"TEXT"}, .want = "TEXT" },
+            // 텍스트가 없다(이미지만) — 받지 않는다.
+            .{ .offered = &.{ "image/png", "STRING" }, .want = null },
+            .{ .offered = &.{}, .want = null },
+            // 대소문자 · 띄어쓰기가 다른 이름은 다른 mime이다.
+            .{ .offered = &.{"text/plain; charset=utf-8"}, .want = null },
+        };
+        for (cases) |cs| {
+            const got = logic.pickMime(cs.offered);
+            const ok = if (cs.want) |w| (got != null and std.mem.eql(u8, got.?, w)) else got == null;
+            if (!ok) {
+                std.debug.print("FAIL: pickMime({any}) = {?s}, want {?s}\n", .{ cs.offered, got, cs.want });
+                return error.WrongMime;
+            }
+        }
+        // 내는 넷은 전부 받을 수 있는 것이다(셸 → 앱 → 셸이 한 바퀴 돈다).
+        for (logic.OFFER_MIMES) |m| {
+            const one = [_][]const u8{m};
+            if (logic.pickMime(&one) == null) return error.WrongMime;
+        }
+    }
+    std.debug.print("wl_logic_test: mime pick 7 cases, offered 4 all pickable\n", .{});
+
+    // 받아들이는 조건(design 결정 36).
+    {
+        var g: logic.SelectionGate = .{};
+        // 포커스를 가져 본 적 없는 클라이언트는 안 된다.
+        if (g.allows(1)) return error.WrongGate;
+        g.focus(1);
+        if (!g.allows(1) or g.allows(2)) return error.WrongGate;
+        // 셸로 갔다(null) — 1은 여전히 가장 최근이다(`Cmd+C` 바로 뒤의 `Cmd+1`).
+        g.focus(null);
+        if (!g.allows(1)) return error.WrongGate;
+        // 2가 포커스를 받으면 1은 더는 아니다.
+        g.focus(2);
+        if (g.allows(1) or !g.allows(2)) return error.WrongGate;
+        // 끝난 클라이언트는 잊는다 — 다른 클라이언트의 forget은 영향이 없다.
+        g.forget(1);
+        if (!g.allows(2)) return error.WrongGate;
+        g.forget(2);
+        if (g.allows(2)) return error.WrongGate;
+    }
+    std.debug.print("wl_logic_test: selection gate 8 cases\n", .{});
+
+    // 한도(design 결정 33) — 숫자를 여기 한 번 더 적어, 바꾸면 이 줄도 함께 고치게 한다.
+    if (logic.SELECTION_MAX_BYTES != 1048576 or logic.SELECTION_TIMEOUT_MS != 2000) return error.WrongLimit;
+    std.debug.print("wl_logic_test: selection limits 1 MiB 2000 ms\n", .{});
     std.debug.print("wl_logic_test: all checks passed\n", .{});
 }

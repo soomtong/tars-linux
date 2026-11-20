@@ -113,6 +113,9 @@ pub fn build(b: *std.Build) void {
     scanner.generate("wl_seat", 7);
     scanner.generate("xdg_wm_base", 5);
     scanner.generate("zxdg_decoration_manager_v1", 1);
+    // WY-M4(design 결정 32): 클립보드. 판 2 — 판 3의 새 요청은 전부 drag-and-drop 액션이다. 자식(`wl_data_device` ·
+    // `wl_data_source` · `wl_data_offer`)이 같은 판으로 함께 생긴다.
+    scanner.generate("wl_data_device_manager", 2);
     const wayland_mod = b.createModule(.{ .root_source_file = scanner.result });
 
     // libwayland는 컨테이너의 x86_64 sysroot에 있다(Dockerfile 층 22 — dpkg -x로 푼 libwayland-dev:amd64의 무버전

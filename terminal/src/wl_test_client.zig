@@ -9,6 +9,8 @@
 //! `--hide-cursor`면 enter마다 `set_cursor(NULL)`을 보낸다(SDL_HideCursor처럼 — 서버가 화살표를 숨기는지 본다).
 //! WY-M3(plan 확정 8): `--buffer-scale N`이면 버퍼를 surface 크기 × N으로 만들고 `set_buffer_scale(N)`, `--checker`면 한 색 대신
 //! 1 버퍼 픽셀 바둑판. 서버가 알리는 배율을 `preferred scale=N` · `surface on output` · `output mode=WxH scale=N` 줄로 찍는다.
+//! WY-M4(plan 확정 10): `--copy TEXT`면 C 키(evdev 46) 누름에서 source를 만들어 SDL3처럼 텍스트 mime 다섯을 offer하고
+//! `set_selection(그 키의 serial)`을 보낸다. `send`를 받으면 TEXT를 쓰고 닫은 뒤 `send mime= len=`, `cancelled`면 `cancelled`.
 //! `wl_surface.enter`의 줄에 `enter`라는 낱말을 안 쓰는 것은 wayland 체인 판정 16이 이 로그의 `enter`(키보드)를 세기 때문이다.
 //!
 //! 바인딩은 terminal의 서버와 같은 스캐너가 만든 것이다(`build.zig`의 `wayland` 모듈 — 서버는 `server`, 이쪽은
@@ -28,6 +30,15 @@ const OUTPUT_VERSION: u32 = 4;
 const SHM_VERSION: u32 = 1;
 const SEAT_VERSION: u32 = 7;
 const WM_BASE_VERSION: u32 = 5;
+/// 클립보드(WY-M4, design 결정 32).
+const DATA_DEVICE_MANAGER_VERSION: u32 = 2;
+
+/// `--copy`가 offer하는 mime — SDL3 3.2.10의 텍스트 다섯과 같은 순서다(`SDL_waylandclipboard.c` text_mime_types). 서버가
+/// 그중에서 고르는 것(`wl_logic.pickMime`)을 남의 클라이언트와 같은 목록으로 본다.
+const COPY_MIMES = [_][*:0]const u8{ "text/plain;charset=utf-8", "text/plain", "TEXT", "UTF8_STRING", "STRING" };
+
+/// evdev KEY_C — `--copy`의 방아쇠. app pane의 `Cmd+C`가 이 코드(+ super)로 온다.
+const KEY_C: u32 = 46;
 
 /// `frame` 줄은 처음 열 번만 찍는다 — 체인은 콜백이 도는지만 보고, 그 뒤로는 로그가 프레임마다 불어난다.
 const FRAME_LINES: u32 = 10;
@@ -72,6 +83,8 @@ const Args = struct {
     buffer_scale: u32 = 1,
     /// 1 버퍼 픽셀 바둑판 — `(x + y) & 1`이면 `--color`, 아니면 흰색. 게이트가 화면에서 1:1인지 늘린 것인지 가른다.
     checker: bool = false,
+    /// `--copy TEXT`(WY-M4) — C 키 누름에서 이 글을 selection으로 낸다.
+    copy: ?[]const u8 = null,
 };
 
 /// 바둑판의 둘째 색. 둘레의 검정과 갈리게 흰색이다.
@@ -114,6 +127,10 @@ fn parseArgs(argv: []const []const u8) ?Args {
             i += 1;
             if (i == argv.len or argv[i].len != 6) return null;
             args.color = std.fmt.parseInt(u32, argv[i], 16) catch return null;
+        } else if (std.mem.eql(u8, a, "--copy")) {
+            i += 1;
+            if (i == argv.len) return null;
+            args.copy = argv[i];
         } else if (std.mem.eql(u8, a, "--size")) {
             i += 1;
             if (i == argv.len) return null;
@@ -128,7 +145,7 @@ fn parseArgs(argv: []const []const u8) ?Args {
 fn usage() u8 {
     writeAll(2,
         \\usage: tars-wl-test [--color RRGGBB] [--size WxH] [--ignore-close] [--follow-size] [--fullscreen]
-        \\       [--hide-cursor] [--buffer-scale N] [--checker]
+        \\       [--hide-cursor] [--buffer-scale N] [--checker] [--copy TEXT]
         \\  open one xdg_toplevel filled with one colour (default 3366CC, 320x200) and
         \\  print what the compositor sends, one line each. Ends on close, unless
         \\  --ignore-close (then close and ping are ignored). The buffer keeps its
@@ -139,6 +156,7 @@ fn usage() u8 {
         \\  --buffer-scale N (1..3) draws a buffer N times the surface size and sets
         \\  that buffer scale; sizes (--size, configure) stay in surface units.
         \\  --checker fills a one-buffer-pixel checkerboard of the colour and white.
+        \\  --copy TEXT sets the selection to TEXT when C is pressed in the window.
         \\
     );
     return EXIT_USAGE;
@@ -152,6 +170,7 @@ const Globals = struct {
     seat: ?*wl.Seat = null,
     wm_base: ?*xdg.WmBase = null,
     output: ?*wl.Output = null,
+    data_device_manager: ?*wl.DataDeviceManager = null,
     /// output의 mode · scale을 `done`까지 모은다. listener는 bind하는 자리에서 건다 — output의 이벤트는 첫 roundtrip이 끝난
     /// 뒤의 같은 읽기에 섞여 올 수 있고, listener 없는 proxy의 이벤트는 버려진다.
     out_info: OutputInfo = .{},
@@ -178,6 +197,9 @@ const State = struct {
     pending_states: [48]u8 = undefined,
     pending_states_len: usize = 0,
     configured: bool = false,
+    /// 클립보드(WY-M4). 장치는 `--copy`일 때만 얻는다.
+    data_device_manager: ?*wl.DataDeviceManager = null,
+    data_device: ?*wl.DataDevice = null,
     frames: u32 = 0,
     running: bool = true,
     failed: bool = false,
@@ -257,6 +279,8 @@ fn registryListener(registry: *wl.Registry, event: wl.Registry.Event, g: *Global
                 const o = registry.bind(global.name, wl.Output, @min(global.version, OUTPUT_VERSION)) catch return;
                 o.setListener(*OutputInfo, outputListener, &g.out_info);
                 g.output = o;
+            } else if (std.mem.eql(u8, name, std.mem.span(wl.DataDeviceManager.interface.name))) {
+                g.data_device_manager = registry.bind(global.name, wl.DataDeviceManager, @min(global.version, DATA_DEVICE_MANAGER_VERSION)) catch return;
             }
         },
         .global_remove => {},
@@ -391,13 +415,16 @@ fn pointerListener(p: *wl.Pointer, event: wl.Pointer.Event, state: *State) void 
     }
 }
 
-fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, _: *State) void {
+fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, state: *State) void {
     switch (event) {
         .keymap => |k| {
             say("keymap size={d}", .{k.size});
             _ = linux.close(k.fd);
         },
-        .key => |k| say("key code={d} state={d}", .{ k.key, @backingInt(k.state) }),
+        .key => |k| {
+            say("key code={d} state={d}", .{ k.key, @backingInt(k.state) });
+            if (k.key == KEY_C and k.state == .pressed) copySelection(state, k.serial);
+        },
         .modifiers => |m| say("mods depressed=0x{x}", .{m.mods_depressed}),
         // 키보드 포커스(WY-M2 확정 9) — column 창은 포커스 slot이 될 때 enter, 셸로 옮기면 leave.
         .enter => say("enter", .{}),
@@ -406,11 +433,52 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, _: *State) void {
     }
 }
 
+// ── 클립보드(WY-M4) ─────────────────────────────────────────────────
+
+/// `--copy`: source 하나를 만들어 mime 다섯을 offer하고 `set_selection(serial)`. serial은 방금 받은 키의 것이다(SDL3도 마지막
+/// 키 · 버튼의 serial을 쓴다). source는 `cancelled`를 받을 때 지운다 — 서버가 다음 selection으로 바꾸면 그때 온다.
+fn copySelection(state: *State, serial: u32) void {
+    const text = state.args.copy orelse return;
+    const dev = state.data_device orelse return say("copy no-device", .{});
+    const mgr = state.data_device_manager orelse return;
+    const src = mgr.createDataSource() catch return say("copy no-source", .{});
+    src.setListener(*State, sourceListener, state);
+    for (COPY_MIMES) |m| src.offer(m);
+    dev.setSelection(src, serial);
+    say("copy len={d} serial={d}", .{ text.len, serial });
+}
+
+/// 서버가 selection을 청했다(`send`) — TEXT를 쓰고 닫는다. 서버가 준 쓰기 끝은 블록 파이프라 한 번에 다 쓴다.
+fn sourceListener(src: *wl.DataSource, event: wl.DataSource.Event, state: *State) void {
+    switch (event) {
+        .send => |s| {
+            const text = state.args.copy orelse "";
+            writeAll(s.fd, text);
+            _ = linux.close(s.fd);
+            say("send mime={s} len={d}", .{ s.mime_type, text.len });
+        },
+        .cancelled => {
+            say("cancelled", .{});
+            src.destroy();
+        },
+        .target => {},
+    }
+}
+
+/// 서버의 offer(단계 B)는 아직 쓰지 않는다 — 받은 selection offer는 곧바로 지운다(xml: 새 selection을 받으면 옛 offer를 지운다).
+fn dataDeviceListener(_: *wl.DataDevice, event: wl.DataDevice.Event, _: *State) void {
+    switch (event) {
+        .selection => |s| if (s.id) |o| o.destroy(),
+        else => {},
+    }
+}
+
 // ── 실행 ───────────────────────────────────────────────────────────
 
 pub fn main(init: std.process.Init.Minimal) u8 {
     const vector = init.args.vector;
-    var spans: [8][]const u8 = undefined;
+    // `--follow-size --paste --copy TEXT --color …`처럼 깃발이 늘었다(WY-M4) — 열여섯 칸.
+    var spans: [16][]const u8 = undefined;
     if (vector.len > spans.len + 1) return usage();
     for (vector[1..], 0..) |a, i| spans[i] = std.mem.span(a);
     const args = parseArgs(spans[0 .. vector.len - 1]) orelse return usage();
@@ -446,6 +514,13 @@ fn run(args: Args) !u8 {
     wm_base.setListener(*State, wmBaseListener, &state);
     // seat가 없어도 창은 뜬다 — 키 줄만 안 나온다.
     if (g.seat) |seat| seat.setListener(*State, seatListener, &state);
+    // 클립보드 장치(WY-M4) — `--copy`일 때만. seat 하나에 장치 하나다.
+    if (args.copy != null) if (g.data_device_manager) |mgr| if (g.seat) |seat| {
+        const dev = try mgr.getDataDevice(seat);
+        dev.setListener(*State, dataDeviceListener, &state);
+        state.data_device_manager = mgr;
+        state.data_device = dev;
+    };
     // seat의 capabilities를 여기서 받아 `get_keyboard` · `get_pointer`를 첫 commit보다 먼저 보낸다(WY-M3 단계 A). 서버는
     // 요청을 차례로 처리하므로 첫 configure가 나갈 때 키보드가 이미 있다 — 체인이 configure를 보자마자 친 키의 누름이
     // 키보드 없는 틈에 떨어지고 뗌만 오던 경쟁(wayland 판정 16의 `c16-1-1-1`)이 닫힌다.

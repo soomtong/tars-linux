@@ -6304,8 +6304,31 @@ const App = struct {
                     self.output_pending = true;
                 },
             },
+            .selection => self.takeSelection(srv),
         };
         return .keep;
+    }
+
+    /// 앱이 복사한 것이 서버 사본에 다 들어왔다(WY-M4, design 결정 33 · 37). `clipboard=shared`면 셸 클립보드에 넣고 셸의
+    /// 복사와 같은 `clip>` 줄을 찍는다 — 셸의 `Cmd+V`는 지금 그대로 동기다. `pane`이면 셸에 안 넣는다(서버 사본은
+    /// 클라이언트끼리만).
+    ///
+    /// 서버 사본을 빌리지 않고 복사한다. `Clipboard.set`은 옛것을 자기 할당자로 해제하므로 그 할당자로 만든 `[:0]`이어야
+    /// 하고, 서버 사본은 다음 `dispatch`가 바꿀 수 있다.
+    fn takeSelection(self: *App, srv: *wls.Server) void {
+        const bytes = srv.clipboard() orelse return;
+        if (self.clips.scope != .shared) {
+            logline.print("terminal: wl> selection kept scope=pane\n", .{});
+            return;
+        }
+        const clip = &self.clips.shared;
+        const owned = clip.alloc.allocSentinel(u8, bytes.len, 0) catch {
+            logline.print("terminal: wl> selection dropped (no memory)\n", .{});
+            return;
+        };
+        @memcpy(owned, bytes);
+        clip.set(owned);
+        dumpClip(clip.text());
     }
 
     /// 창 하나가 어디 있는가(WY-M2). 자기 workspace이거나 셸 workspace의 slot이다.
