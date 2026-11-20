@@ -200,6 +200,7 @@ BT(2026-11-02)가 남긴 것.
       다섯 번째(SW-M1 루트 게이트, 2026-11-18, 다시 lane 20): 같은 서명(`services.d/bt` 53행 `Segmentation fault`,
       `controllers 0 paired`). 체인만 다시 돌린 판은 초록(206초). 네 번째는 아래 pointer 항목에 잘못 들어간 PS-M0의 것이다.
       여섯 번째(WY-M0 루트 게이트 둘째 판, 2026-11-19): `btvirt[94]`, 같은 서명. 체인만 다시 돌린 판은 초록(3분 22초).
+      일곱 번째(WY-M4 루트 게이트, 2026-11-20): `btvirt[108]` general protection fault(segfault가 아닌 다른 꼴, 같은 btvirt). 체인만 다시 돌린 판은 초록(3분 25초).
 - [ ] `pointer`(PD-M4) 부팅 C의 말없는 끝(TP-M2 루트 게이트 2회차, 2026-11-06, lane 16). `(라)`의 `=== … ===` 줄 바로 뒤에
       `report_failure` 없이 체인이 끝났다. 시리얼 로그는 `(나)`가 친 `/config/pd/tp-replay`의 메아리와 그 뒤 몇 줄에서 멎었고 패닉
       줄은 없다. lane 출력에도 셸 오류가 없다. `set -e`가 꺼진 체인이 말없이 끝나는 길은 SIGPIPE다 — QEMU(`-no-reboot`)가 사라진 뒤
@@ -342,7 +343,7 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   아예 없다.
 - 렌더가 PTY 분기 안에만 있었다. `needs_redraw`로 루프 끝에 뺐다.
 
-## WY-M2 · WY-M3이 남긴 것 (Wayland 서버, 그대로 이월)
+## WY-M2 ~ WY-M4가 남긴 것 (Wayland 서버, 그대로 이월)
 
 - SDL은 렌더러가 GL 창을 바라 창을 한 번 지웠다 다시 짓는다 — column이 한 번 깜빡인다. 첫 commit 뒤 한 바퀴 기다려 자리를 정하면 줄 수 있다.
 - vsync SDL 창은 숨은 동안 frame `done`을 못 받아 swap에서 멈춘다 — 숨은 창의 `Cmd+Q`는 ping에 못 답해 SIGKILL이 된다.
@@ -352,3 +353,7 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 - SDL exclusive fullscreen(viewport 없음)은 `set_buffer_scale(mode.w / output_w)`를 보낸다 — 우리 `output_w`는 논리라 모드가 그 정수 배가
   아니면 `invalid_size`. 쓰는 클라이언트가 없다(viewporter는 결정 31로 안 낸다).
 - 배율 2 화면의 bs 1 · bs 2 column 통째 프레임 시간을 같은 조건에서 맞댄 숫자는 없다(TCG에서 셸 다시 그리기 50~67 ms에 묻힌다).
+- 클립보드 이어 쓰기(64 KiB 넘는 글, `Outgo`)는 체인이 안 탄다 — 판정 글은 9바이트. 1 MiB · 2초 한도와 writable 콜백은 코드로만 맞췄다.
+- SDL 앱으로 실제 붙여넣기를 재지 않았다 — app pane의 `Cmd`는 `Super`로 가서 SDL의 `Ctrl+V`가 아니다(WY-M6 호환 모드). SDL은 파이프를 14 ms만
+  기다린다 — 서버는 `receive`를 요청 처리기 안에서 쓰지만(`first=` 전부), TCG에서 바퀴가 길면 요청 처리 자체가 늦을 수 있다.
+- `clipboard=pane` 범위의 Wayland 쪽(셸과 안 이음)은 게이트가 안 본다. 판 2의 `start_drag` → `cancelled`도 쓰는 클라이언트가 없어 런타임으로 안 봤다.

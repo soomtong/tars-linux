@@ -2,7 +2,7 @@
 
 Date: 2026-11-20
 Design: `docs/specs/2026-11-19-tars-wayland-server-design.md`(결정 32~37), 요구사항 R-WY-6 · R-WY-8
-Status: 진행 중. 브랜치 `app-layer-0-3`.
+Status: 끝(2026-11-20). 브랜치 `app-layer-0-3`.
 
 ## 확인(조사 `wy-m4`, 세션 scratchpad `wy-m4/research.md` — HEAD `34c721d`, SDL 3.2.10 소스)
 
@@ -93,3 +93,13 @@ wayland 부팅 1, 판정 22 뒤 · 9 앞(셸만 남은 자리):
 3. plan과 달라진 것: 파이프는 `pipe2(O_CLOEXEC)` 뒤 읽기 끝만 비블록(두 끝 다 비블록이면 클라이언트 쓰기 끝도 비블록이 되어 EAGAIN을 안 다루는
    클라이언트가 64 KiB 넘는 글을 자른다). 0바이트 받기는 버린다(`wl> selection empty` — 실패한 클라이언트가 셸 클립보드를 비우지 않게).
    gate가 거절한 source에는 `cancelled`. 로그 `wl> selection len=` · `empty` · `cleared` · `dropped` · `kept scope=pane`을 더했다.
+4. 단계 B `ca9f431`: `setClipboard`(셸 복사 → 서버 사본 · 옛 source `cancelled` · 포커스 offer), `setFocus`가 키보드 `enter` 앞에 offer, 늦은 `get_data_device`에도
+   offer, `receive`는 처리기 안에서 곧바로 쓰고(`first=K`) 남으면 writable로 이어 쓴다. SIGPIPE는 `main` 앞에서 무시, `pty.spawn` 자식에서 되돌림.
+   `tars-wl-test --paste` · `--paste-drop`(plan에 없던 시험 깃발 — 읽기 끝을 먼저 닫아 EPIPE를 결정적으로). wayland 판정 23 · 24 · 25(25는 plan에
+   없던 SIGPIPE 판정 — terminal이 EPIPE에 살고, 셸의 `seq 1000000 | head -n1`이 141). 도움말 한 줄. 체인 단독 wayland 395초(+22초) · copy · pointer ·
+   display · pane · terminal PASS.
+5. 실측 5: Cmd+V 다음 줄이 `wl> receive … len=9 first=9` — 같은 dispatch 안에서 다 썼다. 창이 열리면 `wl> column` 바로 다음이 `wl> offer`(enter 앞).
+6. 루트 게이트 34/35(prebuild 347초 + lanes 1,562초, `out/gate-logs/20261120-041131`), verify mismatch 0. 빨강 하나는 BT-M2 `btvirt` 간헐(carryover
+   일곱 번째 — 이번엔 general protection fault) — 체인 단독 초록(3분 25초).
+
+남은 걱정은 `docs/guides/carryover.md`의 "WY-M2 ~ WY-M4가 남긴 것" 절로 옮겼다.
