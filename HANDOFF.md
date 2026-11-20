@@ -1,4 +1,4 @@
-# HANDOFF: App Layer(0.3) — WY-M5(한글) 끝(`6390798`), 다음 WY-M6(장식 · popup · damage · 호환 모드). tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) — WY-M5(한글) 끝(`6390798`), WY-M6(호환 모드 · damage) 단계 A 구현 중. tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
 
 ## 목표
 
@@ -116,8 +116,10 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
       `devlayer/cache/<sha256>`에 손으로 두었다 — 캐시 없는 기계에서는 release 전까지 `make dev-layers`가 받기에서 멈춘다.
       release 방법 두 갈래: (가) 태그 push → Actions가 빌드 · 업로드(sha256이 바뀌어 manifest를 고치고 wayland 체인 한 번), (나) 로컬 tarball을
       `gh release create`로 올림(sha256 그대로). Actions workflow가 태그에서 함께 돌면 자산이 겹치니 (나)면 workflow를 고르게 손본다
-- [ ] WY-M6(design milestone 표: `xdg-decoration` 서버 쪽 장식 · `xdg_popup` · damage 부분 blit · 호환 모드 — 끝나는 조건 "popup 위치, 장식의 좌표 색,
-      호환 모드의 키 판정"): 아직 조사 전. 호환 모드(요구사항 결정 3 — app의 Cmd → Ctrl)가 SDL · GTK 붙여넣기의 전제다(carryover). 녹화 B(사람)도 남음
+- [ ] WY-M6(호환 모드 · `tars_menu_v1` 뼈대 · damage): design 결정 44~47 · plan `docs/plans/2026-11-20-tars-wayland-server-wy-m6.md`(`abba27d`),
+      로드맵 4판 — popup · 장식은 WY-M7(CR-M0 실측 뒤), 순서 WY-M6 → TK → CR-M0 → WY-M7 → CR-M1. 서브에이전트 `wy-m6`(Herdr pane `w3J:pE`, Opus)이
+      단계 A(호환 모드 · `tars_menu_v1` · 판정 29)를 하는 중, 지시 · 보고는 세션 scratchpad `wy-m6/task-a.md` · `report-a.md`. 다음 단계 B(damage · 판정 30)
+- [ ] 녹화 B(사람 녹화 — strip + SDL3 column + 클립보드 + 한글, 조사 `wy-m5/research.md` 6절 끝에 보일 것)
 - [ ] 소개 페이지(`gh-pages`의 `data.js`)에 SW를 안 올렸다 — 사이트는 `main` 줄 기준(`commits`가 `rev-list --count main`)이고 SW는
       `app-layer-0-3`에만 있다. 0.3 줄이 `main`에 들어갈 때 올린다(사용자가 먼저 원하면 그때)
 - [ ] `app-layer-0-3`의 이 세션 commit들(`cac1858`부터)은 push하지 않았다 — 사용자가 원하면 push
