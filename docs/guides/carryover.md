@@ -363,3 +363,10 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   SDL의 텍스트 입력은 저장소에 쓰는 앱이 없어 소스 사실로만 선다. 녹화 B(사람 녹화)는 아직.
 - 호환 · damage(WY-M6): SDL이 호환 모드의 Ctrl+V로 붙이는지는 저장소에 SDL 붙여넣기 앱이 없어 소스 사실로만 선다. damage는 합집합 하나라 멀리 떨어진 작은
   damage 둘은 그 사이 전체를 옮긴다(목록은 TK-M1의 숫자를 보고). WY-M7의 popup · 장식이 창 자리를 가렸다 비키면 `damage_whole`을 세워야 한다.
+
+## TK-M0이 남긴 것 (툴킷, 그대로 이월)
+
+- `/vendor/fonts/Pretendard-Regular.otf`가 로그인 사용자 uid로 읽히는지는 체인(root 셸)이 못 본다 — 설치된 기계에서 `tars-tk-demo`를 사용자로 띄워 본다.
+- `toolkit` 체인 판정 2의 대각선 중간값은 z2d v0.13.2에서 한 칸이다 — z2d 판을 올리면 모서리 12 × 12 상자의 중간값 수로 바꾼다.
+- 저장소에 `THIRD_PARTY` 고지 파일이 없다 — z2d(MPL-2.0)는 `toolkit/build.zig.zon` 주석, Pretendard(OFL)는 `toolkit/vendor/fonts/README`가 고지 자리다.
+  배포물(ISO)에 고지 묶음을 만드는 일은 릴리스 절차(`project_release`)에서 본다.

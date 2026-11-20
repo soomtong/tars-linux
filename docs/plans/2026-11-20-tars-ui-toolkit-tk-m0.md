@@ -2,7 +2,7 @@
 
 Date: 2026-11-20
 Design: `docs/specs/2026-11-20-tars-ui-toolkit-design.md`(결정 1~12)
-Status: 진행 중. 브랜치 `app-layer-0-3`.
+Status: 끝(2026-11-20). 브랜치 `app-layer-0-3`.
 
 ## 확인
 
@@ -82,3 +82,11 @@ design의 확인 절 1~9(조사 `tk-m0`, 세션 scratchpad `tk/research.md`)가 
 4. 실측: z2d를 끌어들인 호스트 검사는 Debug 기본 백엔드에서 MaxRSS 478 MB로 섰다(design 위험 1은 z2d 자체 검사 전체의 일). `tars-tk-demo` strip-debug
    1,121,264 B, NEEDED는 이미 initrd에 있는 사슬. initrd gzip 어림 +1.53 MB(글꼴 1.05 + 데모 0.48). `THIRD_PARTY` 파일은 저장소에 없다 — 고지는 zon 주석 ·
    `vendor/fonts/README`. 단계 B에서 달라진 것: 버퍼 나이는 TK-M1(통째 그리기라 뜻이 없다), 같은 크기 configure는 ack만(idle commit 0).
+5. 단계 C `5c3ec2b`: 체인 `toolkit/check.sh`(서른여섯째, monitor 45509, 판정 1~6 — native bind · column · 616 × 752, 둥근 사각형 좌표 색 · 대각선 중간값,
+   "안녕" 상자 ink · 결정 4의 1배 PNG를 회차 로그 폴더에, `Cmd+R` 1240 폭 · 새 가운데, idle 2초 서버 commit 줄 그대로, `Cmd+Q` 뒤 스스로 끝남 · 셈
+   `tk-2-2-1-1-2-2`), 루트 `CHAINS` · `prebuild`에 toolkit `zig build test`, `GAMMA = 1.8`, 데모의 같은 Face 둘을 하나로. 체인 단독 toolkit 두 번 연속 · terminal PASS.
+   idle commit 0의 결정적 증거는 클라이언트 셈(commit = draw)이다 — 서버의 `wl> commit` 줄은 버퍼 모양이 바뀔 때만 찍힌다.
+6. 루트 게이트 36/36 첫 판 PASS(prebuild 388초 + lanes 1,578초, `out/gate-logs/20261120-122030`), verify mismatch 0.
+
+남은 걱정: 판정 2의 대각선 중간값은 z2d 판에 묶인 한 칸이다(판을 올리면 모서리 상자의 중간값 수로). 판정 좌표는 1280 × 800 · column 616에 묶였다
+(데모 머리와 체인 머리가 같은 숫자를 적었다). `/vendor/fonts/`가 로그인 사용자 uid로 읽히는지는 체인(root)이 못 본다 — 설치된 기계에서(carryover).
