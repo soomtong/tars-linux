@@ -29,7 +29,7 @@ SW-M0 ─ SW-M1 ─ SW-M2 ─ SW-M3
 ~~~
 
 한 번에 한 줄씩 한다. 권장 순서는 SW-M0~M3(끝, 2026-11-19) → WY-M0 → WY-M1(녹화 A)
-→ WY-M2~M5(녹화 B) → WY-M6 → TK-M0~M5(녹화 C) → CR-M0 → WY-M7 → CR-M1~M2(녹화 D). TK와 CR은 서로 독립이라
+→ WY-M2~M5(녹화 B) → WY-M6 → TK-M0~M6(녹화 C) → CR-M0 → WY-M7 → CR-M1~M2(녹화 D). TK와 CR은 서로 독립이라
 바꿔도 된다. 4판(2026-11-20, WY design 결정 44): 옛 WY-M6을 둘로 — WY-M6(호환 모드 · damage)은 TK 앞, WY-M7(popup · 장식)은
 Chromium이 실제로 쓰는 것을 CR-M0이 잰 뒤.
 
@@ -102,8 +102,8 @@ WY-M0은 SW-M0 뒤다 — 사각형을 내는 자리(`layout.Strip`)가 먼저 �
 
 ## 3단 — TK: 툴킷과 `tars-files`
 
-design doc: `tars-ui-toolkit-design.md`(접두사 TK). 새 체인 `toolkit/check.sh`.
-전제는 WY-M2. 텍스트 필드(TK-M4)는 WY-M3 · M4가 있어야 한다.
+design doc: `docs/specs/2026-11-20-tars-ui-toolkit-design.md`(접두사 TK, 결정 1~12 — 아래 표는 그 design의 milestone 표가 기준이다).
+새 체인 `toolkit/check.sh`. 전제는 WY-M6(끝) — text-input · 클립보드 · damage · 원래 모드의 문이 서버에 있다.
 
 확인 절에 넣을 것
 
@@ -122,7 +122,8 @@ design doc: `tars-ui-toolkit-design.md`(접두사 TK). 새 체인 `toolkit/check
 | TK-M2 | responder · 포커스 · 가상화 리스트 · 스크롤 | `↓` 열 번 뒤 강조 위치. 10만 행 호스트 검사 |
 | TK-M3 | column view · 분할 뷰 · `tars-files` 뼈대(로딩 · 안정 선택) | `→` `→` `←` 뒤 열 셋과 포커스 |
 | TK-M4 | 비례폭 텍스트 · 텍스트 필드 · text-input · 검색. 표시 → 편집 둘로 가른다 | 한글 `sendkey` → preedit 밑줄 → commit |
-| TK-M5 | `tars_menu_v1` · 메뉴 바 · 단축키 · 미리보기 | 메뉴 바의 좌표 판정. 녹화 C |
+| TK-M5 | 서버 쪽: `tars_menu_v1` 판 2 · 메뉴 바 · title/app_id 저장(TK 결정 10) | 메뉴 바의 좌표 판정 |
+| TK-M6 | 툴킷 쪽: 메뉴 모델 · 단축키 · 미리보기 | 녹화 C |
 
 요구사항: R-ARCH · R-TKW · R-CG · R-TXT · R-CA · R-KIT · R-FM, 결정 4 · 9 · 13.
 
