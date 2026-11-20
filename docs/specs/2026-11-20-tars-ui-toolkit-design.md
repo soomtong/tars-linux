@@ -56,7 +56,8 @@ stb_truetype 비례폭 글자. terminal과는 `shared/`의 테마 색 · 글리�
    쓰는 일이다. 사각형 채우기의 빠른 길은 백엔드 인터페이스 뒤에 열어 두고 TK-M1의 숫자로 정한다.
 4. clip은 툴킷의 것이다(z2d에 없다). TK-M0은 통째 그리기. TK-M1이 "더티 크기 임시 surface + translate + composite"와 "그리는 쪽이 사각형 밖을 안
    그림" 중 하나를 측정으로 고른다.
-5. 글자(결정 4 · 13): 크기는 em 기준(`stbtt_ScaleForMappingEmToPixels` — 글꼴마다 같은 "13 px"), 서브픽셀 x 위치 켬, 감마 하나(값은 TK-M0의 화면 판정에서),
+5. 글자(결정 4 · 13): 크기는 em 기준(`stbtt_ScaleForMappingEmToPixels` — 글꼴마다 같은 "13 px"), 서브픽셀 x 위치 켬(0.25 px 넷), 감마 1.8(TK-M0의
+   화면 판정 — 1.0에서는 14 px 글자에 coverage 255 픽셀이 하나도 없어 획이 흐렸다),
    소수 advance(f32), kern. 아틀라스는 프로세스마다(R-ARCH-5).
 6. 글꼴은 하나, 원본 파일 그대로 싣는다(잘라 싣지 않는다 — RFN). 자리는 initrd `/vendor/fonts/`(TARS 번들 앱이 부른다), 앱은 절대 경로로 연다.
    고르는 것은 TK-M0 plan이고 첫 후보는 Pretendard Regular .otf(가장 작고 UI용 비례폭, 13 px 줄 높이 16), 대안은 Gothic A1.

@@ -72,3 +72,13 @@ design의 확인 절 1~9(조사 `tk-m0`, 세션 scratchpad `tk/research.md`)가 
    `Size = pixel_height | em`, 서브픽셀 x, f32 advance, kern). `font.zig`는 감싸개(16 px · unifont · sprite · 정수 셀). `stbtt_GetCodepointBitmap`은
    v1.26에서 서브픽셀 0의 `…BitmapSubpixel`을 그대로 부르므로 coverage가 같다. 체인 단독 terminal · pane · hangul · copy · pointer · wayland PASS,
    루트 게이트 35/35(prebuild 475초 + lanes 1,615초, `out/gate-logs/20261120-104410`), verify mismatch 0. strip 뒤 terminal +128 B.
+2. 단계 B `4af0ad8`: `toolkit/`(build · zon — z2d v0.13.2 · zig-wayland v0.7.0, 모듈 `tk`, `tars-tk-demo`, 호스트 검사 `tk_test` 열다섯), 창 층(버퍼 둘 · release ·
+   configure를 따름 · 바뀐 것만 frame + commit · `preferred_buffer_scale` · `tars_menu_manager_v1` bind), `canvas`(z2d 둥근 사각형 · 감마 섞기), `text`(em ·
+   서브픽셀 넷 · kern), 글꼴 `toolkit/vendor/fonts/Pretendard-Regular.otf` 1.3.9 원본(sha256 `3ffbacde…1c93`, OFL-1.1.txt · README — unifont처럼 커밋),
+   `shared/theme.zig` 앱 토큰(`TK_BG 202C3C` · `TK_ACCENT 3C78D8` · `TK_TEXT F4F6F8` — 셸의 게이트 색과 다른 값), prepare.sh 한 줄, initrd(데모 · 글꼴).
+   체인 단독 terminal · wayland · display PASS, verify mismatch 0. 한 번 부팅: `wl> keys pid=73 native` → `column` → `configure w=616 h=752` → `tk> draw …
+   us=57620`(첫 장 — 글리프 굽기 포함) → `Cmd+R` → `w=1240` · `us=4363` → idle 3초 commit 0 → `Cmd+Q`로 끝.
+3. 결정 4의 판정(lead, 실제 QEMU screendump 1배): 13 px · 14 px 한글 · 라틴 · 숫자가 읽힌다, 획 많은 음절도 구별된다, 숫자 간격이 고르다. 감마 1.8로 정했다.
+4. 실측: z2d를 끌어들인 호스트 검사는 Debug 기본 백엔드에서 MaxRSS 478 MB로 섰다(design 위험 1은 z2d 자체 검사 전체의 일). `tars-tk-demo` strip-debug
+   1,121,264 B, NEEDED는 이미 initrd에 있는 사슬. initrd gzip 어림 +1.53 MB(글꼴 1.05 + 데모 0.48). `THIRD_PARTY` 파일은 저장소에 없다 — 고지는 zon 주석 ·
+   `vendor/fonts/README`. 단계 B에서 달라진 것: 버퍼 나이는 TK-M1(통째 그리기라 뜻이 없다), 같은 크기 configure는 ack만(idle commit 0).
