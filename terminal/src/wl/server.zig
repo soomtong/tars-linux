@@ -25,8 +25,9 @@ const logic = @import("../wl_logic.zig");
 const logline = @import("../logline.zig");
 
 /// 내는 global의 판(WY design 결정 5 — 구현한 요청이 다 되는 가장 낮은 판). `wl_shm`은 libwayland가 직접
-/// 낸다(`wl_display_init_shm`, ARGB8888 · XRGB8888 둘).
-const COMPOSITOR_VERSION = 4;
+/// 낸다(`wl_display_init_shm`, ARGB8888 · XRGB8888 둘). compositor는 WY-M3에서 6이다(design 결정 27) — surface 판 6의
+/// `preferred_buffer_scale`로 배율을 알린다. 판 5의 `offset`도 함께 생긴다(받아서 버린다, 결정 28).
+const COMPOSITOR_VERSION = 6;
 const OUTPUT_VERSION = 4;
 const SEAT_VERSION = 7;
 const WM_BASE_VERSION = 5;
@@ -72,9 +73,14 @@ pub const Server = struct {
     allocator: std.mem.Allocator,
     display: *wl.Server,
     loop: *wl.EventLoop,
-    /// 화면(논리) 크기. configure의 크기와 `wl_output`의 mode가 이것이다.
+    /// 화면(논리) 크기. configure의 크기가 이것이다.
     fb_w: u32,
     fb_h: u32,
+    /// 물리 크기와 HS 배율(WY-M3, design 결정 27). `wl_output`의 mode · scale과 surface의 `preferred_buffer_scale`이다.
+    /// 배율은 terminal 수명 동안 고정이다(바꾸는 길은 `reload terminal`).
+    phys_w: u32,
+    phys_h: u32,
+    scale: u32,
     /// 봉인한 키맵 memfd(design 결정 6). 모든 클라이언트에 같은 fd를 준다 — libwayland가 보낼 때 복제한다.
     keymap_fd: i32,
     keymap_size: u32,
@@ -83,6 +89,8 @@ pub const Server = struct {
     events: std.ArrayList(Event) = .empty,
     /// 모든 `wl_keyboard`. 키는 포커스 창의 클라이언트 것에만 간다.
     keyboards: wl.list.Head(wl.Keyboard, null) = undefined,
+    /// 모든 `wl_output`(WY-M3 확정 4). 창이 처음 configure될 때 그 클라이언트의 output마다 `wl_surface.enter`를 보낸다.
+    outputs: wl.list.Head(wl.Output, null) = undefined,
     /// 모든 `xdg_wm_base`(단계 C, ping을 보낼 곳). 창과 같은 클라이언트의 것을 고른다.
     wm_bases: std.ArrayList(*xdg.WmBase) = .empty,
     /// 키보드 포커스 창(단계 C). App이 `setFocus`로 고친다. 창이 사라지면 null이 된다.
@@ -106,7 +114,7 @@ pub const Server = struct {
     /// 이 둘이 셸 자식의 환경에 들어간다(부르는 쪽이 셸을 띄우기 전에 부른다). 실패하면 둘을 지우고 에러다.
     ///
     /// `Server`는 heap에 있다 — listener가 libwayland의 목록에 들어가므로 자리가 움직이면 안 된다.
-    pub fn start(allocator: std.mem.Allocator, uid: u32, gid: u32, fb_w: u32, fb_h: u32) !*Server {
+    pub fn start(allocator: std.mem.Allocator, uid: u32, gid: u32, fb_w: u32, fb_h: u32, phys_w: u32, phys_h: u32, scale: u32) !*Server {
         var dir_buf: [32]u8 = undefined;
         const dir = try std.fmt.bufPrintSentinel(&dir_buf, "/run/user/{d}", .{uid}, 0);
         _ = std.c.mkdir("/run/user", 0o755);
@@ -139,10 +147,14 @@ pub const Server = struct {
             .loop = display.getEventLoop(),
             .fb_w = fb_w,
             .fb_h = fb_h,
+            .phys_w = phys_w,
+            .phys_h = phys_h,
+            .scale = scale,
             .keymap_fd = kfd,
             .keymap_size = @intCast(KEYMAP.len + 1),
         };
         self.keyboards.init();
+        self.outputs.init();
         self.pointers.init();
         display.addClientCreatedListener(&self.client_created);
         _ = try wl.Global.create(display, wl.Compositor, COMPOSITOR_VERSION, *Server, self, bindCompositor);
@@ -429,14 +441,14 @@ pub const Server = struct {
         const buf = s.current orelse return null;
         const shm = wl.shm.Buffer.get(@ptrCast(buf)) orelse return null;
         if (!logic.formatOk(shm.getFormat())) return null;
-        const w: u32 = @intCast(shm.getWidth());
-        const h: u32 = @intCast(shm.getHeight());
-        const f = logic.fitIn(area, w, h) orelse return null;
+        // 창의 크기는 surface 크기(버퍼 ÷ buffer_scale)다(WY-M3, design 결정 29) — `last_fit`과 포인터 좌표가 이 단위다.
+        const sz = logic.surfaceSize(@intCast(shm.getWidth()), @intCast(shm.getHeight()), s.scale);
+        const f = logic.fitIn(area, sz.w, sz.h) orelse return null;
         // 클라이언트가 풀을 줄였으면 읽기가 SIGBUS다 — libwayland이 그 틈을 막는다(begin · end).
         shm.beginAccess();
         defer shm.endAccess();
         const data: [*]const u8 = @ptrCast(shm.getData() orelse return null);
-        logic.blit(dst, pitch, f, data, @intCast(shm.getStride()));
+        logic.blit(dst, pitch, f, data, @intCast(shm.getStride()), s.scale);
         // 포인터 좌표를 거꾸로 셀 자리(단계 C).
         t.last_fit = f;
         return f;
@@ -521,6 +533,9 @@ fn compositorRequest(comp: *wl.Compositor, req: wl.Compositor.Request, srv: *Ser
             s.pending_frames.init();
             s.frames.init();
             res.setHandler(*Surface, surfaceRequest, surfaceDestroyed, s);
+            // 배율을 알린다(WY-M3 확정 3, design 결정 27). 판 6 이상의 surface에만 — 판 4로 bind한 클라이언트(둠)에는 이
+            // 이벤트가 없다. 배율 1에서도 1을 보낸다(받기 전의 기본값과 뜻은 같지만 클라이언트가 줄로 찍는다).
+            if (res.getVersion() >= 6) res.sendPreferredBufferScale(@intCast(srv.scale));
         },
         .create_region => |r| {
             const res = wl.Region.create(client, comp.getVersion(), r.id) catch return comp.postNoMemory();
@@ -557,12 +572,19 @@ const Surface = struct {
     pending_frames: wl.list.Head(wl.Callback, null) = undefined,
     frames: wl.list.Head(wl.Callback, null) = undefined,
     role: ?*XdgSurface = null,
+    /// buffer_scale(WY-M3 확정 5). `set_buffer_scale`이 pending을 고치고 commit이 current로 옮긴다 — double-buffered.
+    /// 다른 길로는 둘 다 안 바뀐다(xml).
+    pending_scale: u32 = 1,
+    scale: u32 = 1,
 };
 
 fn surfaceRequest(res: *wl.Surface, req: wl.Surface.Request, s: *Surface) void {
     switch (req) {
         .destroy => res.destroy(),
         .attach => |a| {
+            // 판 5+에서 0이 아닌 x · y는 오류다(xml, design 결정 28). 놓는 자리는 서버가 정한다 — 판 4 이하는 지금처럼 버린다.
+            if (res.getVersion() >= 5 and (a.x != 0 or a.y != 0))
+                return res.postError(.invalid_offset, "attach with a non-zero offset on wl_surface version 5+");
             if (s.pending_linked) {
                 s.pending_gone.link.remove();
                 s.pending_linked = false;
@@ -580,8 +602,13 @@ fn surfaceRequest(res: *wl.Surface, req: wl.Surface.Request, s: *Surface) void {
             s.pending_frames.append(cb);
         },
         .commit => commit(s),
-        // damage는 아직 안 본다 — 통째 blit이다(부분 blit은 M5, R-WY-10).
-        .damage, .damage_buffer, .set_opaque_region, .set_input_region, .set_buffer_transform, .set_buffer_scale => {},
+        .set_buffer_scale => |r| {
+            if (!logic.scaleOk(r.scale)) return res.postError(.invalid_scale, "buffer scale must be greater than 0");
+            s.pending_scale = @intCast(r.scale);
+        },
+        // damage는 아직 안 본다 — 통째 blit이다(부분 blit은 M5, R-WY-10). `offset`(판 5)은 받아서 버린다 — toplevel
+        // 하나뿐이고 놓는 자리는 서버가 정한다(design 결정 28).
+        .damage, .damage_buffer, .set_opaque_region, .set_input_region, .set_buffer_transform, .offset => {},
     }
 }
 
@@ -604,7 +631,9 @@ fn currentGone(listener: *wl.Listener(*wl.Resource), _: *wl.Resource) void {
 }
 
 fn commit(s: *Surface) void {
-    var changed = false;
+    // buffer_scale이 먼저 확정된다 — 아래 크기 검사와 `wl> commit` 줄이 새 값을 본다. 값만 바뀐 commit도 다시 그린다.
+    var changed = s.scale != s.pending_scale;
+    s.scale = s.pending_scale;
     if (s.pending_set) {
         const next = s.pending;
         if (s.pending_linked) {
@@ -627,6 +656,11 @@ fn commit(s: *Surface) void {
             changed = true;
         }
     }
+    // 버퍼 크기가 buffer_scale의 정수 배여야 한다(xml의 attach, design 결정 28).
+    if (s.current) |b| if (wl.shm.Buffer.get(@ptrCast(b))) |shm| {
+        if (!logic.sizeOk(@intCast(shm.getWidth()), @intCast(shm.getHeight()), s.scale))
+            return s.resource.postError(.invalid_size, "buffer size is not a multiple of the buffer scale");
+    };
     const waiting = !s.pending_frames.empty();
     s.frames.appendList(&s.pending_frames);
 
@@ -651,11 +685,16 @@ fn commit(s: *Surface) void {
 fn logCommit(t: *Toplevel, s: *Surface) void {
     const buf = s.current orelse return;
     const shm = wl.shm.Buffer.get(@ptrCast(buf)) orelse return;
-    const f = logic.fit(t.area_w, t.area_h, @intCast(shm.getWidth()), @intCast(shm.getHeight())) orelse return;
-    const sig: Toplevel.Sig = .{ .w = shm.getWidth(), .h = shm.getHeight(), .fit = f };
+    const sz = logic.surfaceSize(@intCast(shm.getWidth()), @intCast(shm.getHeight()), s.scale);
+    const f = logic.fit(t.area_w, t.area_h, sz.w, sz.h) orelse return;
+    const sig: Toplevel.Sig = .{ .w = shm.getWidth(), .h = shm.getHeight(), .fit = f, .bs = s.scale };
     if (t.last) |l| if (std.meta.eql(l, sig)) return;
     t.last = sig;
-    logline.print("terminal: wl> commit id={d} buf={d}x{d} scale={d} at={d},{d}\n", .{ t.id, sig.w, sig.h, f.k, f.x, f.y });
+    // `scale=`은 `fit`의 늘림 배수다(체인 패턴이 본다). buffer_scale은 1이 아닐 때만 끝에 붙인다 — bs 1의 줄은 WY-M2와
+    // 바이트가 같다(WY-M3 확정 6).
+    var tail: [16]u8 = undefined;
+    const bs_text = if (s.scale != 1) std.fmt.bufPrint(&tail, " bs={d}", .{s.scale}) catch "" else "";
+    logline.print("terminal: wl> commit id={d} buf={d}x{d} scale={d} at={d},{d}{s}\n", .{ t.id, sig.w, sig.h, f.k, f.x, f.y, bs_text });
 }
 
 fn surfaceDestroyed(_: *wl.Surface, s: *Surface) void {
@@ -672,23 +711,43 @@ fn surfaceDestroyed(_: *wl.Surface, s: *Surface) void {
 
 // ── wl_output ──────────────────────────────────────────────────────────
 
+/// mode는 물리 크기("physical hardware units"), scale은 HS 배율이다(WY-M3 확정 2, design 결정 27). 이 클라이언트의 창이
+/// 이미 보이면 그 surface에 `enter`(늦은 bind — 키보드의 늦은 `get_keyboard`와 같은 까닭).
 fn bindOutput(client: *wl.Client, srv: *Server, version: u32, id: u32) void {
     const o = wl.Output.create(client, version, id) catch return client.postNoMemory();
-    o.setHandler(?*anyopaque, outputRequest, null, null);
+    o.setHandler(*Server, outputRequest, outputDestroyed, srv);
+    srv.outputs.append(o);
     o.sendGeometry(0, 0, 0, 0, .unknown, "TARS", "framebuffer", .normal);
-    o.sendMode(.{ .current = true, .preferred = true }, @intCast(srv.fb_w), @intCast(srv.fb_h), 60000);
-    if (version >= 2) o.sendScale(1);
+    o.sendMode(.{ .current = true, .preferred = true }, @intCast(srv.phys_w), @intCast(srv.phys_h), 60000);
+    if (version >= 2) o.sendScale(@intCast(srv.scale));
     if (version >= 4) {
         o.sendName("TARS-1");
         o.sendDescription("TARS framebuffer");
     }
     if (version >= 2) o.sendDone();
+    for (srv.toplevels.items) |t| {
+        if (t.sent == null) continue;
+        const sr = surfaceOf(t) orelse continue;
+        if (sr.getClient() == client) sr.sendEnter(o);
+    }
 }
 
-fn outputRequest(o: *wl.Output, req: wl.Output.Request, _: ?*anyopaque) void {
+fn outputRequest(o: *wl.Output, req: wl.Output.Request, _: *Server) void {
     switch (req) {
         .release => o.destroy(),
     }
+}
+
+fn outputDestroyed(o: *wl.Output, _: *Server) void {
+    o.getLink().remove();
+}
+
+/// 창이 처음 configure된다(WY-M3 확정 4) — 그 클라이언트의 output마다 `wl_surface.enter`. output은 하나뿐이고 leave는
+/// 보내지 않는다(xml이 허락한다 — 숨겨져도 leave가 없을 수 있다).
+fn enterOutputs(t: *Toplevel) void {
+    const sr = surfaceOf(t) orelse return;
+    var it = t.srv.outputs.iterator(.forward);
+    while (it.next()) |o| if (o.getClient() == sr.getClient()) sr.sendEnter(o);
 }
 
 // ── wl_seat · wl_keyboard ──────────────────────────────────────────────
@@ -862,7 +921,7 @@ const Toplevel = struct {
     /// 이 창의 클라이언트가 `set_cursor(NULL)`을 보냈다(확정 10).
     cursor_hidden: bool = false,
 
-    const Sig = struct { w: i32, h: i32, fit: logic.Fit };
+    const Sig = struct { w: i32, h: i32, fit: logic.Fit, bs: u32 };
     const Sent = struct { w: u32, h: u32, act: bool };
 };
 
@@ -929,7 +988,9 @@ fn sendConfigure(t: *Toplevel, w: u32, h: u32, act: bool) void {
     var arr: wl.Array = .{ .size = states.len * @sizeOf(u32), .alloc = states.len * @sizeOf(u32), .data = states.ptr };
     t.resource.sendConfigure(@intCast(w), @intCast(h), &arr);
     xs.resource.sendConfigure(t.srv.display.nextSerial());
+    const first = t.sent == null;
     t.sent = .{ .w = w, .h = h, .act = act };
+    if (first) enterOutputs(t);
     logline.print("terminal: wl> configure id={d} w={d} h={d} act={d}\n", .{ t.id, w, h, @intFromBool(act) });
 }
 

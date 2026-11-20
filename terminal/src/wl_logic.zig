@@ -6,6 +6,7 @@
 //! (5) 클라이언트에 누름을 보낸 키의 목록(`Held`, 단계 C), (6) `Cmd+Q`의 2초 기한(`Deadline`, 단계 C).
 //! WY-M2가 다섯을 더했다 — pane 사각형 안의 자리(`fitIn`), configure의 states(`toplevelStates`), 그리고 포인터 셋
 //! (단계 C): 화면 좌표 → surface 좌표(`surfacePoint`), enter · leave와 버튼 grab(`PointerFocus`), 휠의 axis 값(`axisFor`).
+//! WY-M3(design 결정 28 · 29)이 버퍼 배율을 더했다 — surface 크기(`surfaceSize`), 버퍼 배율의 규칙(`scaleOk`), `blit`의 솎기(`bs`).
 
 const std = @import("std");
 
@@ -67,26 +68,48 @@ pub fn formatOk(format: u32) bool {
     return format == FORMAT_ARGB8888 or format == FORMAT_XRGB8888;
 }
 
-/// `src`(클라이언트의 버퍼, 행 간격 `src_stride` 바이트)를 `f`의 자리에 가장 가까운 픽셀로 늘려
-/// `dst`(프레임버퍼, 행 간격 `dst_pitch` 바이트)에 쓴다.
+// ── 버퍼 배율(WY-M3, design 결정 28 · 29) ──────────────────────────────
+
+/// surface 크기(논리 — configure · `fit` · 포인터 좌표의 단위)는 버퍼 크기 ÷ buffer_scale이다(wayland.xml의 attach).
+pub const Size = struct { w: u32, h: u32 };
+
+pub fn surfaceSize(buf_w: u32, buf_h: u32, bs: u32) Size {
+    return .{ .w = buf_w / bs, .h = buf_h / bs };
+}
+
+/// buffer_scale이 받을 수 있는 값인가(`invalid_scale` — 0 이하는 오류).
+pub fn scaleOk(bs: i32) bool {
+    return bs > 0;
+}
+
+/// 버퍼 크기가 buffer_scale의 정수 배인가(`invalid_size` — commit 때 본다).
+pub fn sizeOk(buf_w: u32, buf_h: u32, bs: u32) bool {
+    return buf_w % bs == 0 and buf_h % bs == 0;
+}
+
+/// `src`(클라이언트의 버퍼, 행 간격 `src_stride` 바이트, buffer_scale `bs`)를 `f`의 자리에 가장 가까운 픽셀로 늘려
+/// `dst`(프레임버퍼, 행 간격 `dst_pitch` 바이트)에 쓴다. `f`는 surface 크기로 셈한 것이다 — 화면 픽셀 `f.k`개가 surface
+/// 단위 하나이고 버퍼 픽셀 `bs`개가 surface 단위 하나라, 화면 픽셀 `p`(늘린 그림 안)는 버퍼 픽셀 `p · bs / k`다(WY-M3 확정 6).
+/// `k == bs`이면 1:1(행 memcpy) — bs 1 · k 1이 그 경우이고 WY-M2까지의 길과 같다. `bs > k`이면 솎는다(배율 2 화면의
+/// 논리 그림자에 bs 2 버퍼를 놓을 때 — 물리 합성은 단계 B).
 ///
 /// 픽셀은 u32 하나를 그대로 옮긴다. 프레임버퍼는 XRGB8888이라 위 8비트는 화면에 안 나간다. ARGB8888은
 /// 미리 곱한 알파(premultiplied)라 검정 위에 겹친 값이 곧 RGB 셋이다 — 따로 섞을 것이 없다(둘레가 검정이고
 /// 겹친 창이 없으므로).
 ///
 /// `src`는 `buf_h` 행이 다 있어야 하고 `dst`는 `f`의 사각형이 다 들어가야 한다 — 부르는 쪽이 크기를 본다.
-pub fn blit(dst: [*]u8, dst_pitch: u32, f: Fit, src: [*]const u8, src_stride: u32) void {
+pub fn blit(dst: [*]u8, dst_pitch: u32, f: Fit, src: [*]const u8, src_stride: u32, bs: u32) void {
     var y: u32 = 0;
     while (y < f.h) : (y += 1) {
-        const sy = (f.oy + y) / f.k;
+        const sy = (f.oy + y) * bs / f.k;
         const srow: [*]align(1) const u32 = @ptrCast(src + @as(usize, sy) * src_stride);
         const drow: [*]align(1) u32 = @ptrCast(dst + @as(usize, f.y + y) * dst_pitch + @as(usize, f.x) * 4);
-        if (f.k == 1) {
+        if (f.k == bs) {
             @memcpy(drow[0..f.w], srow[f.ox .. f.ox + f.w]);
             continue;
         }
         var x: u32 = 0;
-        while (x < f.w) : (x += 1) drow[x] = srow[(f.ox + x) / f.k];
+        while (x < f.w) : (x += 1) drow[x] = srow[(f.ox + x) * bs / f.k];
     }
 }
 

@@ -98,7 +98,8 @@ pub fn build(b: *std.Build) void {
     // 빌드 호스트에서 돈다(zig-wayland가 `b.graph.host`로 만든다).
     //
     // generate의 판은 서버가 내는 판이다(결정 5 — 구현한 요청이 다 되는 가장 낮은 판). 그 판보다 새 요청 · 이벤트는
-    // 생성되지 않는다. viewporter.xml은 받아만 두고 M2(SDL3의 2단)에서 여기에 더한다.
+    // 생성되지 않는다. compositor 6은 WY-M3(결정 27) — 자식 wl_surface에 `offset`(5) · `preferred_buffer_scale`(6)이 생긴다.
+    // viewporter.xml은 받아만 둔다 — 배율에 필요 없고 쓰는 클라이언트가 없다(결정 31).
     const scanner = Scanner.create(b, .{
         .wayland_xml = b.path("vendor/wayland/wayland.xml"),
         .wayland_protocols = b.path("vendor/wayland"),
@@ -106,7 +107,7 @@ pub fn build(b: *std.Build) void {
     scanner.addCustomProtocol(b.path("vendor/wayland/xdg-shell.xml"));
     // WY-M2(design 결정 25): 장식 관리자. 늘 server_side로 답한다 — 클라이언트가 장식을 안 그리고, SDL3는 libdecor를 안 탄다.
     scanner.addCustomProtocol(b.path("vendor/wayland/xdg-decoration-unstable-v1.xml"));
-    scanner.generate("wl_compositor", 4);
+    scanner.generate("wl_compositor", 6);
     scanner.generate("wl_shm", 1);
     scanner.generate("wl_output", 4);
     scanner.generate("wl_seat", 7);

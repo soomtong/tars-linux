@@ -42,7 +42,7 @@ pub fn main() !void {
         var dst: [8 * 6]u32 = @splat(0xDEADBEEF);
         const f = logic.fit(8, 6, 2, 2).?;
         if (f.k != 3 or f.x != 1 or f.y != 0) return error.WrongSmallFit;
-        logic.blit(@ptrCast(&dst), 8 * 4, f, @ptrCast(&src), 2 * 4);
+        logic.blit(@ptrCast(&dst), 8 * 4, f, @ptrCast(&src), 2 * 4, 1);
         for (0..6) |y| {
             for (0..8) |x| {
                 const want: u32 = if (x == 0 or x == 7) 0xDEADBEEF else src[(y / 3) * 2 + (x - 1) / 3];
@@ -58,7 +58,7 @@ pub fn main() !void {
         const src = [5]u32{ 1, 2, 3, 4, 0xBAD };
         var dst: [2]u32 = @splat(0);
         const f = logic.fit(2, 1, 4, 1).?;
-        logic.blit(@ptrCast(&dst), 2 * 4, f, @ptrCast(&src), 5 * 4);
+        logic.blit(@ptrCast(&dst), 2 * 4, f, @ptrCast(&src), 5 * 4, 1);
         if (dst[0] != 2 or dst[1] != 3) {
             std.debug.print("FAIL: blit k=1 crop = {any}\n", .{dst});
             return error.WrongCrop;
@@ -67,6 +67,58 @@ pub fn main() !void {
     if (!logic.formatOk(logic.FORMAT_ARGB8888) or !logic.formatOk(logic.FORMAT_XRGB8888) or logic.formatOk(0x34325241))
         return error.WrongFormat;
     std.debug.print("wl_logic_test: blit 2 cases, format 3\n", .{});
+
+    // WY-M3: 버퍼 배율. surface 크기는 버퍼 ÷ bs, 규칙 둘(invalid_scale · invalid_size).
+    {
+        if (!std.meta.eql(logic.surfaceSize(1392, 1696, 2), logic.Size{ .w = 696, .h = 848 })) return error.WrongSurfaceSize;
+        if (!std.meta.eql(logic.surfaceSize(320, 200, 1), logic.Size{ .w = 320, .h = 200 })) return error.WrongSurfaceSize;
+        if (logic.scaleOk(0) or logic.scaleOk(-1) or !logic.scaleOk(1) or !logic.scaleOk(3)) return error.WrongScaleRule;
+        if (!logic.sizeOk(640, 400, 2) or logic.sizeOk(641, 400, 2) or logic.sizeOk(640, 401, 2) or !logic.sizeOk(7, 5, 1))
+            return error.WrongSizeRule;
+        // bs 2 버퍼를 surface 크기로 놓는다 — 696 × 848 column에 1392 × 1696 버퍼면 1배, 둘레 없음(버퍼 크기로 놓던 WY-M2는
+        // k = 1 · 가운데를 잘라 왼쪽 위가 (348, 424)였다).
+        const sz = logic.surfaceSize(1392, 1696, 2);
+        const f = logic.fitIn(.{ .x = 704, .y = 20, .w = 696, .h = 848 }, sz.w, sz.h).?;
+        if (!std.meta.eql(f, logic.Fit{ .k = 1, .x = 704, .y = 20, .w = 696, .h = 848, .ox = 0, .oy = 0 })) return error.WrongScaledFit;
+    }
+    // 솎기 — 4x4 바둑판 버퍼(bs 2, surface 2x2)를 2x2 화면에 k = 1: 버퍼의 짝수 행 · 짝수 열만 남는다.
+    {
+        var src: [16]u32 = undefined;
+        for (0..4) |y| for (0..4) |x| {
+            src[y * 4 + x] = @intCast(y * 4 + x);
+        };
+        var dst: [4]u32 = @splat(0);
+        const f = logic.fit(2, 2, 2, 2).?;
+        logic.blit(@ptrCast(&dst), 2 * 4, f, @ptrCast(&src), 4 * 4, 2);
+        if (!std.mem.eql(u32, &dst, &.{ 0, 2, 8, 10 })) {
+            std.debug.print("FAIL: blit bs=2 k=1 = {any}\n", .{dst});
+            return error.WrongDecimate;
+        }
+    }
+    // k == bs는 1:1 — 2x2 버퍼(bs 2, surface 1x1)를 2x2 화면에 k = 2: 버퍼 그대로.
+    {
+        const src = [4]u32{ 1, 2, 3, 4 };
+        var dst: [4]u32 = @splat(0);
+        const f = logic.fit(2, 2, 1, 1).?;
+        if (f.k != 2) return error.WrongSmallFit;
+        logic.blit(@ptrCast(&dst), 2 * 4, f, @ptrCast(&src), 2 * 4, 2);
+        if (!std.mem.eql(u32, &dst, &.{ 1, 2, 3, 4 })) {
+            std.debug.print("FAIL: blit bs=2 k=2 = {any}\n", .{dst});
+            return error.WrongOneToOne;
+        }
+    }
+    // bs 2 · k 3(surface 1x1을 3배) — 화면 픽셀 p는 버퍼 p · 2 / 3: 0, 0, 1.
+    {
+        const src = [4]u32{ 1, 2, 3, 4 };
+        var dst: [9]u32 = @splat(0);
+        const f = logic.fit(3, 3, 1, 1).?;
+        logic.blit(@ptrCast(&dst), 3 * 4, f, @ptrCast(&src), 2 * 4, 2);
+        if (!std.mem.eql(u32, &dst, &.{ 1, 1, 2, 1, 1, 2, 3, 3, 4 })) {
+            std.debug.print("FAIL: blit bs=2 k=3 = {any}\n", .{dst});
+            return error.WrongDecimate;
+        }
+    }
+    std.debug.print("wl_logic_test: buffer scale 5 cases, blit bs 3 cases\n", .{});
 
     // configure 순서 — 첫 commit은 버퍼 없이(configure를 보낸다), ack 뒤 버퍼(보인다), 그 뒤는 다시 그린다.
     try expectStep(.fresh, false, false, .{ .action = .send_configure, .next = .configured });
@@ -179,7 +231,21 @@ pub fn main() !void {
         const c = logic.fit(1280, 800, 1400, 900).?;
         if (!std.meta.eql(logic.surfacePoint(c, 0, 0), logic.Point{ .x = 60 * 256, .y = 50 * 256 })) return error.WrongPoint;
     }
-    std.debug.print("wl_logic_test: surface points 6 cases\n", .{});
+    // WY-M3: 같은 column에 bs 1 버퍼(696 × 848)와 bs 2 버퍼(1392 × 1696) — surface 크기로 놓으면 같은 화면 점이 같은 surface
+    // 점이다(포인터 좌표는 surface 단위, 버퍼 픽셀이 아니다).
+    {
+        const area: logic.Area = .{ .x = 704, .y = 20, .w = 696, .h = 848 };
+        const one = logic.fitIn(area, 696, 848).?;
+        const s2 = logic.surfaceSize(1392, 1696, 2);
+        const two = logic.fitIn(area, s2.w, s2.h).?;
+        for ([_][2]u32{ .{ 704, 20 }, .{ 1000, 500 }, .{ 1399, 867 } }) |p| {
+            const a = logic.surfacePoint(one, p[0], p[1]);
+            const b = logic.surfacePoint(two, p[0], p[1]);
+            if (!std.meta.eql(a, b)) return error.WrongScaledPoint;
+        }
+        if (!std.meta.eql(logic.surfacePoint(two, 1000, 500), logic.Point{ .x = 296 * 256, .y = 480 * 256 })) return error.WrongScaledPoint;
+    }
+    std.debug.print("wl_logic_test: surface points 6 cases, bs 1 = bs 2 4 cases\n", .{});
 
     // 포인터 포커스와 grab.
     {

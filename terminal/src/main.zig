@@ -4577,7 +4577,8 @@ const App = struct {
         const has_user = !std.mem.eql(u8, user, screen_args.NO_USER);
         const wl_uid: u32 = if (has_user) screen_args.USER_UID else 0;
         const wl_gid: u32 = if (has_user) screen_args.USER_GID else 0;
-        self.wl = wls.Server.start(self.allocator, wl_uid, wl_gid, self.fb.width, self.fb.height) catch |e| blk: {
+        // 물리 크기는 커넥터의 모드(= dumb 버퍼, `drm.open`)다 — 배율 > 1이면 `fb.width`는 논리라서(WY-M3 확정 2).
+        self.wl = wls.Server.start(self.allocator, wl_uid, wl_gid, self.fb.width, self.fb.height, self.fb.mode.hdisplay, self.fb.mode.vdisplay, self.fb.scale) catch |e| blk: {
             logline.print("terminal: wl> off reason={s}\n", .{@errorName(e)});
             break :blk null;
         };
