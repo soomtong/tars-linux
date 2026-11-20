@@ -2,7 +2,7 @@
 
 Date: 2026-11-20
 Design: `docs/specs/2026-11-20-tars-ui-toolkit-design.md`(결정 3 · 4 · 9, milestone 표 TK-M1), 요구사항 R-ARCH-1 · 2 · 4, R-CA-1~5, R-TKW-1
-Status: 진행 중. 브랜치 `app-layer-0-3`.
+Status: 끝(2026-11-21). 브랜치 `app-layer-0-3`.
 
 ## 확인(조사 `tk-m1`, 세션 scratchpad `tk1/research.md` — HEAD `80332bf`, 개발 컨테이너 aarch64 벤치)
 
@@ -83,3 +83,16 @@ Status: 진행 중. 브랜치 `app-layer-0-3`.
    `age=2` · `dirty=24,300,64,32` · 120~952 µs. 서버 `wl> blit x=668 y=320 w=64 h=32` 일곱 줄 — 면의 화면 사각형 그대로. 데모 VmRSS 10 MB. 호스트 검사 MaxRSS 476 MB.
 4. 단계 A에서 달라진 것: 창 층이 CG를 모른다(버퍼마다 z2d Surface를 안 든다 — design 결정 9 문장을 고쳤다), `Handler.resize`, 로그에 ` age=N`, 데모의 면(단계 B가
    애니메이션으로). `tk>` 줄 꺼내기는 `/dev/console`(체인의 `type_text`가 대문자 `S`를 못 친다).
+5. 단계 B `c270732`: `ca/anim.zig`(easeOutCubic · linear, frame · opacity · background 넷을 같은 틀로, 첫 tick이 시작 시각), `ca/stack.zig`(axis · spacing · padding ·
+   alignment · size · flex · cross, 정수 반올림), `tokens.zig`(`tk.tokens`) · 앱 토큰(셸 색과 겹치지 않음을 comptime으로), 창 층 `Handler.tick`(그릴 수 있을 때만 —
+   tick 하나 뒤에 그림 하나라 `draw = commit = 2 + N`을 셀 수 있다), 데모의 세로 스택 · `space` 애니메이션 · `--anim-ms` · `--easing`, 체인 판정 7 · 8 · 9,
+   `measurements.md` 108. 체인 단독 toolkit 두 번 · terminal PASS.
+6. 실측: 3초 linear 애니메이션이 163~165프레임(프레임당 18.2~18.4 ms — 서버 하한 16 ms에 붙는다). 애니메이션 한 프레임(64 × 32) draw 중앙 52~56 µs, 서버 부분
+   blit 27~33 µs. 통째 1240 × 752 10.5~11.5 ms. 게스트/네이티브 비 약 20배. `/dev/console`로 꺼낸 `tk>` 줄은 쪼개지지 않았다.
+7. 단계 B에서 달라진 것: tick 자리를 "done에서"가 아니라 "그릴 수 있을 때 그리기 바로 앞에서"로, `anim end`에 `prop=` · `ms=`, 스택 필드 이름 `alignment`(`align`은 예약어).
+8. 루트 게이트 첫 판은 입구 검사에서 멈췄다 — `toolkit/check.sh`의 파이프 끝 `grep -q` 둘(GA-M0: SIGPIPE 141이 pipefail로 거짓 판정). lead가 `> /dev/null`로
+   고쳤다(`TK-M1: toolkit chain greps…`). `make quick`은 이 입구 검사를 안 돌린다 — 체인 단독 PASS로는 안 드러난다. 둘째 판 36/36 PASS(prebuild 385초 + lanes
+   1,677초, `out/gate-logs/20261120-143102`), verify mismatch 0.
+
+남은 걱정: 첫 애니메이션 프레임은 둘째 버퍼가 새 것이라 통째(11~20 ms) — 짧은 애니메이션에서 눈에 띌 수 있다. 판정 9의 `2 + N`은 애니메이션 하나에 기댄다.
+`cat > /dev/console`이 terminal의 logline과 같은 순간이면 섞일 수 있다(지금은 `Cmd+Q` 뒤 조용한 셸).

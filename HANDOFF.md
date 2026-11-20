@@ -1,4 +1,4 @@
-# HANDOFF: App Layer(0.3) — TK-M0 끝(`5c3ec2b`). TK-M1(레이어 트리 · 더티 · clip) 단계 A 구현 중. tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) — TK-M1 끝(`c270732`, 루트 게이트 36/36). 다음 TK-M2(responder · 포커스 · 리스트 · 스크롤). tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
 
 ## 목표
 
@@ -22,6 +22,10 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 실제 파일과 대조한다. 기억 `feedback_herdr_subagents`.
 
 ## 완료된 작업 (2026-11-19~20, WY-M0 단계 C · WY-M1 착수 — 이 세션)
+
+- [x] TK-M1(plan `…-tk-m1.md`, 서브에이전트 `tk-m1` — 끝나고 pane 닫음): A `d3eaa34` 층을 모듈로(window → cg → ca), CG `Painter`(더티 크기 임시 판 clip —
+      design 결정 4를 측정으로 닫음), CA 레이어 트리, 버퍼 나이, B `c270732` 애니메이션 · 스택 · 토큰 · 판정 7~9 · `measurements.md` 108. 루트 게이트 36/36
+      (`out/gate-logs/20261120-143102` — 첫 판은 입구 검사의 `grep -q` 둘에서 멈춰 lead가 고침)
 
 - [x] TK design(`docs/specs/2026-11-20-tars-ui-toolkit-design.md`, 결정 1~12) · TK-M0(plan `…-tk-m0.md`, 서브에이전트 `tk-m0` — 끝나고 pane 닫음):
       A `2a1c245` `shared/theme.zig` · `shared/glyph.zig`(변화 0 — 루트 게이트 35/35), B `4af0ad8` `toolkit/`(z2d v0.13.2 · 창 층 · em 글자 · Pretendard 원본 ·
@@ -124,9 +128,8 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
       `devlayer/cache/<sha256>`에 손으로 두었다 — 캐시 없는 기계에서는 release 전까지 `make dev-layers`가 받기에서 멈춘다.
       release 방법 두 갈래: (가) 태그 push → Actions가 빌드 · 업로드(sha256이 바뀌어 manifest를 고치고 wayland 체인 한 번), (나) 로컬 tarball을
       `gh release create`로 올림(sha256 그대로). Actions workflow가 태그에서 함께 돌면 자산이 겹치니 (나)면 workflow를 고르게 손본다
-- [ ] TK-M1: plan `docs/plans/2026-11-20-tars-ui-toolkit-tk-m1.md`(design 결정 4를 측정으로 닫음 — 더티 크기 임시 판). 서브에이전트 `tk-m1`(Herdr pane
-      `w3J:pG`, Opus)이 단계 A(CG 백엔드 · 레이어 트리 · 버퍼 나이)를 하는 중, 지시 · 보고는 세션 scratchpad `tk1/task-a.md` · `report-a.md`. 다음 단계 B
-      (애니메이션 · 스택 · 토큰 · 판정 7~9 · `measurements.md` 108). 그 뒤 TK-M2~M6(녹화 C), CR-M0 → WY-M7 → CR-M1
+- [ ] TK-M2(responder · 포커스 · 가상화 리스트 · 스크롤, 키는 원래 모드의 Super — design milestone 표): 아직 조사 전. 끝나는 조건 "`↓` 열 번 뒤 강조 위치,
+      10만 행 호스트 검사". hit-test(R-CA-6)도 여기. 그 뒤 TK-M3~M6(녹화 C), CR-M0 → WY-M7 → CR-M1
 - [ ] 녹화 B(사람 녹화 — strip + SDL3 column + 클립보드 + 한글, 조사 `wy-m5/research.md` 6절 끝에 보일 것)
 - [ ] 소개 페이지(`gh-pages`의 `data.js`)에 SW를 안 올렸다 — 사이트는 `main` 줄 기준(`commits`가 `rev-list --count main`)이고 SW는
       `app-layer-0-3`에만 있다. 0.3 줄이 `main`에 들어갈 때 올린다(사용자가 먼저 원하면 그때)
