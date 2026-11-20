@@ -2,7 +2,7 @@
 
 Date: 2026-11-20
 Design: `docs/specs/2026-11-19-tars-wayland-server-design.md`(결정 44~47), 요구사항 결정 3 · R-WY-10 · R-KIT-1 · R-CA-2
-Status: 진행 중. 브랜치 `app-layer-0-3`.
+Status: 끝(2026-11-20). 브랜치 `app-layer-0-3`.
 
 ## 확인(조사 `wy-m6`, 세션 scratchpad `wy-m6/research.md` — HEAD `e654a8e`, SDL 3.2.10 · 둠 소스)
 
@@ -79,3 +79,14 @@ wayland 부팅 1, 판정 28 뒤 · 9 앞:
    체인 단독 terminal · wayland(457초) · hangul · pointer · display PASS, verify mismatch 0. 도움말 한 줄을 고쳤다(SDL · GTK 앱에서도 `Cmd+C` · `Cmd+V`).
 2. 단계 A에서 달라진 것: 셈 줄은 `type_text`가 `=`를 못 쳐 `depressed.0x4` · `grep -cx wl-test..native`로(첫 판 빨강). `wl> keys to=` 줄은 모드가
    바뀔 때만이라 앞 판정들의 호환 창은 첫 창에서 한 번만 찍힌다.
+3. 단계 B `10d153c`: `Surface`의 pending damage 둘(`damage_buffer` · `damage` — bs는 commit에서) → 버퍼 좌표 합집합 누적, `damageFor` = whole · none · part,
+   `paint(…, clip)`이 부분만 `blitClip`하고 그 사각형만 clip(둘레 칠하기 없음), damage만 준 같은 버퍼의 commit도 다시 그림, `tars-wl-test --damage`(버퍼 고리 넷),
+   wayland 판정 30(섞은 commit 하나 · 몰아친 commit 둘이 한 프레임 · 상자 A만 여덟 번). 체인 단독 wayland(473초) · hidpi · display · pointer · pane PASS.
+4. plan과 달라진 것: 빈 프레임(clip도 통째도 없음 — frame만 건 commit)은 내보내지 않는다. `stage` · DIRTYFB가 빈 목록을 "화면 전체"로 읽어 그림자 늘림이
+   bs 2 창을 덮었다(1회차 hidpi 판정 6 빨강 — damage 전에는 매 프레임 창 사각형이 clip이라 잠재해 있던 길). `wl> blit` 줄 상한은 창마다(통째 2 · 부분 16).
+5. 실측(`measurements.md` 107): 배율 1 통째 616 × 752 1.0~1.2 ms, 부분 32 × 32 23~31 µs. 배율 2 bs 2 통째 696 × 848 8.6 ms, 부분 37~41 µs(물리 4,096 px).
+   프레임 전체는 render verify(11~22 ms)가 대부분이라 체인의 프레임 시간으로는 이득이 안 보인다. SDL Ctrl+V는 실측 불가(SDL 붙여넣기 앱 없음).
+6. 루트 게이트 35/35 첫 판 PASS(prebuild 347초 + lanes 1,606초, `out/gate-logs/20261120-090804`), verify mismatch 0.
+
+남은 걱정은 `docs/guides/carryover.md`의 "WY-M2 ~ WY-M6이 남긴 것" 절로 옮겼다. WY-M7 plan에 넘길 것: popup · 장식이 창 자리를 잠깐 가리고 비킬 때
+`damage_whole`을 세운다(부분 blit의 전제 "프레임버퍼의 그 자리에 이 창의 직전 그림").

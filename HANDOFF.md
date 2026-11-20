@@ -1,4 +1,4 @@
-# HANDOFF: App Layer(0.3) — WY-M5(한글) 끝(`6390798`), WY-M6(호환 모드 · damage) 단계 A 구현 중. tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) — WY-M6(호환 모드 · damage) 끝(`10d153c`) — WY의 TK 앞 몫 끝. 다음은 TK(툴킷) design. tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
 
 ## 목표
 
@@ -22,6 +22,10 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 실제 파일과 대조한다. 기억 `feedback_herdr_subagents`.
 
 ## 완료된 작업 (2026-11-19~20, WY-M0 단계 C · WY-M1 착수 — 이 세션)
+
+- [x] WY-M6(design 결정 44~47, 로드맵 4판 — popup · 장식은 WY-M7, 서브에이전트 `wy-m6` — 끝나고 pane 닫음): A `95562b5` 호환 모드(포커스 클라이언트가
+      `tars_menu_v1`을 안 bind했으면 modifiers의 Super → Ctrl, 키 코드 그대로) · `terminal/protocol/tars-menu-v1.xml` 뼈대 · 판정 29, B `10d153c` damage 합집합 ·
+      부분 blit · 빈 프레임 안 내보냄 · 판정 30 · `measurements.md` 107. 루트 게이트 35/35 첫 판(`out/gate-logs/20261120-090804`)
 
 - [x] WY-M5(design 결정 38~43, 서브에이전트 `wy-m5` — 끝나고 pane 닫음): A `732d1cf` text-input-v3 1 · 객체 상태 · enter/leave 순서 ·
       `tars-wl-test --text-input`, B `6390798` 켠 창에서만 셸의 한글 층(오토마타 하나 — `input.State`), 먹은 키는 `wl_keyboard`로 안 감, 확정이 키보다 먼저,
@@ -116,9 +120,8 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
       `devlayer/cache/<sha256>`에 손으로 두었다 — 캐시 없는 기계에서는 release 전까지 `make dev-layers`가 받기에서 멈춘다.
       release 방법 두 갈래: (가) 태그 push → Actions가 빌드 · 업로드(sha256이 바뀌어 manifest를 고치고 wayland 체인 한 번), (나) 로컬 tarball을
       `gh release create`로 올림(sha256 그대로). Actions workflow가 태그에서 함께 돌면 자산이 겹치니 (나)면 workflow를 고르게 손본다
-- [ ] WY-M6(호환 모드 · `tars_menu_v1` 뼈대 · damage): design 결정 44~47 · plan `docs/plans/2026-11-20-tars-wayland-server-wy-m6.md`(`abba27d`),
-      로드맵 4판 — popup · 장식은 WY-M7(CR-M0 실측 뒤), 순서 WY-M6 → TK → CR-M0 → WY-M7 → CR-M1. 서브에이전트 `wy-m6`(Herdr pane `w3J:pE`, Opus)이
-      단계 A(호환 모드 · `tars_menu_v1` · 판정 29)를 하는 중, 지시 · 보고는 세션 scratchpad `wy-m6/task-a.md` · `report-a.md`. 다음 단계 B(damage · 판정 30)
+- [ ] 다음: TK(TARS 툴킷, 첫 앱 `tars-files`) — 새 서브프로젝트라 design부터(요구사항 결정 9 · R-TK* · R-KIT* · R-CA*, 로드맵 TK-M0~M5). 툴킷은
+      `tars_menu_v1`을 bind해 원래 모드(Super)로 받고, `damage_buffer`로 더티를 보낸다(WY-M6이 받을 준비). 그 뒤 CR-M0 → WY-M7(popup · 장식) → CR-M1
 - [ ] 녹화 B(사람 녹화 — strip + SDL3 column + 클립보드 + 한글, 조사 `wy-m5/research.md` 6절 끝에 보일 것)
 - [ ] 소개 페이지(`gh-pages`의 `data.js`)에 SW를 안 올렸다 — 사이트는 `main` 줄 기준(`commits`가 `rev-list --count main`)이고 SW는
       `app-layer-0-3`에만 있다. 0.3 줄이 `main`에 들어갈 때 올린다(사용자가 먼저 원하면 그때)
