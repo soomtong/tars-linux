@@ -60,6 +60,8 @@ done < <(find init/src terminal/src shared devlayer/manifest-gen.zig -name '*.zi
 [ "$ast_failed" = 0 ] || failed+=(zig-ast-check)
 
 # 4. shared/의 순수 검사. libc · 시스템 콜이 없어 어느 호스트에서나 돈다(SA-M1).
+#    shared/glyph.zig는 여기 없다 — stb 번역(`c_stb_truetype`)을 부르는 build.zig가 꽂아야 서므로 `zig run` 혼자로는
+#    안 돈다(TK design 결정 2). 그 검사는 terminal의 font_test(`zig build test`)가 한다. theme.zig는 상수뿐이라 검사가 없다.
 zig run shared/screen_args_test.zig || failed+=(shared-test)
 zig run shared/display_proto_test.zig || failed+=(shared-test)
 

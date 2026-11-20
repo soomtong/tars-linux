@@ -17,6 +17,8 @@ const layout = @import("layout.zig");
 const pointer = @import("pointer.zig");
 const pty = @import("pty.zig");
 const screen_args = @import("screen_args");
+// 색 한 벌(TK-M0 단계 A). 값은 그 파일에, 까닭은 아래 각 상수의 주석에 남는다.
+const theme = @import("theme");
 // WY-M3: 화살표의 마스크 늘리기(`presentComposed`).
 const scale = @import("scale.zig");
 const status = @import("status.zig");
@@ -49,7 +51,7 @@ extern "c" fn socket(domain: c_uint, sock_type: c_uint, protocol: c_uint) c_int;
 
 // 화면 여백을 칠할 색. 셀의 배경색은 이제 상수가 아니라 vt.zig가 셀마다
 // 확정해서 넘긴다(design 결정 1·5) — 이 상수는 격자 바깥에만 쓴다.
-const MARGIN_COLOR: u32 = 0x00102030;
+const MARGIN_COLOR: u32 = theme.MARGIN_COLOR;
 /// 지금 격자의 왼쪽 위 픽셀(FU-M0). `touchpad_screen`과 같은 이유로 파일 하나의 값이다 — 쓰는
 /// 자리(그리기 · 덤프 · 포인터의 셀 찾기)가 대부분 사각형만 받는 자유 함수라 인자로 나르지 않는다.
 /// 바꾸는 것은 `openScreen` · `setFullscreen` 둘뿐이고 terminal에는 스레드가 없다.
@@ -62,14 +64,14 @@ const ROW_HEIGHT: u32 = geometry.ROW_HEIGHT;
 
 /// 상태 줄 앞 세 칸의 글자 색(IS design 결정 7). 여백(`MARGIN_COLOR`) 위에서
 /// 읽히되 눈을 안 끄는 회색이다 — 이것은 터미널의 내용이 아니라 창틀이다.
-const STATUS_FG: u32 = 0x00808890;
+const STATUS_FG: u32 = theme.STATUS_FG;
 
 /// 대문자 잠금이 켜졌을 때 `CAPS` 칸의 색(IS-M1).
 ///
 /// SP-M0의 `CURRENT_BG`와 같은 앰버다. 이 저장소는 이미 그 색으로
 /// "지금 봐야 할 것"을 뜻한다(검색의 현재 매치) — 켜진 대문자 잠금이
 /// 정확히 그런 것이다.
-const STATUS_ON: u32 = 0x00C08000;
+const STATUS_ON: u32 = theme.STATUS_ON;
 
 /// 꺼졌을 때 `CAPS` 칸의 색. 여백(`MARGIN_COLOR` = 0x00102030)보다 조금
 /// 밝아 자리는 보이되 안 읽힌다.
@@ -81,7 +83,7 @@ const STATUS_ON: u32 = 0x00C08000;
 ///
 /// `MARGIN_COLOR`와 달라야 한다. 같으면 `dumpStatus`가 여백 전체를
 /// 세면서 픽셀 수만 개를 돌려준다.
-const STATUS_OFF: u32 = 0x00303840;
+const STATUS_OFF: u32 = theme.STATUS_OFF;
 
 /// copy mode일 때 꼬리에 붙는 `COPY` 칸의 색(CI design 결정 3).
 ///
@@ -94,7 +96,7 @@ const STATUS_OFF: u32 = 0x00303840;
 /// 여백과 `STATUS_FG`보다 밝다. 모드는 창틀이 아니라 지금 봐야 할 것이다.
 /// 셀의 기본 전경(`0xFFFFFF`)과는 다른 값이다 — 상태 줄은 격자 밖이라
 /// 섞일 일이 없지만, 같은 값을 피하는 쪽이 조사할 때 덜 헷갈린다.
-const STATUS_COPY: u32 = 0x00E0E8F0;
+const STATUS_COPY: u32 = theme.STATUS_COPY;
 
 /// 받아쓰기 칸의 색(VD-M1). `REC` · `WAIT`와 알림 다섯이 같은 색이다.
 ///
@@ -102,7 +104,7 @@ const STATUS_COPY: u32 = 0x00E0E8F0;
 /// 이 색의 픽셀을 세어 `dict ink=`로 찍는데, 다른 칸이 같은 색을 쓰면 그 수가 이 칸만
 /// 세지 않는다. 붉은 쪽인 것은 마이크가 열려 있다는 뜻이라서다. 여백 · 상태 줄 색
 /// 넷 · 구분선 · 매치 색 둘 · 커서 · 화살표 어느 것과도 다르다.
-const STATUS_DICT: u32 = 0x00F07070;
+const STATUS_DICT: u32 = theme.STATUS_DICT;
 
 /// 배터리 칸의 색 셋(BS design 결정 5). 방전 중이거나 잔량을 모르면 `STATUS_BAT`(회색),
 /// 어댑터가 꽂혀 있으면(`Charging` · `Full` · `Not charging`) `STATUS_BAT_PLUG`(초록),
@@ -115,9 +117,9 @@ const STATUS_DICT: u32 = 0x00F07070;
 /// 배터리 칸을 따로 셀 길이 없다. 초록이 밝고 빨강이 어두운 것은 적록 색약에서도 둘이
 /// 갈리게 하려는 것이다(design 위험 4). 여백 · 상태 줄 색 다섯 · 구분선 · 매치 색 둘 · 커서 ·
 /// 화살표 둘 어느 것과도 다르다.
-const STATUS_BAT: u32 = 0x00909AA0;
-const STATUS_BAT_PLUG: u32 = 0x0060C070;
-const STATUS_BAT_LOW: u32 = 0x00E05040;
+const STATUS_BAT: u32 = theme.STATUS_BAT;
+const STATUS_BAT_PLUG: u32 = theme.STATUS_BAT_PLUG;
+const STATUS_BAT_LOW: u32 = theme.STATUS_BAT_LOW;
 
 /// 배터리 칸과 왼쪽 문자열 사이에 남겨야 하는 칸 수(BS design 결정 6). 상태 줄이 칸을
 /// 가르는 두 칸(`status.zig`의 `GAP`)과 같다. 그 이름은 pub이 아니고 design이 `status.zig`를
@@ -130,8 +132,8 @@ const STATUS_BAT_GAP: u32 = status.COPY_TAIL.len - status.COPY.len;
 ///
 /// 둘 다 전용 색인 이유는 배터리 칸과 같다 — `dumpStatus`가 띠 전체에서 이 둘의 픽셀을 세어
 /// `status> link` 줄로 찍는다. 어느 기존 색과도 다르다(LK-M1 plan 확정 2).
-const STATUS_LINK: u32 = 0x0070B0E0;
-const STATUS_LINK_WAIT: u32 = 0x00586878;
+const STATUS_LINK: u32 = theme.STATUS_LINK;
+const STATUS_LINK_WAIT: u32 = theme.STATUS_LINK_WAIT;
 
 /// 패널 사이 구분선의 색(WP design 결정 2).
 ///
@@ -143,7 +145,7 @@ const STATUS_LINK_WAIT: u32 = 0x00586878;
 ///
 /// 픽셀 한 줄이 아니라 셀 한 칸이다. 폭 2 글자의 spacer 규칙과 셀 격자를
 /// 흐리지 않으려면 구분선도 격자의 한 칸이어야 한다.
-const SEPARATOR: u32 = 0x00405060;
+const SEPARATOR: u32 = theme.SEPARATOR;
 
 /// 한 셀의 배경을 칠한다. 글리프보다 먼저 전부 칠해야 한다
 /// (design 결정 6) — 글자가 셀 경계를 넘을 수 있어서, 섞어 그리면 다음
@@ -1861,7 +1863,7 @@ const PHYS_LINES: u8 = 4;
 const PART_LINES: u8 = 16;
 
 /// app 워크스페이스에서 창 둘레의 색(WY design 결정 9 — 둘레는 검정이다).
-const APP_BACKDROP: u32 = 0x000000;
+const APP_BACKDROP: u32 = theme.APP_BACKDROP;
 
 /// 패널 왼쪽 위 셀의 프레임버퍼 좌표.
 const Origin = struct { x: u32, y: u32 };

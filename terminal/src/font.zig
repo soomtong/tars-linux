@@ -2,7 +2,9 @@ const std = @import("std");
 const logline = @import("logline.zig");
 const sprite = @import("sprite.zig");
 
-const stb = @import("c_stb_truetype");
+/// stb_truetype 한 겹(`shared/glyph.zig`, TK-M0 단계 A). 이 파일은 그 위의 terminal 감싸개다 — 16 px · unifont ·
+/// sprite · 정수 셀 폭이 여기 남는다(문턱값은 `main.zig`의 `drawGlyph`). 툴킷이 같은 한 겹을 em 기준으로 쓴다.
+const glyph = @import("glyph");
 
 /// 구워 놓은 글자 하나.
 ///
@@ -54,8 +56,7 @@ pub const Glyph = struct {
 /// 복사하지 않고 참조만 한다.
 pub const Cache = struct {
     alloc: std.mem.Allocator,
-    info: stb.stbtt_fontinfo,
-    scale: f32,
+    face: glyph.Face,
     /// baseline까지의 픽셀. stb의 `yoff`를 셀 기준으로 옮길 때 더한다.
     /// unifont는 ascent=56, descent=-8, unitsPerEm=64라 16px에서 scale이
     /// 정확히 0.25이고 이 값이 14가 된다. 남는 2px이 descent 몫이라 16x16
@@ -67,24 +68,14 @@ pub const Cache = struct {
     bitmap_bytes: usize,
 
     pub fn init(alloc: std.mem.Allocator, font_data: []const u8) !Cache {
-        var info: stb.stbtt_fontinfo = undefined;
-        if (stb.stbtt_InitFont(&info, font_data.ptr, 0) == 0) {
-            return error.FontInitFailed;
-        }
-
         const pixel_height: f32 = 16.0;
-        const scale = stb.stbtt_ScaleForPixelHeight(&info, pixel_height);
-
-        var ascent: c_int = 0;
-        var descent: c_int = 0;
-        var line_gap: c_int = 0;
-        stb.stbtt_GetFontVMetrics(&info, &ascent, &descent, &line_gap);
+        const face = try glyph.Face.init(font_data, .{ .pixel_height = pixel_height });
+        const ascent = face.vmetrics().ascent;
 
         return .{
             .alloc = alloc,
-            .info = info,
-            .scale = scale,
-            .ascent_px = @intFromFloat(@round(@as(f32, @floatFromInt(ascent)) * scale)),
+            .face = face,
+            .ascent_px = @intFromFloat(@round(@as(f32, @floatFromInt(ascent)) * face.scale)),
             .glyphs = .empty,
             .bitmap_bytes = 0,
         };
@@ -121,45 +112,27 @@ pub const Cache = struct {
             return gop.value_ptr.*;
         }
 
-        var w: c_int = 0;
-        var h: c_int = 0;
-        var xoff: c_int = 0;
-        var yoff: c_int = 0;
-        const bitmap = stb.stbtt_GetCodepointBitmap(
-            &self.info,
-            self.scale,
-            self.scale,
-            @intCast(codepoint),
-            &w,
-            &h,
-            &xoff,
-            &yoff,
-        );
+        // 서브픽셀 0 — `stbtt_GetCodepointBitmap`과 바이트까지 같다(glyph.zig의 `bitmap` 주석).
+        const bm = self.face.bitmap(codepoint, 0.0);
 
         // 공백과 폰트에 없는 글자는 0x0 비트맵으로 온다. 그것은 정상이다.
         // w*h가 0이 아닌데 null이면 malloc이 실패한 것이고, 그때는 알아야
         // 한다. 캐시에 들어가므로 이 경고는 글자마다 한 번만 찍힌다.
-        if (bitmap == null and w * h != 0) {
+        if (bm.pixels == null and bm.width * bm.height != 0) {
             logline.print("font: WARN could not rasterize U+{X}\n", .{codepoint});
         }
 
-        var advance: c_int = 0;
-        var lsb: c_int = 0;
-        stb.stbtt_GetCodepointHMetrics(&self.info, @intCast(codepoint), &advance, &lsb);
-
         gop.value_ptr.* = .{
             .codepoint = codepoint,
-            .width = @intCast(w),
-            .height = @intCast(h),
-            .cell_width = @intFromFloat(
-                @round(@as(f32, @floatFromInt(advance)) * self.scale),
-            ),
-            .x_offset = @intCast(xoff),
+            .width = bm.width,
+            .height = bm.height,
+            .cell_width = @intFromFloat(@round(self.face.advance(codepoint))),
+            .x_offset = bm.x_offset,
             // 여기가 baseline이 사라지는 자리다. 위 doc comment 참고.
-            .y_offset = self.ascent_px + @as(i32, @intCast(yoff)),
-            .bitmap = bitmap,
+            .y_offset = self.ascent_px + bm.y_offset,
+            .bitmap = bm.pixels,
         };
-        self.bitmap_bytes += @as(usize, @intCast(w)) * @as(usize, @intCast(h));
+        self.bitmap_bytes += @as(usize, bm.width) * @as(usize, bm.height);
         return gop.value_ptr.*;
     }
 

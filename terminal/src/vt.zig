@@ -1,6 +1,8 @@
 const std = @import("std");
 const logline = @import("logline.zig");
 const ghostty_vt = @import("ghostty-vt");
+// 색 한 벌(TK-M0 단계 A) — 매치 · 커서 · 셀 기본색의 값.
+const theme = @import("theme");
 const png = @import("png.zig");
 const clipboard = @import("clipboard.zig");
 
@@ -136,7 +138,7 @@ pub const HlStats = struct { spans: usize, cells: usize, cur: usize, us: i64 };
 ///
 /// 상수가 `main.zig`가 아니라 여기 있는 이유는 색을 확정하는 것이 이 파일의
 /// 일이기 때문이다(TR design 결정 1). `pub`인 것은 `vt_test`가 본다.
-pub const MATCH_BG: u32 = 0x00705000;
+pub const MATCH_BG: u32 = theme.MATCH_BG;
 
 /// 지금 선택된 매치의 바탕색(SP design 결정 4). `MATCH_BG`와 같은 계열의
 /// 더 밝은 색이다.
@@ -155,11 +157,16 @@ pub const MATCH_BG: u32 = 0x00705000;
 ///
 /// `fg`는 여전히 안 건드린다. 그래서 CS design 결정 1의 "매치는 바탕만
 /// 정한다"가 한 줄 그대로 남는다.
-pub const CURRENT_BG: u32 = 0x00C08000;
+pub const CURRENT_BG: u32 = theme.CURRENT_BG;
 
 /// `color.RGB`를 프레임버퍼의 XRGB8888 한 워드로 만든다.
 fn packRgb(c: ghostty_vt.color.RGB) u32 {
     return (@as(u32, c.r) << 16) | (@as(u32, c.g) << 8) | c.b;
+}
+
+/// `packRgb`의 반대. 테마의 한 워드를 라이브러리의 `color.RGB`로(TK-M0 단계 A — 셀 기본색).
+fn unpackRgb(c: u32) ghostty_vt.color.RGB {
+    return .{ .r = @truncate(c >> 16), .g = @truncate(c >> 8), .b = @truncate(c) };
 }
 
 /// `TerminalStream`이 들고 있는 handler의 타입. 라이브러리가 `Handler`를
@@ -206,7 +213,7 @@ pub const CellPx = struct { w: u32, h: u32 };
 /// 이유다. 셀의 `fg`나 기본 전경(`0xFFFFFF`)을 쓰면 커서 칸의 글자와 같은
 /// 색이라 게이트가 띠의 픽셀과 글리프의 픽셀을 못 가른다. 사람 눈에는
 /// 흰색과 구별이 안 된다.
-pub const CURSOR_COLOR: u32 = 0x00F0F0F0;
+pub const CURSOR_COLOR: u32 = theme.CURSOR_COLOR;
 
 /// bar의 폭과 underline의 높이(픽셀). 1이면 ink 값이 bar 16 · underline 16으로
 /// 같아져 게이트가 숫자로 못 가르고, 3 이상이면 셀(8픽셀)의 절반에 가까워져
@@ -559,8 +566,8 @@ pub const Screen = struct {
                 .max_scrollback_bytes = null,
                 .max_scrollback_lines = 1000,
                 .colors = .{
-                    .background = .init(.{ .r = 0x10, .g = 0x20, .b = 0x30 }),
-                    .foreground = .init(.{ .r = 0xFF, .g = 0xFF, .b = 0xFF }),
+                    .background = .init(unpackRgb(theme.CELL_BG)),
+                    .foreground = .init(unpackRgb(theme.CELL_FG)),
                     .cursor = .unset,
                     .palette = .default,
                 },

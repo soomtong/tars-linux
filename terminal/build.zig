@@ -92,6 +92,19 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("../shared/display_proto.zig"),
     });
 
+    // TK-M0 단계 A: 툴킷과 함께 컴파일하는 둘(TK design 결정 2). `theme`은 screen_args처럼 순수 상수라 대상 없이 하나다 —
+    // `vt.zig` · `pointer.zig` · `main.zig`를 트리에 둔 모듈마다 붙인다. `glyph`는 stb 번역을 import하므로 대상마다 하나씩이다
+    // (게스트는 여기, 호스트의 `glyph_host`는 font_test 앞). stb의 구현 C 파일은 지금처럼 그 모듈을 쓰는 실행 파일이 링크한다.
+    const theme = b.createModule(.{
+        .root_source_file = b.path("../shared/theme.zig"),
+    });
+    const glyph = b.createModule(.{
+        .root_source_file = b.path("../shared/glyph.zig"),
+        .target = target,
+        .optimize = guest_optimize,
+    });
+    glyph.addImport("c_stb_truetype", c_stb_truetype.mod);
+
     // WY-M0: Wayland 바인딩(WY design 결정 2 · 5 · 10). zig-wayland의 스캐너가 xml을 읽어 `wayland.zig` 하나를 만들고,
     // 그 안에 `server`(terminal의 서버)와 `client`(tars-wl-test) 두 이름공간이 함께 있다. xml은 vendor_wayland_xml.sh가
     // 받는 셋이다(판 · 출처 · sha256은 그 스크립트에) — 경로를 직접 주므로 pkg-config를 부르지 않는다. 스캐너 자체는
@@ -151,7 +164,8 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("c_drm", c_drm.mod);
     exe_mod.addImport("c_pty", c_pty.mod);
     exe_mod.addImport("c_poll", c_poll.mod);
-    exe_mod.addImport("c_stb_truetype", c_stb_truetype.mod);
+    exe_mod.addImport("glyph", glyph);
+    exe_mod.addImport("theme", theme);
     exe_mod.addImport("c_input", c_input.mod);
     exe_mod.addImport("screen_args", screen_args);
     // DY-M0: 화면 양보의 약속(`shared/display_proto.zig`). init의 `tars-fullscreen`과 같은 파일이다.
@@ -245,6 +259,12 @@ pub fn build(b: *std.Build) void {
         \\
     , host_target, optimize);
     c_stb_truetype_host.addIncludePath(b.path("vendor"));
+    const glyph_host = b.createModule(.{
+        .root_source_file = b.path("../shared/glyph.zig"),
+        .target = host_target,
+        .optimize = optimize,
+    });
+    glyph_host.addImport("c_stb_truetype", c_stb_truetype_host.mod);
     const c_input_host = translateC(b, "c_input",
         \\#include <linux/input.h>
         \\
@@ -271,6 +291,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     vt_test_mod.addImport("ghostty-vt", ghostty_host_dep.module("ghostty-vt"));
+    vt_test_mod.addImport("theme", theme);
     vt_test_mod.addImport("screen_args", screen_args);
     addStbImage(b, vt_test_mod);
     const vt_test = b.addExecutable(.{
@@ -288,6 +309,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     image_test_mod.addImport("ghostty-vt", ghostty_host_dep.module("ghostty-vt"));
+    image_test_mod.addImport("theme", theme);
     addStbImage(b, image_test_mod);
     const image_test = b.addExecutable(.{
         .name = "image_test",
@@ -304,6 +326,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     dirty_test_mod.addImport("ghostty-vt", ghostty_host_dep.module("ghostty-vt"));
+    dirty_test_mod.addImport("theme", theme);
     addStbImage(b, dirty_test_mod);
     const dirty_test = b.addExecutable(.{
         .name = "dirty_test",
@@ -347,7 +370,7 @@ pub fn build(b: *std.Build) void {
     });
     font_test_mod.link_libc = true;
     font_test_mod.linkSystemLibrary("m", .{});
-    font_test_mod.addImport("c_stb_truetype", c_stb_truetype_host.mod);
+    font_test_mod.addImport("glyph", glyph_host);
     const font_test = b.addExecutable(.{
         .name = "font_test",
         .root_module = font_test_mod,
@@ -423,6 +446,7 @@ pub fn build(b: *std.Build) void {
     });
     pointer_test_mod.link_libc = true;
     pointer_test_mod.addImport("c_input", c_input_host.mod);
+    pointer_test_mod.addImport("theme", theme);
     // PS-M0: `pointer.zig`가 포인터 설정의 이름(`WheelDirection` · `Accel`)을 여기서 받는다.
     pointer_test_mod.addImport("screen_args", screen_args);
     const pointer_test = b.addExecutable(.{
@@ -441,6 +465,7 @@ pub fn build(b: *std.Build) void {
     });
     touchpad_test_mod.link_libc = true;
     touchpad_test_mod.addImport("c_input", c_input_host.mod);
+    touchpad_test_mod.addImport("theme", theme);
     // PS-M0: `pointer.zig`가 포인터 설정의 이름(`WheelDirection` · `Accel`)을 여기서 받는다.
     touchpad_test_mod.addImport("screen_args", screen_args);
     const touchpad_test = b.addExecutable(.{

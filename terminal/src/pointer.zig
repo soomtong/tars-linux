@@ -10,6 +10,8 @@
 //! `Grab`이 그 누름을 자식의 것으로 정하고 `Gesture`를 건너뛴다(PD-M4).
 const std = @import("std");
 const screen_args = @import("screen_args");
+// 색 한 벌(TK-M0 단계 A) — 화살표 두 색의 값.
+const theme = @import("theme");
 
 /// `input.zig`의 `c`와 같은 번역(`linux/input.h`)이다. `pub`인 이유도 같다 —
 /// `pointer_test`가 커널이 정한 이름(`c.BTN_LEFT`)으로 검사를 쓴다.
@@ -445,10 +447,10 @@ pub const ARROW_H: u32 = 19;
 /// 화살표 안쪽의 색(PD design 결정 4). 전용 색이다 — 게이트가 이 색과
 /// `POINTER_EDGE`만 세어 "그 자리에 그렸는가"를 본다(CI 결정 3 · WP의
 /// `SEPARATOR`와 같은 이유). 지금의 색 상수와 xterm 256색 팔레트에 없다.
-pub const POINTER_FILL: u32 = 0x00FCFCF4;
+pub const POINTER_FILL: u32 = theme.POINTER_FILL;
 
 /// 화살표 테두리 한 픽셀의 색. 밝은 글자 위에서도 화살표가 보이게 한다.
-pub const POINTER_EDGE: u32 = 0x00040810;
+pub const POINTER_EDGE: u32 = theme.POINTER_EDGE;
 
 /// 화살표 모양. `E`는 테두리, `F`는 안쪽, `.`은 그리지 않는 자리다. 줄이
 /// y, 글자가 x다. 고전적인 12 × 19 화살표를 그대로 옮겼다.
