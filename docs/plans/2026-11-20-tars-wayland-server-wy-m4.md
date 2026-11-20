@@ -78,3 +78,18 @@ wayland 부팅 1, 판정 22 뒤 · 9 앞(셸만 남은 자리):
 4. SIGPIPE: receive 직후 읽기 끝을 닫는 클라이언트로 terminal이 살아 있는지, 셸에서 `SigIgn`의 0x1000 비트가 꺼져 있는지.
 5. `receive`가 같은 dispatch 안에서 쓰이는지(로그 순서).
 6. wayland 체인 단독 시간(판정 23 · 24 전후).
+
+## 결과
+
+구현은 `wy-m4`(Herdr, Opus — 조사도 같은 에이전트), lead는 대조 · 게이트 · commit.
+
+1. 단계 A `d07b7ea`: `wl_data_device_manager` 2, source · data device · `set_selection`(gate · `cancelled` · mime 고르기 · 파이프 · `addFd` + 2초 `addTimer`
+   · 1 MiB), `Event.selection` → `Clips.shared` + `clip>` 줄, `tars-wl-test --copy`. 체인 단독 terminal · wayland · copy · pointer PASS, verify mismatch 0.
+   임시 스크립트로 판정 24의 앞 반: `Cmd+C` → `wl> selection from=1 mime=text/plain;charset=utf-8` → `clip> len=8 text=wy24-app`, 앱을 닫은 뒤
+   셸 `Cmd+V`로 `wy24-app`이 그려진다.
+2. 실측: libwayland는 `send`의 fd를 marshal에서 복제한다 — 서버가 곧바로 쓰기 끝을 닫아도 클라이언트가 쓰고, 닫으면 EOF가 온다. 파이프 fd는 새지
+   않는다(첫 받기에서 anon_inode +1 — libwayland 루프의 공용 timerfd로 본다). SDL 3.2.10에는 `start_drag` 호출이 없다 — 판 2의 `cancelled` 길은
+   이번 클라이언트가 안 탄다(런타임 확인 안 함).
+3. plan과 달라진 것: 파이프는 `pipe2(O_CLOEXEC)` 뒤 읽기 끝만 비블록(두 끝 다 비블록이면 클라이언트 쓰기 끝도 비블록이 되어 EAGAIN을 안 다루는
+   클라이언트가 64 KiB 넘는 글을 자른다). 0바이트 받기는 버린다(`wl> selection empty` — 실패한 클라이언트가 셸 클립보드를 비우지 않게).
+   gate가 거절한 source에는 `cancelled`. 로그 `wl> selection len=` · `empty` · `cleared` · `dropped` · `kept scope=pane`을 더했다.
