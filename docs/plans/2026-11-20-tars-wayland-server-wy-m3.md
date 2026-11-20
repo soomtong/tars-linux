@@ -89,3 +89,18 @@ hidpi 부팅 A(배율 2)에 판정 6 · 7, 부팅 B(배율 1)에 판정 8. 포�
    display 체인이 배율 1에서도 잡는다, compositor 판은 배율과 상관없이 6이므로).
 3. 물리 합성 시간: 부팅 A에서 bs 2 column 통째 프레임의 `frame_us`와 bs 1의 것, 화살표만 옮기는 바퀴의 복사가 화살표 크기에 그치는지.
 4. 부팅 A(175 × 53 격자)의 두 column 사각형 값.
+
+## 결과
+
+구현은 `wy-m3`(Herdr, Opus — 조사도 같은 에이전트), lead는 대조 · 게이트 · commit.
+
+1. 단계 A `0b4de50`: compositor 6 · `preferred_buffer_scale`(판 6+만) · `set_buffer_scale`(오류 셋) · `wl_output` 물리 mode + scale · 첫 configure의
+   `enter` · surface 크기 fit · ` bs=N`. 체인 단독 terminal · wayland · display · pointer · hidpi PASS, verify mismatch 0, bs 1의 `wl> commit` 줄은
+   WY-M2 게이트와 바이트 같음. 실측 1: libwayland-server 1.23.1은 resource 판보다 새 이벤트를 막지 않는다(`wayland-server.c:215-245`) — 서버의
+   판 검사가 유일한 방패다. 실측 2: SDL 3.2.10은 compositor를 `min(6, 서버)`로 bind하고 attach x · y는 늘 0, non-HPD 창은 버퍼 1배.
+2. 단계 A에서 plan과 달라진 것: 클라이언트 줄 `surface enter` → `surface on output`(wayland 판정 16이 로그의 `enter`를 센다 — 체인을 바이트
+   그대로 두려고). `tars-wl-test`가 첫 commit 전에 roundtrip 하나를 더 한다 — 판정 16이 configure를 보자마자 키를 치면 `get_keyboard` 전이라
+   누름이 버려지는 경쟁(HEAD에도 있던 것, output bind로 확률이 바뀌었다). bs 2 창은 단계 A에서 "흐린 바둑판"이 아니라 흰색 한 색이다 —
+   짝수 행 · 열만 남기는 솎기라서.
+3. 위험으로 남긴 것: SDL은 커서 surface에 `set_buffer_scale(S)`를 보낸다 — 테마 커서 크기가 S의 배수가 아니면 `invalid_size`로 끊긴다
+   (배율 1에선 안 나온다). SDL exclusive fullscreen(viewport 없음)은 `set_buffer_scale(mode.w / output_w)`를 보낸다 — 쓰는 클라이언트 없음.
