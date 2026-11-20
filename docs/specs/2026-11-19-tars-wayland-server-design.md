@@ -243,9 +243,10 @@ WY-M5를 열며(2026-11-20, 조사 `wy-m5` — HEAD `1cb942a`, wayland-protocols
     키 길이 WY-M4와 한 바이트도 다르지 않다 — 둠의 Ctrl(쏘기) tap이 한/영을 뒤집으면 안 된다. 켠 창에서는 셸의 `hangulLayer` 갈래를 그대로 쓴다.
 41. IME가 먹은 키는 `wl_keyboard`로 보내지 않는다 — xml은 말이 없지만 SDL3는 켜진 동안 받은 키마다 글자를 만들어, 둘 다 보내면 두 번 찍힌다.
     확정은 그 뒤의 키보다 먼저 간다(`commit_string` → `done` → 키). 한 `done`에 확정과 다음 조합을 같이 싣는다.
-42. 포커스를 잃으면 조합을 확정한다(버리지 않는다 — 셸의 `.cancel`과 같다). 자리는 `syncFocus` 하나 — 옛 창에 `commit_string` + 빈 preedit + `done`,
-    그다음 text_input `leave` · 키보드 `leave`. 조합의 주인(셸 · 앱)을 `input.State`에 두고 셸 조합이 앱으로 새지 않게 같은 자리에서 셸 PTY로 확정한다.
-    창이 닫혀 잃으면 버린다. 수정키 tap 상태는 키보드 포커스가 셸 ↔ 앱으로 바뀔 때 리셋한다(앱에서 누른 Ctrl을 셸에서 뗀 것이 tap이 되지 않게).
+42. 포커스를 잃으면 조합을 확정한다(버리지 않는다 — 셸의 `.cancel`과 같다). 앱 조합의 자리는 키보드 포커스를 옮기는 단 하나의 길
+    `focusTo` — 옛 창에 `commit_string` + 빈 preedit + `done`, 그다음 text_input `leave` · 키보드 `leave`. 창이 닫혀 잃으면 버린다.
+    조합의 주인(셸 · 앱)은 `input.State`에 둔다. 셸 조합은 바퀴 끝에서는 옛 셸 pane을 모르므로 포커스를 바꾸는 자리가 먼저 그 PTY에 확정한다
+    (키 chord · 포인터 `.cancel`은 전부터, 새 창 `openApp`은 WY-M5 단계 B가 더함). `focusTo`에 남은 셸 조합은 받을 셸이 없는 것이라 버린다. 수정키 tap 상태는 키보드 포커스가 셸 ↔ 앱으로 바뀔 때 리셋한다(앱에서 누른 Ctrl을 셸에서 뗀 것이 tap이 되지 않게).
 43. text_input의 `enter` · `leave`는 키보드 포커스를 따른다. 순서는 `selection` → text_input `enter` → 키보드 `enter`. "켜졌나"는 포커스 surface가
     맞으면 참이다 — SDL처럼 키보드 `enter`에 enable하는 클라이언트도, text_input `enter`에 enable하는 클라이언트도 받힌다.
 

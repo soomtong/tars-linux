@@ -24,6 +24,9 @@ cd "$(dirname "$0")" || exit 1
 # WY-M4: 판정 23~25(22 뒤 · 9 앞, 셸만 남은 자리) — 셸의 copy mode 복사가 창의 포커스에 offer로 가고 창의 Cmd+V가 받는다,
 #   창의 Cmd+C가 셸 클립보드(`clip>`)에 들어가고 창을 닫은 뒤에도 셸의 Cmd+V로 붙는다, 읽기 끝을 닫은 파이프로 receive해도
 #   terminal은 SIGPIPE로 안 죽고 셸의 `seq | head`는 여전히 SIGPIPE(141)로 끝난다.
+# WY-M5: 판정 26~28(25 뒤 · 9 앞) — text input을 켠 창에서 Shift+Space가 한/영이고 `m f s`가 preedit `한`, `k`가 `한`을 확정하며
+#   먹은 키는 `wl_keyboard`로 안 가고 확정이 그 뒤의 키보다 먼저 간다, 포커스를 잃으면(Cmd+[ · 셸 클릭) 조합을 그 창에 확정한다,
+#   켜지 않은 창은 한글이 켜져 있어도 지금처럼 키를 받는다.
 # WY-M2(단계 B): 창 모드로 띄운 창은 셸 오른쪽 column이 된다(판정 16 · 17 · 22) — `wl> column`, pane 픽셀 크기의 configure
 #   (activated · tiled), 포커스 slot이 창이면 키가 그 창으로, Cmd+[로 셸에 오면 activated를 잃고 keyboard leave, Cmd+R의 새
 #   configure, Cmd+Q에 slot이 닫히고 셸이 전체 폭을 되찾는다. 자기 workspace를 보는 판정 2~8은 `--fullscreen`으로 띄운다.
@@ -624,6 +627,99 @@ type_keys ret
 wait_for_screen 'p25-141 p25-0' || report_failure "(25) seq in a pipe did not die of SIGPIPE (want p25-141 p25-0)"
 echo "(25): terminal survived an EPIPE on the clipboard pipe, and the shell's seq | head still ends by SIGPIPE (141)"
 
+# ── 판정 26: 텍스트 입력을 켠 창의 조합 · 확정, 같은 키가 두 번 안 간다(WY-M5) ─────────────
+# 셸만 남은 자리다(판정 25 끝). 디스크가 없으니 자판은 신세벌 PCS다(`hangul layout=shin_pcs` — 단계 A 실측 3). `m f s` = 한,
+# 다음 `k`(초성 ㄱ)가 `한`을 확정하고 `ㄱ`, Space는 `ㄱ`을 확정한 뒤 키로 간다. 먹은 키(m f s k)는 서버의 `wl> key` 줄에 없다
+# (design 결정 41). 한/영은 창 안에서 친 Shift+Space다 — 켠 창에서는 셸과 같은 전환 키가 돈다(결정 40).
+echo "=== (26) a window with text input composes and commits, and the eaten keys are not sent ==="
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size --text-input > /tmp/wl6.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(26) the text-input client did not open as a column"
+TI_ID="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+# 단계 A의 넘길 것 — enable을 기다린 뒤에 전환한다(그 전의 키는 켜지 않은 창의 길로 간다).
+wait_for_log "terminal: wl> ti enable to=${TI_ID}([^0-9]|$)" || report_failure "(26) the window did not enable its text input (no 'wl> ti enable to=${TI_ID}')"
+ONS="$(count_log 'terminal: hangul> on=true')"
+type_keys shift-spc
+wait_for_count 'terminal: hangul> on=true' $((ONS + 1)) || report_failure "(26) Shift+Space in the window did not turn hangul on"
+[ "$(count_log "terminal: wl> key code=57 state=1 to=${TI_ID}([^0-9]|$)")" -eq 0 ] || report_failure "(26) the Space of Shift+Space reached the window"
+type_keys m f s
+wait_for_log "terminal: wl> ime to=${TI_ID} commit=\(none\) preedit=한" || report_failure "(26) m f s did not compose 한 (no 'wl> ime to=${TI_ID} commit=(none) preedit=한')"
+wait_for_log 'terminal: hangul> on=true preedit=한' || report_failure "(26) no 'hangul> on=true preedit=한'"
+type_keys k
+wait_for_log "terminal: wl> ime to=${TI_ID} commit=한 preedit=ㄱ" || report_failure "(26) k did not commit 한 and start ㄱ"
+type_keys spc
+wait_for_log "terminal: wl> key code=57 state=1 to=${TI_ID}([^0-9]|$)" || report_failure "(26) the Space after ㄱ did not reach the window"
+# 확정이 키보다 먼저다 — 그 창의 ime · key 줄에서 `commit=ㄱ` 바로 다음 줄이 Space의 누름이다.
+NEXT="$(tlog | tr -d '\r' | grep -aE "terminal: wl> (ime|key) .*to=${TI_ID}( |$)" | grep -aA1 'commit=ㄱ preedit=(none)$' | tail -n 1)"
+[ "$NEXT" = "terminal: wl> key code=57 state=1 to=${TI_ID}" ] || report_failure "(26) after the commit of ㄱ came '${NEXT}', want the Space press"
+EATEN="$(count_log "terminal: wl> key code=(50|33|31|37) state=1 to=${TI_ID}([^0-9]|$)")"
+[ "$EATEN" -eq 0 ] || report_failure "(26) ${EATEN} eaten key press(es) (m f s k) also went to the window as keys"
+echo "(26): 한 composed as preedit, committed by k with ㄱ next, ㄱ committed before the Space key, no jamo key reached the window"
+
+# ── 판정 27: 포커스를 잃으면 조합을 확정한다 — chord 길과 클릭 길(WY-M5, design 결정 42) ─────────
+# (가) `m f`(하) 뒤의 Cmd+[ — 한글 층의 Cmd 갈래가 chord보다 먼저 확정한다. (나) 다시 창으로 와서 `m`(ㅎ) 뒤에 셸을 누른다 —
+# 포인터는 키가 아니므로 바퀴 끝의 `focusTo`가 옛 창에 확정한다. 둘 다 text_input `leave` · 키보드 `leave` 앞이다(클라이언트 로그).
+echo "=== (27) losing the focus commits the composition, by Cmd+[ and by a click on the shell ==="
+type_keys m f
+wait_for_log "terminal: wl> ime to=${TI_ID} commit=\(none\) preedit=하" || report_failure "(27) m f did not compose 하"
+type_keys alt-bracket_left
+wait_for_log "terminal: wl> ime to=${TI_ID} commit=하 preedit=\(none\)" || report_failure "(27) Cmd+[ did not commit 하 to the window"
+type_keys alt-bracket_right
+wait_for_count "terminal: wl> ti enable to=${TI_ID}([^0-9]|$)" 2 || report_failure "(27) the window did not enable its text input again"
+type_keys m
+wait_for_log "terminal: wl> ime to=${TI_ID} commit=\(none\) preedit=ㅎ" || report_failure "(27) m did not compose ㅎ"
+move_to 200 200 || report_failure "(27) the pointer did not reach 200,200"
+hmp "mouse_button 1"
+hmp "mouse_button 0"
+wait_for_log "terminal: wl> ime to=${TI_ID} commit=ㅎ preedit=\(none\)" || report_failure "(27) the click on the shell did not commit ㅎ to the window"
+wait_for_log 'terminal: hangul> on=true preedit=\(none\)' || report_failure "(27) the composition did not end"
+# 셸에서 끈다(셸의 Shift+Space) — 아래 명령 줄은 영문이어야 한다.
+OFFS="$(count_log 'terminal: hangul> on=false')"
+type_keys shift-spc
+wait_for_count 'terminal: hangul> on=false' $((OFFS + 1)) || report_failure "(27) Shift+Space in the shell did not turn hangul off"
+# 클라이언트가 본 것: 확정 넷(한 · ㄱ · 하 · ㅎ), 먹은 키 m(50)의 누름 0, serial이 안 맞은 done 0, 그리고 `ti leave` 둘이 저마다
+# 확정 바로 뒤(-B3: commit · preedit · done)이고 키보드 `leave` 바로 앞이다. `ti enter`에도 `enter`가 들어 있어 낱말로 세지 않는다.
+type_text 'echo c27-(grep -c commit.text /tmp/wl6.log)-(grep -c key.code.50.state.1 /tmp/wl6.log)-(grep -c match.0 /tmp/wl6.log)-(grep -B3 ti.leave /tmp/wl6.log | grep -c commit.text)-(grep -A1 ti.leave /tmp/wl6.log | grep -cx wl-test..leave)'
+type_keys ret
+wait_for_screen '\| c27-4-0-0-2-2' || report_failure "(27) the client's log is not commits 4, key 50 presses 0, mismatched done 0, commit before ti leave 2, keyboard leave after ti leave 2"
+type_keys alt-bracket_right
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${TI_ID} ws=1 slot=1" || report_failure "(27) Cmd+Q did not close the text-input window"
+echo "(27): Cmd+[ and a click on the shell both committed the composition to the window before its leave"
+
+# ── 판정 28: 텍스트 입력을 켜지 않은 창은 지금처럼 키다(WY-M5, design 결정 40) ─────────────────
+# 한글은 셸에서 켠다 — 켜지 않은 창에서는 전환 키도 안 돈다(둠의 Ctrl tap이 한/영을 뒤집으면 안 된다). 그 창에서 `m`은 evdev 50의
+# 누름으로 가고 `wl> ime`는 하나도 없다. Shift+Space도 그 창에는 그냥 키(Space 57)다.
+echo "=== (28) a window without text input still gets keys, with hangul on ==="
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size > /tmp/wl7.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(28) the plain client did not open as a column"
+PLAIN_ID="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+type_keys alt-bracket_left
+wait_for_log "terminal: wl> configure id=${PLAIN_ID} w=[0-9]+ h=[0-9]+ act=0" || report_failure "(28) Cmd+[ did not take the keys from the plain window"
+ONS="$(count_log 'terminal: hangul> on=true')"
+type_keys shift-spc
+wait_for_count 'terminal: hangul> on=true' $((ONS + 1)) || report_failure "(28) Shift+Space in the shell did not turn hangul on"
+ACTS="$(count_log "terminal: wl> configure id=${PLAIN_ID} w=[0-9]+ h=[0-9]+ act=1")"
+type_keys alt-bracket_right
+wait_for_count "terminal: wl> configure id=${PLAIN_ID} w=[0-9]+ h=[0-9]+ act=1" $((ACTS + 1)) || report_failure "(28) Cmd+] did not focus the plain window"
+HANGULS="$(count_log 'terminal: hangul> on=')"
+type_keys m shift-spc
+wait_for_log "terminal: wl> key code=50 state=1 to=${PLAIN_ID}([^0-9]|$)" || report_failure "(28) m did not reach the plain window as a key"
+wait_for_log "terminal: wl> key code=57 state=1 to=${PLAIN_ID}([^0-9]|$)" || report_failure "(28) Shift+Space did not reach the plain window as keys"
+[ "$(count_log "terminal: wl> key code=50 state=1 to=${PLAIN_ID}([^0-9]|$)")" -eq 1 ] || report_failure "(28) m reached the plain window more than once"
+[ "$(count_log "terminal: wl> ime to=${PLAIN_ID} ")" -eq 0 ] || report_failure "(28) the plain window got an ime line"
+# 켜지 않은 창의 키 길은 한글 층을 안 지난다 — `hangul>` 줄이 하나도 안 는다(Shift+Space도 한/영이 아니다).
+[ "$(count_log 'terminal: hangul> on=')" -eq "$HANGULS" ] || report_failure "(28) the hangul state changed in the plain window"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${PLAIN_ID} ws=1 slot=1" || report_failure "(28) Cmd+Q did not close the plain window"
+OFFS="$(count_log 'terminal: hangul> on=false')"
+type_keys shift-spc
+wait_for_count 'terminal: hangul> on=false' $((OFFS + 1)) || report_failure "(28) Shift+Space in the shell did not turn hangul off"
+echo "(28): with hangul on, the plain window got m and Shift+Space as keys and no ime"
+
 # ── 판정 9: render verify ───────────────────────────────────────────────
 #
 # 루트 게이트는 모든 체인의 로그에서 `verify>` 줄을 본다(check.sh의 check_verify_lines). 단독 실행(`make check`)에도
@@ -775,4 +871,4 @@ fi
 echo "(15): wl> key lines $(count_log 'terminal: wl> key '), verify lines $(count_log 'terminal: verify> '), no mismatch"
 stop_boot
 
-echo "PASS: WY-M0 · WY-M1 · WY-M2 · WY-M4 — a copy in the shell is pasted in a window and a copy in a window is pasted in the shell even after it closes, an EPIPE on the clipboard pipe does not kill terminal and the shell's children still die of SIGPIPE; a window without fullscreen opens as a column right of the shell and follows its size (Cmd+R), a click gives it the keys and the pointer, a hidden cursor is not drawn; the shell has WAYLAND_DISPLAY, tars-wl-test becomes workspace 2 drawn 4x in the middle, its keys go to it as evdev codes, Cmd+1 · Cmd+2 go back and forth, Cmd+C · Cmd+Q type nothing in the shell, a stopped client does not stop the shell, Cmd+Q closes and a client that ignores close is killed after 2 s; with the doom bundle tars-doom fills the screen at 4x, fires on Ctrl, waits behind the shell and leaves by itself on Cmd+Q"
+echo "PASS: WY-M0 · WY-M1 · WY-M2 · WY-M4 · WY-M5 — in a window with text input Hangul composes as preedit and commits before the next key, the eaten keys are not sent, losing the focus commits the composition, a window without text input still gets keys; a copy in the shell is pasted in a window and a copy in a window is pasted in the shell even after it closes, an EPIPE on the clipboard pipe does not kill terminal and the shell's children still die of SIGPIPE; a window without fullscreen opens as a column right of the shell and follows its size (Cmd+R), a click gives it the keys and the pointer, a hidden cursor is not drawn; the shell has WAYLAND_DISPLAY, tars-wl-test becomes workspace 2 drawn 4x in the middle, its keys go to it as evdev codes, Cmd+1 · Cmd+2 go back and forth, Cmd+C · Cmd+Q type nothing in the shell, a stopped client does not stop the shell, Cmd+Q closes and a client that ignores close is killed after 2 s; with the doom bundle tars-doom fills the screen at 4x, fires on Ctrl, waits behind the shell and leaves by itself on Cmd+Q"

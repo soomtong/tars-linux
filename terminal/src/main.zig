@@ -4030,7 +4030,8 @@ const PointerWire = struct {
                 // 먼저 온다 — 확정 → 포커스 이동 → 선택이 design 결정 6의
                 // 순서다.
                 .cancel => {
-                    // 옛 포커스가 창 slot이면 정리할 것이 없다(창에는 조합 · copy mode가 없다).
+                    // 옛 포커스가 창 slot이면 여기서 정리할 것이 없다(창에는 copy mode가 없다). 창의 한글 조합은 이 바퀴 끝의
+                    // `focusTo`가 옛 창에 확정한다(WY-M5, design 결정 42).
                     const fp = self.ws.panes[self.ws.focus].?.asPane() orelse continue;
                     const composing = self.key_state.preedit() != null;
                     const bytes = self.key_state.forceMode(.normal);
@@ -4989,18 +4990,36 @@ const App = struct {
     /// `Cmd+Q` …)는 compositor가 먹는다 — 키를 다 보낸 뒤 `runPanes`가 한다. 그래서 `Cmd+1`로 셸에 갈 때 그 배치의
     /// 키가 먼저 클라이언트에 닿고 `leave`가 뒤에 간다(바퀴 끝의 `syncFocus`). 셸의 바이트 · 스크롤 · copy · 조합 ·
     /// 받아쓰기는 여기 없다.
+    ///
+    /// WY-M5(design 결정 40 · 41): 창이 text_input을 켰으면(`imeActive`, 포커스가 이미 이 창일 때) 한글 층이 돈다 — 키와 확정 ·
+    /// 조합이 한 줄로 오고(`AppOut`) 차례로 `srv.key` · `srv.imeSend`가 된다. 켜지 않은 창은 WY-M4와 같다.
     fn readKeyboardApp(self: *App, fd: c_int, slot: usize, id: u32) !KeyboardRead {
+        const ime = if (self.wl) |srv| srv.focused == id and srv.imeActive() else false;
         const ctx = input.Context{
             .swap_alt_meta = self.keyboard_devs[slot].?.swap_alt_meta,
             .device = @intCast(slot),
+            .ime = ime,
         };
         const keys = input.readKeysApp(&self.key_state, fd, ctx);
         if (keys.gone) return .gone;
         if (self.wl) |srv| {
             // 이 배치 전에 앞이 바뀌었을 수 있다(같은 바퀴의 앞 키보드). 키보다 enter가 먼저다.
-            srv.setFocus(id, wlMask(self.key_state.appMods()));
+            self.focusTo(srv, id);
             const now: u32 = @truncate(@as(u64, @intCast(self.nowMs())));
-            for (keys.keys) |k| srv.key(k.code, k.pressed, wlMask(k.mods), now);
+            for (keys.keys) |o| switch (o) {
+                .key => |k| srv.key(k.code, k.pressed, wlMask(k.mods), now),
+                .ime => |m| {
+                    var utf8: [4]u8 = undefined;
+                    const n: usize = if (m.preedit) |cp| std.unicode.utf8Encode(cp, &utf8) catch 0 else 0;
+                    srv.imeSend(m.commit.buf[0..m.commit.len], utf8[0..n]);
+                },
+            };
+        }
+        // 한/영이나 조합이 바뀌었다 — 상태 줄(셸 workspace의 창 column이면 보인다)과 `hangul>` 줄. 창 위에 조합 글자를
+        // 그리지 않는다(R-WY-9) — 그리는 것은 클라이언트다.
+        if (keys.redraw) {
+            dumpHangul(&self.key_state);
+            self.needs_redraw = true;
         }
         try self.runPanes(keys.panes);
         if (keys.brightness != 0) stepBacklight(self.io, &self.backlight_state, keys.brightness);
@@ -5022,7 +5041,7 @@ const App = struct {
                 .shell => null,
             },
         };
-        srv.setFocus(want, wlMask(self.key_state.appMods()));
+        self.focusTo(srv, want);
         self.syncColumns(srv);
         // 포인터가 들어가 있던 창이 이제 앞에 안 보이면(워크스페이스를 옮겼다 · 화면 밖 column) leave를 보낸다(WY-M2).
         // 다시 보이게 되어도 enter는 포인터가 움직일 때 간다.
@@ -5030,6 +5049,38 @@ const App = struct {
             const t_ms: u32 = @truncate(@as(u64, @intCast(self.nowMs())));
             srv.pointerMove(null, self.pointer_state.x, self.pointer_state.y, t_ms);
         };
+    }
+
+    /// 키보드 포커스를 `want`로 옮기는 단 하나의 길(WY-M5, design 결정 42). `syncFocus`와 `readKeyboardApp`의 머리가 부른다.
+    ///
+    /// 1. 조합이 남았고 포커스가 그 주인을 떠나면 먼저 정리한다. 앱의 조합은 옛 창에 `commit_string` + 빈 preedit + `done`
+    ///    (`imeSend` — 서버는 포커스 창에만 보내므로 `setFocus` 앞이어야 한다), 그다음 서버가 text_input `leave` · 키보드
+    ///    `leave`. 창이 사라져 포커스를 잃었으면(서버의 포커스가 이미 null) 버린다. 셸의 조합이 창으로 가는 길은 키 chord ·
+    ///    포인터(`.cancel`) · 새 창(`openApp`)이 먼저 그 PTY에 확정하므로, 여기 남은 것은 받을 셸이 없는 것이라 버린다.
+    /// 2. 셸 ↔ 앱이 바뀌면 tap 진행 상태를 버린다.
+    fn focusTo(self: *App, srv: *wls.Server, want: ?u32) void {
+        const ks = &self.key_state;
+        const old = srv.focused;
+        if (ks.preedit()) |cp| switch (ks.hangul_owner) {
+            .app => if (old != want or old == null) {
+                if (old != null) {
+                    var utf8: [4]u8 = undefined;
+                    const n = std.unicode.utf8Encode(cp, &utf8) catch 0;
+                    srv.imeSend(utf8[0..n], "");
+                } else logline.print("terminal: hangul> dropped (the window is gone)\n", .{});
+                ks.dropComposition();
+                dumpHangul(ks);
+                self.needs_redraw = true;
+            },
+            .shell => if (want != null) {
+                logline.print("terminal: hangul> dropped (no shell to take it)\n", .{});
+                ks.dropComposition();
+                dumpHangul(ks);
+                self.needs_redraw = true;
+            },
+        };
+        if ((old == null) != (want == null)) ks.resetTaps();
+        srv.setFocus(want, wlMask(ks.appMods()));
     }
 
     /// 창 `id`가 앞 워크스페이스에 보이는가 — app 워크스페이스의 그 창이거나, 앞 셸 워크스페이스의 화면 안 slot이다.
@@ -6372,6 +6423,18 @@ const App = struct {
     /// column의 configure는 이 바퀴 끝의 `syncFocus` → `syncColumns`가 보낸다 — 포커스를 먼저 옮겨 `activated`를 한 번에 싣는다.
     fn openApp(self: *App, srv: *wls.Server, o: wls.Opened) !void {
         const front = &self.workspaces[self.current].?;
+        // 셸에서 조합 중이었으면 그 PTY에 먼저 확정한다(WY-M5, design 결정 42) — 새 창이 포커스를 가져가므로 이 바퀴의
+        // `focusTo`는 옛 셸 pane을 모른다. 포인터의 `.cancel`과 같은 길(`forceMode`)이다.
+        switch (front.*) {
+            .shell => |*sh| if (sh.panes[sh.focus].?.asPane()) |fp| {
+                if (self.key_state.hangul_owner == .shell and self.key_state.mode == .normal and self.key_state.preedit() != null) {
+                    pty.write(fp.session.master_fd, self.key_state.forceMode(.normal));
+                    fp.screen.setPreedit(null);
+                    dumpHangul(&self.key_state);
+                }
+            },
+            .app => {},
+        }
         const ws = switch (front.*) {
             .shell => |*sh| if (o.fullscreen) null else sh,
             .app => null,

@@ -2822,7 +2822,8 @@ pub fn main() !void {
         }
         const want_codes = [_]u16{ K.KEY_LEFTMETA, K.KEY_2, K.KEY_LEFTMETA, K.KEY_LEFTCTRL };
         const want_pressed = [_]bool{ true, false, false, true };
-        for (got.keys, want_codes, want_pressed) |k, wc, wp| {
+        for (got.keys, want_codes, want_pressed) |o, wc, wp| {
+            const k = o.key;
             if (k.code != wc or k.pressed != wp) {
                 std.debug.print("FAIL: readKeysApp key {d}/{} want {d}/{}\n", .{ k.code, k.pressed, wc, wp });
                 return error.AppBatchOrder;
@@ -2834,7 +2835,175 @@ pub fn main() !void {
     }
     std.debug.print("input_test: readKeysApp이 키와 명령을 따로 모은다 OK\n", .{});
 
+    try appImeChecks();
+
     std.debug.print("PASS\n", .{});
+}
+
+// ── WY-M5: 텍스트 입력을 켠 창의 한글 층(design 결정 40 · 41 · 42) ──
+
+/// 배치 하나를 `readKeysApp`에 먹이고 그 답을 복사해 돌려준다(답의 슬라이스는 다음 배치가 덮어쓴다).
+const AppBatch = struct {
+    outs: [128]input.AppOut = undefined,
+    n: usize = 0,
+    panes: [8]input.Pane = undefined,
+    np: usize = 0,
+    redraw: bool = false,
+
+    fn items(self: *const AppBatch) []const input.AppOut {
+        return self.outs[0..self.n];
+    }
+};
+
+fn appBatch(state: *input.State, ctx: input.Context, evs: []const input.c.struct_input_event) !AppBatch {
+    const fds = try feedEvents(evs);
+    defer _ = close(fds[0]);
+    const got = input.readKeysApp(state, fds[0], ctx);
+    if (got.gone) return error.AppImeGone;
+    var b: AppBatch = .{ .n = got.keys.len, .np = got.panes.len, .redraw = got.redraw };
+    @memcpy(b.outs[0..b.n], got.keys);
+    @memcpy(b.panes[0..b.np], got.panes);
+    return b;
+}
+
+/// 배치 안의 IME를 차례로 `want`(확정 · 조합)와 맞춘다.
+fn expectImes(b: *const AppBatch, want: []const struct { []const u8, ?u21 }) !void {
+    var i: usize = 0;
+    for (b.items()) |o| switch (o) {
+        .ime => |m| {
+            if (i >= want.len) {
+                std.debug.print("FAIL: extra ime commit={s} preedit={?u}\n", .{ m.commit.buf[0..m.commit.len], m.preedit });
+                return error.AppImeExtra;
+            }
+            if (!std.mem.eql(u8, m.commit.buf[0..m.commit.len], want[i][0]) or m.preedit != want[i][1]) {
+                std.debug.print("FAIL: ime {d} commit={s} preedit={?u}, want {s} {?u}\n", .{ i, m.commit.buf[0..m.commit.len], m.preedit, want[i][0], want[i][1] });
+                return error.AppImeWrong;
+            }
+            i += 1;
+        },
+        .key => {},
+    };
+    if (i != want.len) {
+        std.debug.print("FAIL: {d} ime, want {d}\n", .{ i, want.len });
+        return error.AppImeMissing;
+    }
+}
+
+/// 배치 안에서 `code`의 누름이 클라이언트로 몇 번 가는가.
+fn pressesOf(b: *const AppBatch, code: u16) usize {
+    var n: usize = 0;
+    for (b.items()) |o| switch (o) {
+        .key => |k| if (k.code == code and k.pressed) {
+            n += 1;
+        },
+        .ime => {},
+    };
+    return n;
+}
+
+fn appImeChecks() !void {
+    const ime: input.Context = .{ .ime = true };
+    // 검사 94. 켠 창에서 Shift+Space가 한/영이고 Space는 안 간다. 신세벌 PCS(기본)의 `m f s` → ㅎ · 하 · 한, 키는 하나도
+    // 안 간다(뗌은 서버가 버린다 — 누름을 안 보냈다). `k` → `한` 확정 + `ㄱ`, Space → `ㄱ` 확정 다음에 Space 키(확정 먼저).
+    {
+        var st: input.State = .{};
+        var b = try appBatch(&st, ime, &.{
+            keyEventAt(K.KEY_LEFTSHIFT, 1, 1_000_000), keyEventAt(K.KEY_SPACE, 1, 1_010_000),
+            keyEventAt(K.KEY_SPACE, 0, 1_020_000),     keyEventAt(K.KEY_LEFTSHIFT, 0, 1_030_000),
+        });
+        if (!st.hangul_on or !b.redraw or pressesOf(&b, K.KEY_SPACE) != 0 or pressesOf(&b, K.KEY_LEFTSHIFT) != 1) return error.AppImeToggle;
+        try expectImes(&b, &.{});
+        if (st.hangul_owner != .app) return error.AppImeOwner;
+        b = try appBatch(&st, ime, &.{
+            keyEventAt(K.KEY_M, 1, 2_000_000), keyEventAt(K.KEY_M, 0, 2_010_000),
+            keyEventAt(K.KEY_F, 1, 2_020_000), keyEventAt(K.KEY_F, 0, 2_030_000),
+            keyEventAt(K.KEY_S, 1, 2_040_000), keyEventAt(K.KEY_S, 0, 2_050_000),
+        });
+        try expectImes(&b, &.{ .{ "", 'ㅎ' }, .{ "", '하' }, .{ "", '한' } });
+        if (pressesOf(&b, K.KEY_M) + pressesOf(&b, K.KEY_F) + pressesOf(&b, K.KEY_S) != 0) return error.AppImeKeyLeaked;
+        b = try appBatch(&st, ime, &.{
+            keyEventAt(K.KEY_K, 1, 3_000_000),     keyEventAt(K.KEY_K, 0, 3_010_000),
+            keyEventAt(K.KEY_SPACE, 1, 3_020_000), keyEventAt(K.KEY_SPACE, 0, 3_030_000),
+        });
+        try expectImes(&b, &.{ .{ "한", 'ㄱ' }, .{ "ㄱ", null } });
+        if (pressesOf(&b, K.KEY_K) != 0 or pressesOf(&b, K.KEY_SPACE) != 1) return error.AppImeKeyLeaked;
+        // 확정 `ㄱ` 바로 뒤가 Space 누름이다.
+        var at: ?usize = null;
+        for (b.items(), 0..) |o, i| if (o == .ime and std.mem.eql(u8, o.ime.commit.buf[0..o.ime.commit.len], "ㄱ")) {
+            at = i;
+        };
+        const next = b.items()[at.? + 1];
+        if (next != .key or next.key.code != K.KEY_SPACE or !next.key.pressed) return error.AppImeOrder;
+    }
+    std.debug.print("input_test: 켠 창에서 조합 · 확정이 IME로 가고 먹은 키는 안 간다 OK\n", .{});
+
+    // 검사 95. Backspace — 조합 중이면 자모 하나(먹음), 비면 키.
+    {
+        var st: input.State = .{ .hangul_on = true };
+        _ = try appBatch(&st, ime, &.{ keyEventAt(K.KEY_M, 1, 1_000_000), keyEventAt(K.KEY_F, 1, 1_010_000) });
+        const b = try appBatch(&st, ime, &.{
+            keyEventAt(K.KEY_BACKSPACE, 1, 2_000_000), keyEventAt(K.KEY_BACKSPACE, 0, 2_010_000),
+            keyEventAt(K.KEY_BACKSPACE, 1, 2_020_000), keyEventAt(K.KEY_BACKSPACE, 0, 2_030_000),
+            keyEventAt(K.KEY_BACKSPACE, 1, 2_040_000),
+        });
+        try expectImes(&b, &.{ .{ "", 'ㅎ' }, .{ "", null } });
+        if (pressesOf(&b, K.KEY_BACKSPACE) != 1) return error.AppImeBackspace;
+    }
+    std.debug.print("input_test: 켠 창의 Backspace가 조합 중이면 자모를 뺀다 OK\n", .{});
+
+    // 검사 96. 조합 중의 표 chord(`Cmd+1`) — 확정이 먼저 IME로 가고 chord는 compositor가 먹는다. 자모가 되지 않는다.
+    {
+        var st: input.State = .{ .hangul_on = true };
+        const b = try appBatch(&st, ime, &.{
+            keyEventAt(K.KEY_M, 1, 1_000_000),
+            keyEventAt(K.KEY_LEFTMETA, 1, 1_010_000),
+            keyEventAt(K.KEY_1, 1, 1_020_000),
+        });
+        try expectImes(&b, &.{ .{ "", 'ㅎ' }, .{ "ㅎ", null } });
+        if (b.np != 1 or b.panes[0] != .workspace_1 or pressesOf(&b, K.KEY_1) != 0) return error.AppImeChord;
+    }
+    std.debug.print("input_test: 켠 창의 chord가 조합을 먼저 확정한다 OK\n", .{});
+
+    // 검사 97. 켜지 않은 창은 WY-M4 그대로 — 한글이 켜져 있어도 `m`은 키다. 그 창에 남은 앱 조합은 버린다.
+    {
+        var st: input.State = .{ .hangul_on = true };
+        _ = try appBatch(&st, ime, &.{keyEventAt(K.KEY_M, 1, 1_000_000)});
+        if (st.preedit() == null) return error.AppImeSetup;
+        const b = try appBatch(&st, .{}, &.{ keyEventAt(K.KEY_M, 0, 2_000_000), keyEventAt(K.KEY_F, 1, 2_010_000) });
+        try expectImes(&b, &.{});
+        if (pressesOf(&b, K.KEY_F) != 1 or b.redraw or st.preedit() != null) return error.AppPlainChanged;
+    }
+    std.debug.print("input_test: 켜지 않은 창은 한글이 켜져도 키다 OK\n", .{});
+
+    // 검사 98. 왼쪽 Ctrl tap이 배치를 넘어 한/영이다(켠 창은 tap을 들고 간다). 켜지 않은 창은 검사 93처럼 버린다.
+    {
+        var st: input.State = .{};
+        _ = try appBatch(&st, ime, &.{keyEventAt(K.KEY_LEFTCTRL, 1, 1_000_000)});
+        const b = try appBatch(&st, ime, &.{keyEventAt(K.KEY_LEFTCTRL, 0, 1_100_000)});
+        if (!st.hangul_on or !b.redraw) return error.AppImeCtrlTap;
+        // Ctrl+키는 조합 키다 — tap이 아니다.
+        _ = try appBatch(&st, ime, &.{ keyEventAt(K.KEY_LEFTCTRL, 1, 2_000_000), keyEventAt(K.KEY_A, 1, 2_010_000) });
+        _ = try appBatch(&st, ime, &.{keyEventAt(K.KEY_LEFTCTRL, 0, 2_100_000)});
+        if (!st.hangul_on) return error.AppImeCtrlCombo;
+        // 셸 ↔ 앱 전환의 리셋 — 누른 뒤 리셋하면 뗌은 tap이 아니다.
+        _ = try appBatch(&st, ime, &.{keyEventAt(K.KEY_LEFTCTRL, 1, 3_000_000)});
+        st.resetTaps();
+        _ = try appBatch(&st, ime, &.{keyEventAt(K.KEY_LEFTCTRL, 0, 3_100_000)});
+        if (!st.hangul_on) return error.AppImeTapReset;
+    }
+    std.debug.print("input_test: 켠 창의 왼쪽 Ctrl tap이 한/영이다 OK\n", .{});
+
+    // 검사 99. 세벌식 기호(`nonSyllable`)는 음절과 함께 확정 하나에 실린다. 3-P3의 `kf`(가) 뒤 Shift+J = '4'.
+    {
+        var st: input.State = .{ .hangul_on = true, .hangul_layout = .sebeol_3p3 };
+        const b = try appBatch(&st, ime, &.{
+            keyEventAt(K.KEY_K, 1, 1_000_000),         keyEventAt(K.KEY_F, 1, 1_010_000),
+            keyEventAt(K.KEY_LEFTSHIFT, 1, 1_020_000), keyEventAt(K.KEY_J, 1, 1_030_000),
+        });
+        try expectImes(&b, &.{ .{ "", 'ㄱ' }, .{ "", '가' }, .{ "가4", null } });
+        if (pressesOf(&b, K.KEY_J) != 0) return error.AppImeSymbol;
+    }
+    std.debug.print("input_test: 켠 창에서 세벌식 기호가 음절과 함께 확정된다 OK\n", .{});
 }
 
 fn expectAppKey(state: *input.State, ctx: input.Context, raw: u16, value: i32, code: u16, pressed: bool, mods: input.AppMods) !void {

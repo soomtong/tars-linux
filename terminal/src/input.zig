@@ -260,6 +260,10 @@ pub const Context = struct {
     /// 같은 read의 Esc는 PTY로 간다. 사람의 손으로는 생기지 않는 순서다.
     dictating: bool = false,
 
+    /// 키보드 포커스 창이 text_input을 켰는가(WY-M5, design 결정 40). `readKeysApp`만 본다 — 참이면 app 쪽 한글 층이
+    /// 돌고(`imeKey`), 거짓이면 키 길이 WY-M4와 같다(`appKey`). `main.zig`가 읽는 순간의 서버 값(`imeActive`)을 싣는다.
+    ime: bool = false,
+
     /// 이 배치가 어느 키보드 칸에서 왔는가(DM design 결정 5). `readKeys` 한 번은 fd
     /// 하나를 읽으므로 배치의 모든 이벤트가 같은 칸이다. `main.zig`의 키보드 칸
     /// 번호(`readKeyboards`의 `ki`)를 그대로 싣는다. 기본값 0이라 칸을 모르는 단위
@@ -448,12 +452,33 @@ pub const AppMods = struct {
     super: bool = false,
 };
 
+/// app 쪽 출력 하나(WY-M5, design 결정 41). 키와 IME가 한 줄에 순서대로 선다 — 확정(`ime`)이 그 뒤의 키(Enter ·
+/// 방향키 · Ctrl 조합)보다 먼저 가야 하기 때문이다. `main.zig`가 차례로 `srv.key` · `srv.imeSend`를 부른다.
+pub const AppOut = union(enum) {
+    key: AppKey,
+    ime: Ime,
+};
+
+/// 텍스트 입력을 켠 창에 보낼 확정과 조합(WY-M5, design 결정 39). 서버의 `imeSend` 한 번이다 — 확정이 있으면
+/// `commit_string`, 조합은 늘(없으면 빈 것). 확정 칸이 여덟인 까닭은 `commit_buf`와 같다(음절 + 세벌식 기호).
+pub const Ime = struct {
+    commit: Copy.Commit = .{},
+    preedit: ?u21 = null,
+};
+
+/// 조합 버퍼의 주인(WY-M5, design 결정 42). 마지막으로 키를 먹인 길이다 — 포커스가 옮겨 갈 때 조합을 어디에
+/// 확정할지(셸 PTY · 창의 `commit_string`) 정한다. 버퍼는 하나다(결정 39).
+pub const HangulOwner = enum { shell, app };
+
 /// `readKeysApp`의 답. 키와 명령은 따로 순서대로 모은다 — 키를 먼저 보내고 명령(워크스페이스 옮기기)을 뒤에 한다.
 /// 옮긴 뒤의 `leave`가 그 배치의 키보다 뒤에 가야 클라이언트가 눌린 채로 남는 키가 없다.
 pub const AppKeys = struct {
-    keys: []const AppKey,
+    /// 클라이언트로 갈 것(키와 IME, WY-M5)을 순서대로.
+    keys: []const AppOut,
     panes: []const Pane,
     brightness: i32 = 0,
+    /// 한/영이나 조합이 바뀌었다(WY-M5) — 상태 줄과 `hangul>` 줄. 텍스트 입력을 켠 창에서만 켜진다.
+    redraw: bool = false,
     gone: bool = false,
 };
 
@@ -785,7 +810,9 @@ pub const State = struct {
 
     /// 한 번의 read에서 나온 클라이언트 키의 저장소(WY-M0, `readKeysApp`). 같은 이유로 힙을 안 쓴다. 한 read가
     /// 이벤트 64개까지라 넘칠 일이 없다.
-    app_keys: [64]AppKey = undefined,
+    ///
+    /// WY-M5: 키와 IME가 한 줄이다(`AppOut`). 키 하나가 IME 하나와 키 하나를 낼 수 있어(확정 + Enter) 128이다.
+    app_keys: [128]AppOut = undefined,
 
     /// 한글을 치는 중인가(HI design 결정 5). `Mode`에 넣지 않는다 —
     /// `Mode`는 normal·copy·find인데 한/영은 그것과 독립이고, copy mode에
@@ -797,6 +824,9 @@ pub const State = struct {
     /// 그 불변식이 서 있으므로 "꺼져 있는데 조합이 남은" 상태를 따로 다룰
     /// 필요가 없다.
     hangul_buf: hangul.Syllable = .{},
+
+    /// 조합 버퍼의 주인(WY-M5, design 결정 42). `readKeys`가 셸로, 텍스트 입력을 켠 창의 `readKeysApp`이 앱으로 둔다.
+    hangul_owner: HangulOwner = .shell,
 
     /// 한글 자판(HI-M2). 부팅 내내 상수다 — 설정 파일이 정하고 argv로
     /// 오며, 런타임 전환은 안 한다(design 결정 7).
@@ -1182,6 +1212,17 @@ pub const State = struct {
     /// 이미 같은 모양이다.
     pub fn preedit(self: State) ?u21 {
         return self.hangul_buf.codepoint();
+    }
+
+    /// 조합을 버린다(WY-M5). 받을 곳이 없을 때다 — 창이 사라졌거나 텍스트 입력을 껐다(design 결정 42).
+    pub fn dropComposition(self: *State) void {
+        self.hangul_buf = .{};
+    }
+
+    /// 수정키 tap의 진행 상태를 버린다(WY-M5, design 결정 42). 키보드 포커스가 셸 ↔ 앱으로 바뀔 때 — 한쪽에서 누른 왼쪽
+    /// Ctrl을 다른 쪽에서 뗀 것이 한/영이 되지 않게.
+    pub fn resetTaps(self: *State) void {
+        self.taps = @splat(.{});
     }
 
     /// 1.7번 단계 — 한글(HI design 결정 2·5·6).
@@ -1899,6 +1940,86 @@ pub const State = struct {
             .super = self.metaed(),
         };
     }
+
+    /// `imeKey`의 답 — IME 하나(없을 수 있다)와 그 뒤의 것 하나. IME가 먼저 간다(design 결정 41).
+    pub const ImeStep = struct {
+        ime: ?Ime = null,
+        then: AppAction = .none,
+    };
+
+    /// 텍스트 입력을 켠 창의 EV_KEY 하나(WY-M5, design 결정 40 · 41). `appKey`의 짝이고 셸의 한글 층을 그대로 쓴다.
+    ///
+    /// 1. 수정키 비트 · 맞바꿈 · 밝기는 `appKey`와 같다. 수정키 자체는 지금처럼 키로 간다.
+    /// 2. tap은 셸(`handleKey`)과 같다 — 다른 키의 누름이 소비를 켜고(`markTapConsumed`), 짧은 왼쪽 Ctrl · CapsLock이
+    ///    한/영이다. CapsLock의 잠금은 셸처럼 뗄 때 뒤집는다(짧은 tap이 아닐 때).
+    /// 3. 수정키가 아닌 누름은 `hangulLayer`를 지난다. `.redraw`는 먹은 키(`wl_keyboard`로 안 간다 — 그 뗌도 서버가
+    ///    버린다), `.bytes`는 먹고 그 바이트를 확정에 잇는다(세벌식 기호), null이면 키가 제 길(표의 chord 또는 클라이언트)로.
+    ///    Cmd 조합은 `hangulLayer`의 Meta 갈래가 확정만 하고 흘리므로 오토마타를 지나 자모가 되지 않는다.
+    /// 4. 확정이 있거나 조합이 바뀌었으면 IME 하나를 키보다 먼저 낸다.
+    /// 5. 자동 반복(2)은 `appKey`처럼 안 보낸다 — 먹은 키의 반복도 없다(조합 중 Backspace를 쥐어도 자모 하나).
+    pub fn imeKey(self: *State, raw_code: u16, value: i32, time_us: u64, ctx: Context) ImeStep {
+        const code = if (ctx.swap_alt_meta) swapAltMeta(raw_code) else raw_code;
+        const dev: usize = ctx.device;
+        std.debug.assert(dev < MAX_KEYBOARDS);
+        const mods = &self.mods[dev];
+        const taps = &self.taps[dev];
+        if (value != 0) self.markTapConsumed(code, dev);
+        if (brightnessKey(code, ctx)) |dir| return .{ .then = if (value != 0) .{ .brightness = dir } else .none };
+        const down = value != 0;
+        const before = self.hangul_buf.codepoint();
+        var modifier = true;
+        switch (code) {
+            c.KEY_LEFTSHIFT => mods.shift_left = down,
+            c.KEY_RIGHTSHIFT => mods.shift_right = down,
+            c.KEY_LEFTCTRL => {
+                mods.ctrl_left = down;
+                // `up()`을 설정과 무관하게 먼저 부르는 것이 계약이다(`handleKey`와 같다).
+                if (value == 0) {
+                    if (taps.lctrl.up(time_us) and self.toggles.lctrl_tap) _ = self.toggleHangul();
+                } else {
+                    taps.lctrl.down(time_us);
+                    if (self.otherHolds(dev, .lctrl)) taps.lctrl.consumed = true;
+                }
+            },
+            c.KEY_RIGHTCTRL => mods.ctrl_right = down,
+            c.KEY_LEFTALT => mods.alt_left = down,
+            c.KEY_RIGHTALT => mods.alt_right = down,
+            c.KEY_LEFTMETA => mods.meta_left = down,
+            c.KEY_RIGHTMETA => mods.meta_right = down,
+            c.KEY_CAPSLOCK => if (value == 0) {
+                const tapped = taps.caps.up(time_us);
+                if (tapped and self.toggles.capslock_tap) {
+                    _ = self.toggleHangul();
+                } else self.caps_lock = !self.caps_lock;
+            } else {
+                taps.caps.down(time_us);
+                if (self.otherHolds(dev, .caps)) taps.caps.consumed = true;
+            },
+            else => modifier = false,
+        }
+        var then: AppAction = .none;
+        if (value == 2) {
+            then = .none;
+        } else if (value == 0 or modifier) {
+            then = .{ .key = .{ .code = code, .pressed = down, .mods = self.appMods() } };
+        } else {
+            const act = self.hangulLayer(code);
+            if (act) |a| switch (a) {
+                .bytes => |b| self.appendCommit(b),
+                else => {},
+            } else {
+                then = .{ .key = .{ .code = code, .pressed = true, .mods = self.appMods() } };
+                if (self.metaed()) if (self.tableChord(code)) |p| if (p != .close and p != .new_workspace) {
+                    then = .{ .pane = p };
+                };
+            }
+        }
+        const commit = self.takeCommit();
+        const after = self.hangul_buf.codepoint();
+        var step: ImeStep = .{ .then = then };
+        if (commit.len > 0 or before != after) step.ime = .{ .commit = Copy.Commit.init(commit), .preedit = after };
+        return step;
+    }
 };
 
 /// evdev 이벤트의 시각을 마이크로초 하나로 합친다(HI design 조사 5).
@@ -2005,6 +2126,8 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
         },
     };
 
+    // 셸의 키가 조합을 먹인다(WY-M5, design 결정 42) — 포커스가 옮겨 가면 이 조합은 셸 PTY의 것이다.
+    self.hangul_owner = .shell;
     const count = @as(usize, @intCast(n)) / ev_size;
     var written: usize = 0;
     var scrolled: usize = 0;
@@ -2129,8 +2252,9 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
 /// app 워크스페이스가 앞일 때의 읽기(WY-M0, design 결정 11). `readKeys`의 짝이고 키 하나는 `State.appKey`가
 /// 정한다. 클라이언트로 갈 키와 compositor가 먹을 명령을 따로 순서대로 모은다.
 ///
-/// tap(한/영)과 받아쓰기의 더블 탭은 배치마다 버린다(`watchEscape`와 같다). app에서 한/영은 안 돈다(결정 11) —
-/// app에서 누른 왼쪽 Ctrl이 셸에서 뗀 것으로 판정되면 셸에서 한/영이 저절로 뒤집힌다.
+/// tap(한/영)과 받아쓰기의 더블 탭은 배치마다 버린다(`watchEscape`와 같다). 텍스트 입력을 켜지 않은 창에서 한/영은
+/// 안 돈다(결정 11 · 40) — app에서 누른 왼쪽 Ctrl이 셸에서 뗀 것으로 판정되면 셸에서 한/영이 저절로 뒤집힌다.
+/// 켠 창(`ctx.ime`, WY-M5)에서는 키 하나를 `imeKey`가 정하고 tap을 배치 사이에 들고 간다.
 pub fn readKeysApp(self: *State, fd: c_int, ctx: Context) AppKeys {
     const ev_size = @sizeOf(c.struct_input_event);
     var raw: [ev_size * 64]u8 = undefined;
@@ -2145,19 +2269,38 @@ pub fn readKeysApp(self: *State, fd: c_int, ctx: Context) AppKeys {
         },
     };
 
-    self.taps = @splat(.{});
+    // 텍스트 입력을 켠 창이면(WY-M5, design 결정 40) tap을 배치 사이에 들고 간다 — 셸과 같은 한/영이다. 리셋은 키보드
+    // 포커스가 셸 ↔ 앱으로 바뀔 때(`resetTaps`, 결정 42). 켜지 않은 창은 WY-M4 그대로 배치마다 버린다. 그 창에 남은 앱
+    // 조합은 받을 곳이 없어 버린다(창이 텍스트 입력을 껐다).
+    if (ctx.ime) {
+        self.hangul_owner = .app;
+    } else {
+        self.taps = @splat(.{});
+        if (self.hangul_owner == .app) self.hangul_buf = .{};
+    }
     self.dictate_tap.reset();
     const count = @as(usize, @intCast(n)) / ev_size;
     var keyed: usize = 0;
     var paned: usize = 0;
     var bright: i32 = 0;
+    var redraw = false;
     var i: usize = 0;
     while (i < count) : (i += 1) {
         const ev: *align(1) const c.struct_input_event = @ptrCast(&raw[i * ev_size]);
         if (ev.type != c.EV_KEY or ev.code >= c.BTN_MISC) continue;
-        switch (self.appKey(ev.code, ev.value, ctx)) {
+        const step: State.ImeStep = if (ctx.ime) blk: {
+            const was_on = self.hangul_on;
+            const st = self.imeKey(ev.code, ev.value, eventMicros(ev), ctx);
+            if (self.hangul_on != was_on or st.ime != null) redraw = true;
+            break :blk .{ .ime = st.ime, .then = st.then };
+        } else .{ .then = self.appKey(ev.code, ev.value, ctx) };
+        if (step.ime) |m| if (keyed < self.app_keys.len) {
+            self.app_keys[keyed] = .{ .ime = m };
+            keyed += 1;
+        };
+        switch (step.then) {
             .key => |k| if (keyed < self.app_keys.len) {
-                self.app_keys[keyed] = k;
+                self.app_keys[keyed] = .{ .key = k };
                 keyed += 1;
             },
             .pane => |p| if (paned < self.panes.len) {
@@ -2172,6 +2315,7 @@ pub fn readKeysApp(self: *State, fd: c_int, ctx: Context) AppKeys {
         .keys = self.app_keys[0..keyed],
         .panes = self.panes[0..paned],
         .brightness = bright,
+        .redraw = redraw,
     };
 }
 
