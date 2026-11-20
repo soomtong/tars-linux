@@ -1,4 +1,4 @@
-# HANDOFF: App Layer(0.3) — WY-M6(호환 모드 · damage) 끝(`10d153c`) — WY의 TK 앞 몫 끝. 다음은 TK(툴킷) design. tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) — WY-M6 끝(`10d153c`). TK(툴킷) design · TK-M0 plan을 쓰고 TK-M0 단계 A(공유 모듈 뽑기) 구현 중. tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
 
 ## 목표
 
@@ -120,8 +120,10 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
       `devlayer/cache/<sha256>`에 손으로 두었다 — 캐시 없는 기계에서는 release 전까지 `make dev-layers`가 받기에서 멈춘다.
       release 방법 두 갈래: (가) 태그 push → Actions가 빌드 · 업로드(sha256이 바뀌어 manifest를 고치고 wayland 체인 한 번), (나) 로컬 tarball을
       `gh release create`로 올림(sha256 그대로). Actions workflow가 태그에서 함께 돌면 자산이 겹치니 (나)면 workflow를 고르게 손본다
-- [ ] 다음: TK(TARS 툴킷, 첫 앱 `tars-files`) — 새 서브프로젝트라 design부터(요구사항 결정 9 · R-TK* · R-KIT* · R-CA*, 로드맵 TK-M0~M5). 툴킷은
-      `tars_menu_v1`을 bind해 원래 모드(Super)로 받고, `damage_buffer`로 더티를 보낸다(WY-M6이 받을 준비). 그 뒤 CR-M0 → WY-M7(popup · 장식) → CR-M1
+- [ ] TK(툴킷): design `docs/specs/2026-11-20-tars-ui-toolkit-design.md`(결정 1~12 — `toolkit/` 독립 빌드, `shared/theme.zig` · `shared/glyph.zig`, z2d v0.13.2,
+      Pretendard 원본, TK-M0부터 `tars_menu_v1` bind, 옛 TK-M5를 서버 쪽 M5 · 툴킷 쪽 M6으로). plan `docs/plans/2026-11-20-tars-ui-toolkit-tk-m0.md`(단계 A 공유 모듈 ·
+      B 툴킷 · 창 층 · 데모 · C 체인 `toolkit` 36번째). 서브에이전트 `tk-m0`(Herdr pane `w3J:pF`, Opus)이 단계 A 중, 지시 · 보고는 세션 scratchpad `tk/task-a.md` · `report-a.md`.
+      그 뒤 CR-M0 → WY-M7(popup · 장식) → CR-M1
 - [ ] 녹화 B(사람 녹화 — strip + SDL3 column + 클립보드 + 한글, 조사 `wy-m5/research.md` 6절 끝에 보일 것)
 - [ ] 소개 페이지(`gh-pages`의 `data.js`)에 SW를 안 올렸다 — 사이트는 `main` 줄 기준(`commits`가 `rev-list --count main`)이고 SW는
       `app-layer-0-3`에만 있다. 0.3 줄이 `main`에 들어갈 때 올린다(사용자가 먼저 원하면 그때)
