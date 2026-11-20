@@ -1,4 +1,4 @@
-# HANDOFF: App Layer(0.3) — WY-M4(클립보드) 끝(`ca9f431`), WY-M5(한글) 단계 A 구현 중. tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) — WY-M5(한글) 끝(`6390798`), 다음 WY-M6(장식 · popup · damage · 호환 모드). tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
 
 ## 목표
 
@@ -22,6 +22,10 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 실제 파일과 대조한다. 기억 `feedback_herdr_subagents`.
 
 ## 완료된 작업 (2026-11-19~20, WY-M0 단계 C · WY-M1 착수 — 이 세션)
+
+- [x] WY-M5(design 결정 38~43, 서브에이전트 `wy-m5` — 끝나고 pane 닫음): A `732d1cf` text-input-v3 1 · 객체 상태 · enter/leave 순서 ·
+      `tars-wl-test --text-input`, B `6390798` 켠 창에서만 셸의 한글 층(오토마타 하나 — `input.State`), 먹은 키는 `wl_keyboard`로 안 감, 확정이 키보다 먼저,
+      `focusTo`가 포커스를 잃은 창에 조합 확정. wayland 판정 26~28. 루트 게이트 35/35 첫 판(`out/gate-logs/20261120-062542`)
 
 - [x] WY-M4(design 결정 32~37, plan `53b0c4d`, 서브에이전트 `wy-m4` — 끝나고 pane 닫음): A `d07b7ea` `wl_data_device_manager` 2 · 앱 → 셸 즉시 받기
       (파이프 · `addFd` · 2초 · 1 MiB) · `tars-wl-test --copy`, B `ca9f431` 셸 → 앱 offer(키보드 enter 앞) · `receive` 곧바로 쓰기 · SIGPIPE 무시(셸 자식은
@@ -112,9 +116,8 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
       `devlayer/cache/<sha256>`에 손으로 두었다 — 캐시 없는 기계에서는 release 전까지 `make dev-layers`가 받기에서 멈춘다.
       release 방법 두 갈래: (가) 태그 push → Actions가 빌드 · 업로드(sha256이 바뀌어 manifest를 고치고 wayland 체인 한 번), (나) 로컬 tarball을
       `gh release create`로 올림(sha256 그대로). Actions workflow가 태그에서 함께 돌면 자산이 겹치니 (나)면 workflow를 고르게 손본다
-- [ ] WY-M5(한글): design 결정 38~43 · plan `docs/plans/2026-11-20-tars-wayland-server-wy-m5.md`. 서브에이전트 `wy-m5`(Herdr pane `w3J:pD`, Opus)이
-      단계 A(text-input xml · protocol · `tars-wl-test --text-input`, 키 경로 불변)를 하는 중, 지시 · 보고는 세션 scratchpad `wy-m5/task-a.md` · `report-a.md`.
-      다음 단계 B(오토마타 연결 · 먹은 키 안 보냄 · 포커스 이동 확정 · wayland 판정 26~28)
+- [ ] WY-M6(design milestone 표: `xdg-decoration` 서버 쪽 장식 · `xdg_popup` · damage 부분 blit · 호환 모드 — 끝나는 조건 "popup 위치, 장식의 좌표 색,
+      호환 모드의 키 판정"): 아직 조사 전. 호환 모드(요구사항 결정 3 — app의 Cmd → Ctrl)가 SDL · GTK 붙여넣기의 전제다(carryover). 녹화 B(사람)도 남음
 - [ ] 소개 페이지(`gh-pages`의 `data.js`)에 SW를 안 올렸다 — 사이트는 `main` 줄 기준(`commits`가 `rev-list --count main`)이고 SW는
       `app-layer-0-3`에만 있다. 0.3 줄이 `main`에 들어갈 때 올린다(사용자가 먼저 원하면 그때)
 - [ ] `app-layer-0-3`의 이 세션 commit들(`cac1858`부터)은 push하지 않았다 — 사용자가 원하면 push

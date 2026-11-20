@@ -2,7 +2,7 @@
 
 Date: 2026-11-20
 Design: `docs/specs/2026-11-19-tars-wayland-server-design.md`(결정 38~43), 요구사항 R-WY-9 · R-KEY-6
-Status: 진행 중. 브랜치 `app-layer-0-3`.
+Status: 끝(2026-11-20). 브랜치 `app-layer-0-3`.
 
 ## 확인(조사 `wy-m5`, 세션 scratchpad `wy-m5/research.md` — HEAD `1cb942a`, wayland-protocols 1.44, SDL 3.2.10 소스)
 
@@ -85,3 +85,14 @@ wayland 부팅 1, 판정 25 뒤 · 9 앞:
    `get_text_input`의 enter · `imeActive` · `imeSend`(부르는 자리 없음) · `tars-wl-test --text-input`. 키 경로 불변. 체인 단독 terminal · wayland(413초) ·
    hangul · pointer PASS, verify mismatch 0. 디스크 없는 부팅은 `hangul layout=shin_pcs … toggles=hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin`.
    plan과 다른 것: `wl> ti enable/disable` 줄은 commit뿐 아니라 enter · leave · 창 사라짐 · destroy로 current가 바뀔 때도 찍힌다.
+2. 단계 B `6390798`: `Context.ime` · `State.imeKey`(켠 창에서 셸의 `hangulLayer`를 그대로, tap은 배치를 넘어 셸처럼) · `AppOut = union { key, ime }`(128) ·
+   `focusTo`(키보드 포커스를 옮기는 단 하나의 길 — 앱 조합을 옛 창에 확정, 셸 ↔ 앱이면 tap 리셋) · `openApp` 머리의 셸 조합 확정 · `input_test` 94~99 ·
+   wayland 판정 26 · 27(가 `Cmd+[`, 나 셸 클릭) · 28 · 도움말 두 줄. 체인 단독 wayland 436초 · terminal · hangul · pointer · display · pane · copy PASS.
+   서버 줄: `wl> ime to=6 commit=(none) preedit=한` → `commit=한 preedit=ㄱ` → `commit=ㄱ preedit=(none)` 바로 다음 `wl> key code=57 state=1 to=6`.
+3. plan과 달라진 것: 셸 조합의 확정은 `syncFocus` 한 자리가 아니라 포커스를 바꾸는 자리마다다(바퀴 끝에서는 옛 셸 pane을 모른다) — design 결정 42를
+   고쳤다. 판정 27을 둘로(Meta chord 길과 `focusTo` 길). 클라이언트 셈은 판정 27 끝 한 줄 `c27-4-0-0-2-2`.
+4. 실측 7: SDL에서 한 done의 commit + preedit은 잴 수 없다 — 저장소에 SDL 텍스트 입력 앱이 없다. 소스상 commit → `SDL_EVENT_TEXT_INPUT`,
+   preedit → `SDL_EVENT_TEXT_EDITING`.
+5. 루트 게이트 35/35 첫 판 PASS(prebuild 361초 + lanes 1,650초, `out/gate-logs/20261120-062542`), verify mismatch 0.
+
+남은 걱정은 `docs/guides/carryover.md`의 "WY-M2 ~ WY-M5가 남긴 것" 절로 옮겼다.
