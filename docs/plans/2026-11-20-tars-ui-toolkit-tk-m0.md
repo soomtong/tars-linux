@@ -63,3 +63,12 @@ design의 확인 절 1~9(조사 `tk-m0`, 세션 scratchpad `tk/research.md`)가 
 1. 게스트(TCG)의 `tk> draw us=` — 616 × 752 통째(둥근 사각형 + 글자). 2. 결정 4의 화면 판정과 감마 값. 3. 글꼴 sha256 · initrd gzip 증가분.
 4. z2d를 끌어들인 호스트 검사의 백엔드 · 메모리. 5. `tars-tk-demo` 크기(strip 뒤)와 NEEDED. 6. 단계 A 뒤 terminal 바이너리 크기 차이.
 7. 첫 configure 크기와 `Cmd+R` 순환의 크기. 8. `/vendor/fonts/`가 로그인 사용자 uid로 읽히는가(체인은 root — 설치된 기계에서 볼 자리는 carryover).
+
+## 결과
+
+구현은 `tk-m0`(Herdr, Opus — 조사도 같은 에이전트), lead는 대조 · 게이트 · commit.
+
+1. 단계 A `2a1c245`: `shared/theme.zig`(셸 색 상수 열여덟 + 셀 기본색 둘, 값 그대로 — lead가 지운 리터럴과 기계로 대조, 다름 0) · `shared/glyph.zig`(stb 한 겹 —
+   `Size = pixel_height | em`, 서브픽셀 x, f32 advance, kern). `font.zig`는 감싸개(16 px · unifont · sprite · 정수 셀). `stbtt_GetCodepointBitmap`은
+   v1.26에서 서브픽셀 0의 `…BitmapSubpixel`을 그대로 부르므로 coverage가 같다. 체인 단독 terminal · pane · hangul · copy · pointer · wayland PASS,
+   루트 게이트 35/35(prebuild 475초 + lanes 1,615초, `out/gate-logs/20261120-104410`), verify mismatch 0. strip 뒤 terminal +128 B.
