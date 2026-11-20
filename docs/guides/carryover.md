@@ -341,3 +341,14 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   `.bottom`·`.delta`이지 `.active`·`.delta_row`가 아니다. 그리고 `.pin`이
   아예 없다.
 - 렌더가 PTY 분기 안에만 있었다. `needs_redraw`로 루프 끝에 뺐다.
+
+## WY-M2 · WY-M3이 남긴 것 (Wayland 서버, 그대로 이월)
+
+- SDL은 렌더러가 GL 창을 바라 창을 한 번 지웠다 다시 짓는다 — column이 한 번 깜빡인다. 첫 commit 뒤 한 바퀴 기다려 자리를 정하면 줄 수 있다.
+- vsync SDL 창은 숨은 동안 frame `done`을 못 받아 swap에서 멈춘다 — 숨은 창의 `Cmd+Q`는 ping에 못 답해 SIGKILL이 된다.
+- 커서 surface의 그림은 합성하지 않는다(terminal의 화살표 그대로, `set_cursor(NULL)`이면 숨김).
+- `invalid_size`(버퍼가 buffer_scale의 배수가 아님)는 xml대로 모든 surface에 강제한다. SDL은 커서 surface에 `set_buffer_scale(S)`를 보낸다 —
+  테마 커서 크기가 배율의 배수가 아니면 배율 2 화면에서 그 SDL 창이 끊긴다. 체인은 배율 1의 SDL만 본다. 실기 hidpi에서 SDL 창이 뜨면 볼 자리.
+- SDL exclusive fullscreen(viewport 없음)은 `set_buffer_scale(mode.w / output_w)`를 보낸다 — 우리 `output_w`는 논리라 모드가 그 정수 배가
+  아니면 `invalid_size`. 쓰는 클라이언트가 없다(viewporter는 결정 31로 안 낸다).
+- 배율 2 화면의 bs 1 · bs 2 column 통째 프레임 시간을 같은 조건에서 맞댄 숫자는 없다(TCG에서 셸 다시 그리기 50~67 ms에 묻힌다).

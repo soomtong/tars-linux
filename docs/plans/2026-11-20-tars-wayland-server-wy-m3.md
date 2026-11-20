@@ -2,7 +2,7 @@
 
 Date: 2026-11-20
 Design: `docs/specs/2026-11-19-tars-wayland-server-design.md`(결정 5 · 27~31)
-Status: 진행 중. 브랜치 `app-layer-0-3`.
+Status: 끝(2026-11-20). 브랜치 `app-layer-0-3`.
 
 ## 확인(조사 `wy-m3`, 세션 scratchpad `wy-m3/research.md` — HEAD `593cb94`의 코드와 vendored xml)
 
@@ -104,3 +104,15 @@ hidpi 부팅 A(배율 2)에 판정 6 · 7, 부팅 B(배율 1)에 판정 8. 포�
    짝수 행 · 열만 남기는 솎기라서.
 3. 위험으로 남긴 것: SDL은 커서 surface에 `set_buffer_scale(S)`를 보낸다 — 테마 커서 크기가 S의 배수가 아니면 `invalid_size`로 끊긴다
    (배율 1에선 안 나온다). SDL exclusive fullscreen(viewport 없음)은 `set_buffer_scale(mode.w / output_w)`를 보낸다 — 쓰는 클라이언트 없음.
+4. 단계 B `f2a81c2`: `drm.present` = `stage` + `flush`, `presentComposed`(늘리기 → 물리 합성 clip ∩ 사각형 → 화살표 마스크 → 내보내기)를 셸 프레임 ·
+   `renderApp` · 화살표만 옮기는 바퀴 셋이 함께 쓴다. `paintPhys`는 `last_fit`이 아니라 지금 버퍼로 자리를 다시 센다(그리기가 하한으로 미뤄진
+   사이 화살표 바퀴가 오면 옛 자리로 작아진 버퍼를 읽지 않게). hidpi 판정 6 · 7a~7e · 8, `ppm_checker`(흰색 · `--color` 고정 — 단계 A의
+   한 색 화면에서는 정확히 반 1,180,416이 bad), 부팅 A에 USB 마우스. 체인 단독 hidpi 195초 · terminal · wayland · display · pointer ·
+   fullscreen 모두 첫 회차 PASS, verify mismatch 0.
+5. 실측 3(TCG): Cmd+R 뒤 bs 2 창 1400 × 848 전체(물리 4,748,800 픽셀)를 옮긴 통째 프레임 50.6 ms — 셸을 다시 그리는 값(50~67 ms)에 묻혀
+   드러나지 않는다. 화살표만 옮기는 바퀴는 1,824 픽셀(화살표 상자 둘 24 × 38 × 2)만 옮긴다. 줄 `wl> frame full …` · `wl> phys arrow …`는
+   terminal 하나에 처음 네 번만.
+6. 루트 게이트 35/35 첫 판 PASS(prebuild 350초 + lanes 1,560초, `out/gate-logs/20261120-014634`), verify 줄 14,503 중 mismatch 0.
+   HS-M0의 PASS 줄은 "HS-M0 · WY-M3 — …"이다.
+
+남은 걱정은 `docs/guides/carryover.md`의 "WY-M2 · WY-M3이 남긴 것" 절로 옮겼다.
