@@ -268,8 +268,8 @@ GUEST_TOOLS=(
   usr/bin/pgrep:usr/bin/pgrep
   usr/bin/kill:usr/bin/kill
 
-  # ── 층 7 · 디스크를 만드는 도구 3 ─────────────────────────────────────
-  # DI-M0. tars-install이 fork+execve로 부르는 셋이다(DI design 결정 3).
+  # ── 층 7 · 디스크를 만드는 도구 5 ─────────────────────────────────────
+  # DI-M0. tars-install이 fork+execve로 부르는 셋이다(DI design 결정 3). PT-M0이 사람이 치는 둘을 끝에 더했다.
   # PATH가 /usr/local/bin:/usr/bin:/bin이라(environ.zig) 셋 다 오른쪽을 /usr/bin에 둔다 —
   # dhcpcd가 층 5에서 같은 이유로 자리를 옮겼다.
   #
@@ -287,11 +287,21 @@ GUEST_TOOLS=(
   #                               libblkid · libuuid는 sfdisk와 겹치고
   #                               libcom_err는 이미 있었다
   # 일곱이 2,129,864바이트, 도구 셋까지 2,502,400바이트, initrd는 1,100,550
-  # 바이트 늘었다(40,735,276 → 41,835,826). libmount는 안 온다 — libfdisk가
-  # 안 부른다. Dockerfile이 libmount1을 받는 것은 blkid·lsblk 때문이다.
+  # 바이트 늘었다(40,735,276 → 41,835,826). 셋은 libmount를 안 부른다 — libfdisk가
+  # 안 부른다. Dockerfile이 libmount1을 받는 것은 blkid·lsblk 때문이었다(아래 cfdisk가 처음 쓴다).
   usr/sbin/sfdisk:usr/bin/sfdisk
   usr/sbin/mkfs.fat:usr/bin/mkfs.vfat
   usr/sbin/mke2fs:usr/bin/mke2fs
+
+  # PT-M0. 사람이 치는 파티션 도구 둘 — sfdisk와 한 패키지(fdisk:amd64, 이미 sysroot에 있다)이고 한 엔진(libfdisk)이다
+  # (PT design 결정 1). tars-install은 안 부른다. initrd 기준 B — 설치 전(`--beside`로 둘 자리 만들기) · 복구 때 쓰고, 그때
+  # 개발 도구 층은 없거나 못 믿는다(결정 2). 오른쪽이 /usr/bin인 이유는 위 셋과 같다.
+  #   fdisk     178,616바이트   NEEDED가 sfdisk와 같다 — 새 라이브러리 0개. `fdisk -l`이 디스크 목록도 된다(lsblk가 없다)
+  #   cfdisk    113,400바이트   화면형. 새 라이브러리 1개 — libmount(그 뒤의 libblkid · libselinux · libpcre2-8은 이미 있다).
+  #                             libncursesw는 alsamixer(층 14)가 이미 들였다
+  # tools 체인 검사 29가 /tmp의 파일 이미지로 셋(sfdisk가 만들고 · fdisk -l이 읽고 · cfdisk가 그리고 q로 끝난다)을 친다.
+  usr/sbin/fdisk:usr/bin/fdisk
+  usr/sbin/cfdisk:usr/bin/cfdisk
 
   # ── 층 8 · 시계 2 ──────────────────────────────────────────────────────
   # TD-M1. init의 clock.zig가 fork한 자식이 /usr/bin/chronyd로 execve한다.

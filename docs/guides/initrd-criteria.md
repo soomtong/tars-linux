@@ -47,3 +47,4 @@ initrd가 이긴다(TP design 결정 4). 같은 이름이 다른 경로에 있�
 | 날짜 | 무엇 | 판정 |
 |---|---|---|
 | 2026-11-05 | 사용자의 터미널 유틸리티 목록(TP design "터미널 유틸리티" 표) | initrd에 lsoff · doge(B). 이미 있던 열(bat · duf · eza · fd · fzf · hyperfine · jq · ripgrep · sd · tree)은 C. 나머지는 개발 도구 층. hexyl(B 후보)은 사용자가 개발 도구 층으로 |
+| 2026-11-20 | 사람이 치는 파티션 도구(PT design) | initrd에 fdisk · cfdisk(B — 설치 전 · 복구). sfdisk(A)와 한 패키지 · 한 엔진이라 같은 일을 하는 gdisk · cgdisk · parted는 안 넣었다. 새 공용 라이브러리는 libmount 하나(cfdisk) |
