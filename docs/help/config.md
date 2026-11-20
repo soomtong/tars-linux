@@ -63,6 +63,20 @@ git config --global user.name '이름'
 git config --global user.email 'me@example.com'
 ```
 
+## 디스크와 파티션
+
+파티션 도구 둘이 늘 들어 있습니다. 둘 다 바꾼 것을 마지막에 쓰겠다고 할 때만 디스크에 씁니다.
+
+```sh
+sudo fdisk -l             # 디스크마다 이름 · 크기 · 파티션 표를 봅니다
+sudo cfdisk /dev/nvme0n1  # 화면에서 고릅니다 — 방향키, [ Write ]에 yes, [ Quit ]
+sudo fdisk /dev/nvme0n1   # 한 글자 명령입니다 — m 도움말, p 보기, w 쓰고 끝, q 버리고 끝
+```
+
+TARS는 자기 파티션을 GPT 이름 `TARS-BOOT` · `TARS-CONFIG` · `TARS-HOME`으로 찾습니다. 이 셋의 이름을 바꾸거나
+지우면 다음 `tars-install`이 이 디스크를 다르게 읽습니다(갱신 대신 새 설치로 가는 등). 다른 운영체제 옆에 둘 자리를 만들
+때는 빈 공간만 남기고, 나머지는 `tars-install --beside`에 맡기세요.
+
 ## 셸이 안 뜨면
 
 셸 설정에 넣은 한 줄이 셸을 죽이면, 세 번 죽은 뒤 설정 파일 없이 한 번 더 뜹니다. 그 셸에서 설정 파일을 고치세요.

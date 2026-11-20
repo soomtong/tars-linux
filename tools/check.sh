@@ -1003,13 +1003,69 @@ if ! wait_for_screen 'ce-seccomp=2( |$)'; then
 fi
 echo "cgroup2 has cpu, io, memory and pids; user namespaces and seccomp are there"
 
+# ── 검사 29: 파티션 도구 셋이 파일 이미지의 GPT를 만들고 읽고 그린다 (PT-M0) ──────────
+#
+# fdisk · cfdisk는 sfdisk와 한 패키지 · 한 엔진(libfdisk)이다(PT design 결정 1). 이 체인에는 디스크가 없다 — 셋 다 일반
+# 파일을 디스크처럼 다루므로 /tmp(RAM)의 8MiB 파일에 sfdisk로 GPT 한 칸을 만들고 나머지 둘이 그것을 읽는다. initrd에
+# truncate · dd가 없어 head -c로 만든다.
+#
+# 판정 글자는 출력에만 생긴다.
+#   fdisk --version; cfdisk --version   친 줄에 `from`이 없다. 출력 첫 줄은 화면 줄 머리에서 `fdisk from util-linux`,
+#                                       둘째 줄은 `cfdisk from util-linux` — 둘 다 라이브러리를 다 풀었다는 뜻이다
+#                                       (cfdisk는 libmount · libncursesw까지)
+#   head … ; echo , | sfdisk … ; echo pt-mk=$status   출력은 pt-mk=0
+#   fdisk -l /tmp/pt.img                친 줄은 `pt.img`에서 끝난다. 출력은 `Disklabel type: gpt`와 첫 칸 `…img1  2048 …`
+#   cfdisk /tmp/pt.img                  화면을 통째로 가져간다. 머리 줄의 `Label: gpt`(fdisk -l의 `Disklabel type`과
+#                                       대소문자 · 모양이 다르다)를 본 뒤 `q` — 쓰지 않고 끝난다
+#   echo pt-back=$status                cfdisk가 끝나고 셸이 돌아왔다. 출력은 pt-back=0
+#
+# 화면을 가져가는 대화형은 지금까지 목록 검사까지만 받았다(htop · btop · alsamixer — 끝내지 못하면 체인이 매달린다).
+# cfdisk는 화면을 본 뒤라 입력을 기다리는 중이고 `q` 한 키로 끝난다 — 그래서 끝까지 본다.
+echo "=== typing 'fdisk --version; cfdisk --version' ==="
+type_keys f d i s k spc minus minus v e r s i o n semicolon spc c f d i s k spc minus minus v e r s i o n ret
+if ! wait_for_screen '(^|\| )fdisk from util-linux'; then
+  fail "fdisk did not print its version" "terminal: screen>" "error while loading" "Unknown command"
+fi
+if ! wait_for_screen 'cfdisk from util-linux'; then
+  fail "cfdisk did not print its version (libmount, libncursesw?)" "terminal: screen>" "error while loading" "Unknown command"
+fi
+echo "=== typing 'head -c 8M /dev/zero > /tmp/pt.img; echo , | sfdisk -q -X gpt /tmp/pt.img; echo pt-mk=\$status' ==="
+type_keys h e a d spc minus c spc 8 shift-m spc slash d e v slash z e r o spc shift-dot spc \
+          slash t m p slash p t dot i m g semicolon spc \
+          e c h o spc comma spc shift-backslash spc s f d i s k spc minus q spc minus shift-x spc g p t spc \
+          slash t m p slash p t dot i m g semicolon spc \
+          e c h o spc p t minus m k equal shift-4 s t a t u s ret
+if ! wait_for_screen 'pt-mk=0( |$)'; then
+  fail "sfdisk did not write a GPT into /tmp/pt.img" "terminal: screen>" "pt-mk=" "sfdisk:"
+fi
+echo "=== typing 'fdisk -l /tmp/pt.img' ==="
+type_keys f d i s k spc minus l spc slash t m p slash p t dot i m g ret
+if ! wait_for_screen 'Disklabel type: gpt'; then
+  fail "fdisk -l did not read the GPT" "terminal: screen>" "fdisk:"
+fi
+if ! wait_for_screen 'img1[[:space:]]*2048'; then
+  fail "fdisk -l did not list the partition sfdisk made (want 'img1  2048')" "terminal: screen>" "fdisk:"
+fi
+echo "=== typing 'cfdisk /tmp/pt.img' ==="
+type_keys c f d i s k spc slash t m p slash p t dot i m g ret
+if ! wait_for_screen 'Label: gpt'; then
+  fail "cfdisk did not draw its screen for /tmp/pt.img" "terminal: screen>" "cfdisk:"
+fi
+type_keys q
+echo "=== typing 'echo pt-back=\$status' ==="
+type_keys e c h o spc p t minus b a c k equal shift-4 s t a t u s ret
+if ! wait_for_screen 'pt-back=0( |$)'; then
+  fail "the shell did not come back with 0 after 'q' in cfdisk" "terminal: screen>" "pt-back="
+fi
+echo "sfdisk wrote a GPT into a file, fdisk -l read it back, and cfdisk drew it and quit on q"
+
 # ── 검사 19: 음성 확인 — 위의 열하나 전부에 대해 ────────────────────
 #
 # fish는 못 찾은 명령에 `Unknown command`를 낸다. 이 검사가 맨 뒤에 있는
 # 이유가 그것이다 — ls · ps · awk · sed · eza · fd · jq · git · vi · fzf ·
 # zoxide 열하나를 다 친 뒤에 한 번 보면 열하나 전부의 음성 확인이 된다.
 # UT-M0 때는 ls 하나뿐이라 바로 뒤에 있었다.
-# 그 뒤에 더해진 것(LB-M3의 nc, GE-M0의 which, LT-M0의 ping)도 같은 그물에 걸린다.
+# 그 뒤에 더해진 것(LB-M3의 nc, GE-M0의 which, LT-M0의 ping, PT-M0의 fdisk · cfdisk)도 같은 그물에 걸린다.
 #
 # 번호가 11 → 17 → 19로 뛴 것은 앞에 검사가 끼워졌기 때문이다(UT-M3이
 # 다섯, SM-M0이 둘). 음성 확인은 언제나 맨 뒤이고, 앞에 무엇이 늘든 이 검사는

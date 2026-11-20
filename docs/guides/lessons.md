@@ -394,6 +394,13 @@ random: crng init done`으로 빨갰고(`wait_for_at`의 `ink=118$`), 같은 판
 함수(배터리의 `cellText`)가 있으면, 게이트의 기대 글자는 사람이 적지 않고 그 함수의 호스트 검사가 찍은 값이나 실측 줄에서
 베낀다. 판정 글자를 따옴표로 감싸 찍는 것(`cell=" 50%"`)도 같은 이유다 — 따옴표가 없으면 로그에서도 앞 공백이 안 보인다.
 
+### 클라우드 세션(amd64)에서 체인을 돌린다 (PT-M0)
+
+claude.ai의 클라우드 세션은 amd64 · KVM 없음이고, ghcr의 이미지는 arm64 전용이라 `exec format error`로 안 돈다. Dockerfile의 호스트 몫
+둘(크로스 gcc 패키지 이름 · zig tarball)만 바꾼 사본을 scratchpad에서 구우면 체인 단독이 선다(tools 2분 50초 남짓, 커널 처음 빌드는 따로).
+세션 프록시를 지나는 법(CA 층 · Docker Hub 429 · ghostty archive · zig 의존 캐시)은 기억 `project_partition_tools`의 "배운 것" 4가 절차다.
+`devtools` · `pm` · `mise`처럼 바깥 망 · 묶음이 필요한 체인과 루트 게이트 전체는 거기서 끝까지 못 간다 — 사용자의 맥에서 돈다.
+
 ## 범용 명령
 
 끝난 milestone의 측정 하네스는 여기 없다 — 각 plan의 Task에 글자 그대로 있다.

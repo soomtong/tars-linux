@@ -1,4 +1,4 @@
-# HANDOFF: App Layer 비전 · 0.2.3 프리릴리스(2026-11-18) — 0.3은 `app-layer-0-3`, `main`은 0.2.x 줄
+# HANDOFF: Partition Tools PT-M0(2026-11-20, 클라우드 세션 · PR) · App Layer 비전 · 0.2.3 프리릴리스(2026-11-18) — 0.3은 `app-layer-0-3`, `main`은 0.2.x 줄
 
 ## 목표
 
@@ -12,6 +12,16 @@
 `app-layer-0-3` — App Layer(0.3)의 브랜치. `v0.2.3` 뒤의 `main`에서 갈라졌고 origin에 있다. SW · WY · TK · CR은 전부 여기서 한다.
 `main` — 0.2.x 줄. 0.2.3 다음의 작업은 언제든 `main`으로 돌아와 잇는다(사용자 2026-11-18, 기억 `project_branch_lines`).
 `gh-pages`(worktree `../tars-linux-pages`) — `0186f3e` 그대로. 0.2.3은 프리릴리스라 `releases`에 안 넣었다.
+
+## 완료된 작업 (2026-11-20, PT-M0 — 클라우드 세션)
+
+사용자: "디스크 파티션 프로그램이 탑재되어 있나요?" → "쉽게 쓸 수 있는 파티션 프로그램은?" → "cfdisk와 fdisk 넣는 plan 작성해 주세요.
+이어서 구현을 하시고 PR해주세요." 브랜치 `claude/friendly-goldberg-n6f04k`(`main`의 `8f429eb`에서), PR로 `main`에.
+
+- [x] design `docs/specs/2026-11-20-tars-partition-tools-design.md` · plan `docs/plans/2026-11-20-tars-partition-tools-pt-m0.md`
+- [x] `kernel/guest_tools.sh` 층 7에 `fdisk` · `cfdisk`(Dockerfile 변경 0 — `fdisk:amd64`가 이미 sysroot에), 새 라이브러리 libmount 하나
+- [x] `tools/check.sh` 검사 29(파일 이미지로 sfdisk → `fdisk -l` → cfdisk 화면 · `q`), mutation 하나, `tars-help config` "디스크와 파티션"
+- [x] 체인 tools · install · dualboot · home PASS, `make quick` PASS — amd64 Dockerfile 사본에서(기억 `project_partition_tools` 배운 것 4)
 
 ## 완료된 작업 (2026-11-18, 이 세션)
 
@@ -40,6 +50,8 @@
 
 ## 남은 작업
 
+- [ ] PT-M0: 사용자의 맥에서 루트 게이트 한 번(클라우드 세션은 devtools · pm · mise를 못 돌린다) → PR 머지. 소개 페이지(`gh-pages`의
+      `data.js`)의 기능 목록에 "파티션 도구 fdisk · cfdisk" — 별도 브랜치라 PR에 안 들었다
 - [ ] 실기(사용자, 맥북 에어 2011): 링크 칸 — Country 요소를 내는 집 AP면 `link> nl80211 … ssid_len=` 줄(GET_INTERFACE 길), 내장
       BCM43224의 operstate 순서. 유선은 USB 동글로. 결과는 `project_link_status`의 "남은 것"에
 - [ ] 실기: GPU 데모 판 설치 → 첫 패널의 데모, `/tmp/gpu-demo.log`의 `gl` 줄이 crocus인가 · frame 수. `carryover.md`의 DY 절

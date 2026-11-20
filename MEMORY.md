@@ -115,6 +115,7 @@ init · 설정 · 전원
 - [MacBook Hardware](docs/decisions/project_macbook_hardware.md) — 맥 트랙패드는 bcm5974 없이 아예 안 움직인다, ACPI_SBS, HID_APPLE은 끈 채(MB-M0, 2026-11-05)
 - [HiDPI Scale](docs/decisions/project_hidpi_scale.md) — 논리 그림자 + 늘리는 present, display_scale(HS-M0, 2026-11-05)
 - [Dual Boot](docs/decisions/project_dual_boot.md) — tars-install --beside · 파티션 지정, TARS 파티션은 GPT 이름으로, 포맷 전 대조 둘(DB-M0 · M1, 2026-11-05)
+- [Partition Tools](docs/decisions/project_partition_tools.md) — initrd에 fdisk · cfdisk(층 7, 기준 B), 새 라이브러리 libmount 하나, tools 검사 29가 파일 이미지로 셋을 친다 · 클라우드 세션(amd64)에서 체인 돌리는 법(PT-M0, 2026-11-20)
 - [Password Feedback](docs/decisions/project_password_feedback.md) — 비밀번호 칸의 `*`, secret.zig, Ctrl+C를 바이트로(PW-M0, 2026-11-05)
 - [Power Commands](docs/decisions/project_power_commands.md) — reboot · poweroff · shutdown · suspend 스크립트, 인자가 권한보다 먼저(RB-M0, 2026-11-05)
 - [Laptop Power](docs/decisions/project_laptop_power.md) — i915 · S3 · 밝기, rootfs가 tmpfs로 바뀌는 함정(LP-M0~M2, 2026-11-05)
