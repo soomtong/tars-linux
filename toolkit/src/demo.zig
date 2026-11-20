@@ -8,6 +8,12 @@
 //! - "안녕": 사각형 가운데(폭은 잰 값, baseline은 사각형 세로 가운데 + ascent/2 근사).
 //! - 표본: 사각형 아래 24부터, 왼쪽 24에서. 13 px 네 줄 → 8 띄우고 14 px 네 줄. 줄 간격은 글꼴의 줄 높이(올림).
 //!
+//! - 면(TK-M1 단계 A): 왼쪽 24, 위 300에 64 × 32 `TK_TEXT` 면. 처음에는 불투명도 0(안 보임)이고 `space`가 0 ↔ 1을 바꾼다 — 부분 그리기
+//!   · 버퍼 나이 · 부분 blit을 실제로 지나게 하는 스위치다(단계 B가 이것을 애니메이션으로 바꾼다).
+//!
+//! TK-M1부터 그림은 레이어 트리다(루트 = 바탕, 사각형 레이어 + "안녕" content, 표본 레이어 + content, 면). 창이 준 clip 안만 다시
+//! 그린다 — 자리와 색은 TK-M0과 같다.
+//!
 //! 인자: `--font PATH`(기본 `/vendor/fonts/Pretendard-Regular.otf`) · `--gamma G`(기본 `tk.text.GAMMA` 1.8, 0.5..3.0).
 
 const std = @import("std");
@@ -24,6 +30,17 @@ const SAMPLE = [_][]const u8{
 const RECT_H: u32 = 96;
 const RECT_MAX_W: u32 = 320;
 const MARGIN: u32 = 24;
+/// 표본 여덟 줄이 차지하는 높이(논리): 13 px 줄 높이 16 × 4 + 띄움 8 + 14 px 17 × 4 = 140(tk_test가 줄 높이 16 · 17을 지킨다). 위아래로
+/// 글자가 넘칠 자리 4씩을 더해 레이어를 잡는다 — content는 레이어 밖에 그리면 안 된다(layer.zig).
+const SAMPLES_H: u32 = 4 * 16 + 8 + 4 * 17;
+const SAMPLES_PAD: u32 = 4;
+/// 단계 A의 면(위 머리 주석).
+const FACE_X: f32 = 24;
+const FACE_Y: f32 = 300;
+const FACE_W: f32 = 64;
+const FACE_H: f32 = 32;
+/// evdev KEY_SPACE.
+const KEY_SPACE: u32 = 57;
 
 const App = struct {
     io: std.Io,
@@ -34,45 +51,85 @@ const App = struct {
     scale: u32 = 0,
     small: ?tk.Face = null,
     body: ?tk.Face = null,
+    tree: tk.Tree,
+    root: *tk.Layer = undefined,
+    rect: *tk.Layer = undefined,
+    samples: *tk.Layer = undefined,
+    face: *tk.Layer = undefined,
 
     fn faces(self: *App, s: u32) !void {
         if (self.scale == s) return;
         inline for (.{ &self.small, &self.body }) |f| if (f.*) |*x| x.deinit();
+        self.small = null;
+        self.body = null;
         const fs: f32 = @floatFromInt(s);
         self.small = try tk.Face.init(self.alloc, self.font, @as(f32, @floatFromInt(theme.TK_FONT_SMALL)) * fs);
         self.body = try tk.Face.init(self.alloc, self.font, @as(f32, @floatFromInt(theme.TK_FONT)) * fs);
         self.scale = s;
     }
 
-    fn draw(ctx: *anyopaque, frame: tk.window.Frame) anyerror!void {
-        const self: *App = @ptrCast(@alignCast(ctx));
-        const s = frame.scale;
-        try self.faces(s);
-        const c = frame.canvas;
-        c.fill(theme.TK_BG);
+    fn build(self: *App) !void {
+        const t = &self.tree;
+        self.root = try t.create(.{ .background = theme.TK_BG });
+        self.rect = try t.create(.{ .background = theme.TK_ACCENT, .radius = @floatFromInt(theme.TK_RADIUS), .content = .{ .ctx = self, .draw = drawHello } });
+        self.samples = try t.create(.{ .content = .{ .ctx = self, .draw = drawSamples } });
+        self.face = try t.create(.{ .frame = .{ .x = FACE_X, .y = FACE_Y, .w = FACE_W, .h = FACE_H }, .background = theme.TK_TEXT, .opacity = 0 });
+        try self.root.addChild(self.rect);
+        try self.root.addChild(self.samples);
+        try self.root.addChild(self.face);
+        t.setRoot(self.root);
+    }
 
-        const W = frame.width / s;
+    /// 창 층의 resize — 루트를 configure 크기로, 자식들을 그 폭에 맞춰(TK-M0과 같은 자리).
+    fn resize(ctx: *anyopaque, width: u32, height: u32, s: u32) void {
+        const self: *App = @ptrCast(@alignCast(ctx));
+        self.tree.setScale(s);
+        const W = width / s;
+        const H = height / s;
         const rw = @min(if (W > 2 * MARGIN) W - 2 * MARGIN else W, RECT_MAX_W);
         const rx = (W - rw) / 2;
-        const ry = MARGIN;
-        try c.roundedRect(self.io, self.alloc, @floatFromInt(rx * s), @floatFromInt(ry * s), @floatFromInt(rw * s), @floatFromInt(RECT_H * s), @floatFromInt(theme.TK_RADIUS * s), theme.TK_ACCENT);
+        self.root.setFrame(.{ .x = 0, .y = 0, .w = @floatFromInt(W), .h = @floatFromInt(H) });
+        self.rect.setFrame(.{ .x = @floatFromInt(rx), .y = @floatFromInt(MARGIN), .w = @floatFromInt(rw), .h = @floatFromInt(RECT_H) });
+        const sy = MARGIN + RECT_H + MARGIN - SAMPLES_PAD;
+        self.samples.setFrame(.{ .x = 0, .y = @floatFromInt(sy), .w = @floatFromInt(W), .h = @floatFromInt(SAMPLES_H + 2 * SAMPLES_PAD) });
+    }
 
-        // "안녕" — 사각형 가운데.
+    fn key(ctx: *anyopaque, code: u32, pressed: bool) void {
+        const self: *App = @ptrCast(@alignCast(ctx));
+        if (code == KEY_SPACE and pressed) self.face.setOpacity(if (self.face.opacity > 0) 0 else 1);
+    }
+
+    fn draw(ctx: *anyopaque, frame: tk.window.Frame) anyerror!void {
+        const self: *App = @ptrCast(@alignCast(ctx));
+        try self.faces(frame.scale);
+        try tk.drawTree(self.io, self.alloc, &self.tree, frame, &self.lut);
+    }
+
+    /// "안녕" — 사각형 가운데(사각형 레이어의 content, 레이어 왼쪽 위가 (0, 0)).
+    fn drawHello(ctx: *anyopaque, p: *tk.Painter, size: [2]f32, alpha: u8) anyerror!void {
+        const self: *App = @ptrCast(@alignCast(ctx));
+        const s = self.scale;
         const hello = &self.body.?;
         const hw = hello.measure("안녕");
-        const hx = @as(f32, @floatFromInt((rx + rw / 2) * s)) - hw / 2.0;
-        const hb: i32 = @intFromFloat(@round(@as(f32, @floatFromInt((ry + RECT_H / 2) * s)) + (hello.ascent - hello.descent) / 2.0));
-        _ = try c.drawText(hello, hx, hb, "안녕", theme.TK_TEXT, &self.lut);
+        const rw: u32 = @intFromFloat(size[0]);
+        const hx = @as(f32, @floatFromInt((rw / s) / 2 * s)) - hw / 2.0;
+        const hb: i32 = @intFromFloat(@round(@as(f32, @floatFromInt(RECT_H / 2 * s)) + (hello.ascent - hello.descent) / 2.0));
+        _ = try p.drawGlyphs(hello, hx, hb, "안녕", theme.TK_TEXT, alpha);
+    }
 
-        // 표본 — 13 px 넷, 14 px 넷.
-        var y: f32 = @floatFromInt((ry + RECT_H + MARGIN) * s);
+    /// 표본 — 13 px 넷, 14 px 넷(표본 레이어의 content).
+    fn drawSamples(ctx: *anyopaque, p: *tk.Painter, size: [2]f32, alpha: u8) anyerror!void {
+        _ = size;
+        const self: *App = @ptrCast(@alignCast(ctx));
+        const s = self.scale;
+        var y: f32 = @floatFromInt(SAMPLES_PAD * s);
         const left: f32 = @floatFromInt(MARGIN * s);
         for ([_]*tk.Face{ &self.small.?, &self.body.? }, 0..) |f, k| {
             if (k == 1) y += @floatFromInt(theme.TK_SPACE * s);
             const lh = @ceil(f.line_height);
             for (SAMPLE) |line| {
                 const base: i32 = @intFromFloat(@round(y + f.ascent));
-                _ = try c.drawText(f, left, base, line, theme.TK_TEXT, &self.lut);
+                _ = try p.drawGlyphs(f, left, base, line, theme.TK_TEXT, alpha);
                 y += lh;
             }
         }
@@ -108,11 +165,19 @@ pub fn main(init: std.process.Init) !u8 {
     };
     defer alloc.free(font);
 
-    var app: App = .{ .io = init.io, .alloc = alloc, .font = font, .lut = tk.text.gammaLut(gamma) };
-    const win = tk.Window.open(alloc, "tars-tk-demo", .{ .ctx = &app, .draw = App.draw }) catch |e| {
+    var app: App = .{ .io = init.io, .alloc = alloc, .font = font, .lut = tk.text.gammaLut(gamma), .tree = tk.Tree.init(alloc) };
+    defer app.tree.deinit();
+    defer inline for (.{ &app.small, &app.body }) |f| if (f.*) |*x| x.deinit();
+    app.build() catch |e| {
+        tk.window.say("error tree={s}", .{@errorName(e)});
+        return 1;
+    };
+    const win = tk.Window.open(alloc, "tars-tk-demo", .{ .ctx = &app, .draw = App.draw, .resize = App.resize, .key = App.key }) catch |e| {
         tk.window.say("error open={s}", .{@errorName(e)});
         return 1;
     };
+    defer win.deinit();
+    tk.connect(&app.tree, win);
     win.run() catch |e| {
         tk.window.say("error run={s}", .{@errorName(e)});
         return 1;

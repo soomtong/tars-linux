@@ -66,8 +66,8 @@ stb_truetype 비례폭 글자. terminal과는 `shared/`의 테마 색 · 글리�
    `tars_menu_v1` 다음 판의 이벤트로 받는다(terminal이 값을 들고, reload가 재시작이라 다시 붙으며 받는다). 실행 때 파일은 uid · 경로 · 감시를 새로 끈다.
 8. 툴킷 창은 TK-M0부터 `tars_menu_manager_v1`을 bind한다(WY 결정 46 — 안 하면 호환 모드라 `Cmd+A` ≠ `Ctrl+A`가 깨진다). text-input은 텍스트 필드가
    포커스를 가질 때만 enable(WY 결정 40 — 리스트 이동 키가 한글 층을 안 지난다).
-9. 창 층 규칙(R-TKW-1 · 2 · 4): 버퍼 둘(memfd · pool, 매핑 유지), release로 busy를 풀고 둘 다 busy면 다음 release까지 미룸. 버퍼마다 z2d `Surface`를
-   한 번 감싼다. 버퍼 나이 — 이번 버퍼에는 지난 두 프레임 더티의 합을 그린다. 바뀐 것이 있을 때만 frame을 걸고 commit(idle이면 commit 0). configure는
+9. 창 층 규칙(R-TKW-1 · 2 · 4): 버퍼 둘(memfd · pool, 매핑 유지), release로 busy를 풀고 둘 다 busy면 다음 release까지 미룸. 창 층은 CG를 모른다(R-ARCH-1) — 그리는 쪽이 버퍼 픽셀을
+   지우지 않는 z2d 판으로 감싼다(TK-M1, z2d `ImageSurface`의 공개 필드). 버퍼 나이 — 이번 버퍼에는 지난 두 프레임 더티의 합을 그린다. 바뀐 것이 있을 때만 frame을 걸고 commit(idle이면 commit 0). configure는
    늘 따른다(크기가 바뀌면 버퍼 둘을 다시). `preferred_buffer_scale`을 받아 물리 크기 버퍼 + `set_buffer_scale`. damage는 `damage_buffer` 사각형
    하나로 시작(서버가 합집합 하나로 합친다 — 목록은 숫자가 바랄 때).
 10. 옛 TK-M5를 둘로 자른다(WY 결정 19 · 44와 같은 까닭). 메뉴 바 · 메뉴 요청 처리 · 키는 terminal(서버) 코드이고, 메뉴 모델 · 단축키 표 · 미리보기는

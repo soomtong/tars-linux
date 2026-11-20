@@ -1,5 +1,5 @@
 //! 글자(TK design 결정 5). `shared/glyph.zig`(stb 한 겹) 위에 툴킷이 쓰는 모양을 얹는다 — em 기준 크기, 서브픽셀 x 위치(한 픽셀을
-//! 넷으로 나눈 칸), f32 advance, kern, 굽고 나서 복사해 두는 캐시. 그리는 것은 `canvas.zig`이고 여기는 픽셀을 모른다.
+//! 넷으로 나눈 칸), f32 advance, kern, 굽고 나서 복사해 두는 캐시. 그리는 것은 `painter.zig`(`drawGlyphs`) · `canvas.zig`이고 여기는 픽셀을 모른다.
 //!
 //! 셰이핑은 없다(R-TXT-4) — 코드포인트 하나가 글리프 하나다. 줄 나누기 · 커서 위치는 TK-M4(비례폭 텍스트)의 것이다.
 
@@ -92,7 +92,7 @@ pub const Face = struct {
         return self.face.kern(left, right);
     }
 
-    /// UTF-8 한 줄의 폭(픽셀, 소수). 그리는 `canvas.text`와 같은 펜 규칙(advance + kern)이다. 잘못된 바이트는 건너뛴다.
+    /// UTF-8 한 줄의 폭(픽셀, 소수). 그리는 `Painter.drawGlyphs`와 같은 펜 규칙(advance + kern)이다. 잘못된 바이트는 건너뛴다.
     pub fn measure(self: *Face, str: []const u8) f32 {
         var pen: f32 = 0;
         var prev: ?u32 = null;
