@@ -24,13 +24,14 @@ Status: 3판(2판: SW design 결정에 맞춰 SW 표와 WY-M0의 전제. 3판: W
 SW-M0 ─ SW-M1 ─ SW-M2 ─ SW-M3
    └─ WY-M0 ─ WY-M1 ─ WY-M2 ─ WY-M3 ─ WY-M4 ─ WY-M5 ─ WY-M6
                (녹화 A)                  (녹화 B는 WY-M5 뒤)
-                └─ TK-M0 ─ TK-M1 ─ TK-M2 ─ TK-M3 ─ TK-M4 ─ TK-M5 (녹화 C)
-                                            WY-M6 ─ CR-M0 ─ CR-M1 ─ CR-M2 (녹화 D)
+                                                              └─ TK-M0 ─ TK-M1 ─ TK-M2 ─ TK-M3 ─ TK-M4 ─ TK-M5 (녹화 C)
+                                                              └─ CR-M0 ─ WY-M7 ─ CR-M1 ─ CR-M2 (녹화 D)
 ~~~
 
 한 번에 한 줄씩 한다. 권장 순서는 SW-M0~M3(끝, 2026-11-19) → WY-M0 → WY-M1(녹화 A)
-→ WY-M2~M5(녹화 B) → TK-M0~M5(녹화 C) → WY-M6 → CR(녹화 D). TK와 CR은 서로 독립이라
-바꿔도 된다.
+→ WY-M2~M5(녹화 B) → WY-M6 → TK-M0~M5(녹화 C) → CR-M0 → WY-M7 → CR-M1~M2(녹화 D). TK와 CR은 서로 독립이라
+바꿔도 된다. 4판(2026-11-20, WY design 결정 44): 옛 WY-M6을 둘로 — WY-M6(호환 모드 · damage)은 TK 앞, WY-M7(popup · 장식)은
+Chromium이 실제로 쓰는 것을 CR-M0이 잰 뒤.
 
 ## 1단 — SW: strip 워크스페이스
 
@@ -85,7 +86,8 @@ design doc: `tars-wayland-server-design.md`(접두사 WY). 새 체인
 | WY-M3 | 배율(결정 5) | `hidpi` 체인에 app pane 검사 |
 | WY-M4 | 클립보드 `wl_data_device` | 테스트 클라이언트와 셸 사이 양방향 붙여넣기 |
 | WY-M5 | 한글 `text-input-v3` | 테스트 클라이언트에 조합 · 확정, 두 번 찍히지 않음. 녹화 B |
-| WY-M6 | `xdg-decoration` · 서버 쪽 장식 · `xdg_popup` · damage로 부분 blit · 호환 모드(Cmd → Ctrl) | 테스트 클라이언트의 popup 위치, 장식의 좌표 색, 호환 모드의 키 판정 |
+| WY-M6 | 호환 모드(Cmd → Ctrl) · 원래 모드의 문 `tars_menu_v1` 뼈대 · damage로 부분 blit | 호환 모드의 키 판정, 부분 blit 줄과 좌표 색 |
+| WY-M7 | `xdg_popup` · `xdg_positioner` · 서버 쪽 장식(포커스 테두리 · 빈 칸 이름) — CR-M0의 실측 뒤 | 테스트 클라이언트의 popup 위치 · grab, 장식의 좌표 색 |
 
 2판(2026-11-19): WY design이 1판의 WY-M0을 서버(M0)와 둠(M1)으로 나눴다. 뒤 번호가 하나씩 밀렸다.
 3판(2026-11-20): WY design 결정 19가 WY-M2를 column · 포인터(M2)와 배율(M3)로 나눴다. 뒤 번호가 다시 하나씩 밀렸다.

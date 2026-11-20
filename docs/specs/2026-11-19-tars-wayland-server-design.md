@@ -250,6 +250,21 @@ WY-M5를 열며(2026-11-20, 조사 `wy-m5` — HEAD `1cb942a`, wayland-protocols
 43. text_input의 `enter` · `leave`는 키보드 포커스를 따른다. 순서는 `selection` → text_input `enter` → 키보드 `enter`. "켜졌나"는 포커스 surface가
     맞으면 참이다 — SDL처럼 키보드 `enter`에 enable하는 클라이언트도, text_input `enter`에 enable하는 클라이언트도 받힌다.
 
+WY-M6을 열며(2026-11-20, 조사 `wy-m6` — HEAD `e654a8e`, SDL 3.2.10 · 둠 소스, 근거는 plan WY-M6의 확인 절):
+
+44. 옛 WY-M6을 둘로 자른다(결정 19와 같은 까닭). WY-M6은 호환 모드 · damage — TK가 바로 쓴다(R-KIT-1 · R-CA-2). WY-M7(새)은 popup · 장식 —
+    CR만 쓰고(툴킷은 popup · 장식을 안 쓴다, 요구사항 결정 9 · R-TKW-2 · 3) 최소 집합은 Chromium이 실제로 보내는 것을 CR-M0이 잰 뒤에 고른다.
+    로드맵 순서는 WY-M6 → TK → CR-M0 → WY-M7 → CR-M1(로드맵 4판).
+45. 호환 모드(요구사항 결정 3)는 서버 한 자리다 — 포커스 클라이언트가 호환이면 `wl_keyboard.modifiers`의 depressed에서 Super(0x40)를 지우고
+    Ctrl(0x4)을 켠다(`key`의 modifiers · `enterKeyboard`). 키 코드는 바꾸지 않는다 — 둠에서 Cmd가 쏘지 않고 `Held`의 짝이 맞는다. `input.zig` ·
+    `main.zig`의 키 길(표 · 한글 층)은 그대로다. 표의 chord는 이미 compositor가 먹었으므로 "표에 없는 Cmd 조합 전부"와 같다.
+46. 원래 모드의 문 `tars_menu_v1`의 뼈대를 WY-M6이 세운다 — 저장소 안 xml(vendor 밖), 판 1, 요청은 `destroy` 하나. bind한 클라이언트는 원래 모드(Super).
+    TK-M5가 같은 인터페이스에 메뉴 요청을 더한다. 이 문이 없으면 TK-M0~M4의 앱이 전부 호환 모드라 `Cmd+A` ≠ `Ctrl+A`(R-KIT-6)가 깨진다.
+    켜는 다른 길(설정 키 · 앱 목록)은 두지 않는다.
+47. damage(R-WY-10): surface마다 pending → commit에서 누적하는 합집합 사각형 하나(버퍼 좌표, `damage`는 × buffer_scale). 화면에는 그 사각형만
+    옮기고 clip에 넣는다(둘레 검정 칠하기 없음). 통째로 되돌아가는 조건은 버퍼 크기 · buffer_scale · `fit` 바뀜, 첫 그림, 통째 프레임, 앞 창이 바뀜 —
+    지금 "둘레를 다시 검정으로"를 정하는 자리와 같다. 물리 합성은 clip을 따라 저절로 작아진다. 사각형 목록은 숫자가 바랄 때.
+
 ## Milestone
 
 로드맵의 WY-M0을 둘로 나눈다. 서버 뼈대 · 키 · workspace · 보호만으로도 milestone 하나의 크기이고, 둠은 별도
@@ -263,4 +278,5 @@ WY-M5를 열며(2026-11-20, 조사 `wy-m5` — HEAD `1cb942a`, wayland-protocols
 | WY-M3 | 배율(결정 5 · 27~31) — `wl_output` 물리 mode + scale, `wl_compositor` 6 · `preferred_buffer_scale`, `set_buffer_scale`, present 단계의 물리 합성. viewporter는 안 냄 | `hidpi` 체인에 app pane 검사(`tars-wl-test --buffer-scale` · `--checker`, 물리 1픽셀 바둑판) |
 | WY-M4 | 클립보드 `wl_data_device_manager` 2(결정 32~37) — 즉시 받기, 포커스 앞 selection, SIGPIPE | 테스트 클라이언트와 셸 사이 양방향 붙여넣기(wayland 판정 23 · 24) |
 | WY-M5 | 한글 `text-input-v3`(결정 38~43) — 오토마타 하나, 켠 창에서만, 먹은 키는 안 보냄, 포커스를 잃으면 확정 | 조합 · 확정, 두 번 찍히지 않음(wayland 판정 26~28). 녹화 B |
-| WY-M6 | `xdg-decoration` · 서버 쪽 장식 · `xdg_popup` · damage 부분 blit · 호환 모드 | popup 위치, 장식의 좌표 색, 호환 모드의 키 판정 |
+| WY-M6 | 호환 모드(결정 45) · `tars_menu_v1` 뼈대(46) · damage 부분 blit(47) | 호환 창 `mods depressed=0x4` · 원래 창 `0x40`, 부분 `wl> blit` 줄과 좌표 색(wayland 판정 29 · 30) |
+| WY-M7 | `xdg_popup` · `xdg_positioner`(slide) · 서버 쪽 장식(포커스 테두리 · 빈 칸 이름) — CR-M0 실측 뒤(결정 44) | popup 위치 · grab · 포커스 잃음, 장식의 좌표 색 |
