@@ -118,8 +118,11 @@ pub fn splitPen(x: f32) struct { ix: i32, sub: u32 } {
     return .{ .ix = ix, .sub = sub };
 }
 
-/// coverage → 섞는 양의 표(감마). 1.0이면 그대로다. 값은 TK-M0의 화면 판정이 고른다(design 결정 5) — 조사의 대리 표본에서
-/// 1.8이 어두운 바탕에서 획을 또렷하게 했다.
+/// 툴킷의 감마 기본값(design 결정 5). TK-M0 결정 4의 화면 판정(실제 QEMU screendump, 13 · 14 px)에서 lead가 골랐다 — 1.0에서는
+/// 14 px 글자에 coverage 255인 픽셀이 없어 획이 흐렸다.
+pub const GAMMA: f32 = 1.8;
+
+/// coverage → 섞는 양의 표(감마). 1.0이면 그대로다.
 pub fn gammaLut(gamma: f32) [256]u8 {
     var lut: [256]u8 = undefined;
     for (&lut, 0..) |*v, i| {

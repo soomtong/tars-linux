@@ -76,6 +76,9 @@ pub fn main(init: std.process.Init) !u8 {
     var same = true;
     for (lut1, 0..) |v, i| same = same and v == i;
     check(same, "gamma 1.0 table is the identity", .{});
+    // 기본 감마(1.8, 결정 4의 판정)는 끝점을 지키고 중간값을 밝힌다 — 어두운 바탕에서 획이 굵어진다.
+    const lutd = text.gammaLut(text.GAMMA);
+    check(lutd[0] == 0 and lutd[255] == 255 and lutd[128] > 128, "default gamma {d:.1}: 0 -> {d}, 128 -> {d}, 255 -> {d}", .{ text.GAMMA, lutd[0], lutd[128], lutd[255] });
 
     // "안녕"(14 px)을 (60, baseline 60)에 — 상자 안 잉크와 중간값.
     c.fill(theme.TK_BG);

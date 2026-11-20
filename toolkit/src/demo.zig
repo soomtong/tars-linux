@@ -8,7 +8,7 @@
 //! - "안녕": 사각형 가운데(폭은 잰 값, baseline은 사각형 세로 가운데 + ascent/2 근사).
 //! - 표본: 사각형 아래 24부터, 왼쪽 24에서. 13 px 네 줄 → 8 띄우고 14 px 네 줄. 줄 간격은 글꼴의 줄 높이(올림).
 //!
-//! 인자: `--font PATH`(기본 `/vendor/fonts/Pretendard-Regular.otf`) · `--gamma G`(기본 1.0, 0.5..3.0).
+//! 인자: `--font PATH`(기본 `/vendor/fonts/Pretendard-Regular.otf`) · `--gamma G`(기본 `tk.text.GAMMA` 1.8, 0.5..3.0).
 
 const std = @import("std");
 const tk = @import("tk");
@@ -30,17 +30,15 @@ const App = struct {
     alloc: std.mem.Allocator,
     font: []const u8,
     lut: [256]u8,
-    /// 배율마다 다시 연다(em × 배율). 지금 배율과 그 Face 셋.
+    /// 배율마다 다시 연다(em × 배율). 지금 배율과 그 Face 둘 — "안녕"과 14 px 표본이 같은 `body`를 쓴다.
     scale: u32 = 0,
-    hello: ?tk.Face = null,
     small: ?tk.Face = null,
     body: ?tk.Face = null,
 
     fn faces(self: *App, s: u32) !void {
         if (self.scale == s) return;
-        inline for (.{ &self.hello, &self.small, &self.body }) |f| if (f.*) |*x| x.deinit();
+        inline for (.{ &self.small, &self.body }) |f| if (f.*) |*x| x.deinit();
         const fs: f32 = @floatFromInt(s);
-        self.hello = try tk.Face.init(self.alloc, self.font, @as(f32, @floatFromInt(theme.TK_FONT)) * fs);
         self.small = try tk.Face.init(self.alloc, self.font, @as(f32, @floatFromInt(theme.TK_FONT_SMALL)) * fs);
         self.body = try tk.Face.init(self.alloc, self.font, @as(f32, @floatFromInt(theme.TK_FONT)) * fs);
         self.scale = s;
@@ -60,7 +58,7 @@ const App = struct {
         try c.roundedRect(self.io, self.alloc, @floatFromInt(rx * s), @floatFromInt(ry * s), @floatFromInt(rw * s), @floatFromInt(RECT_H * s), @floatFromInt(theme.TK_RADIUS * s), theme.TK_ACCENT);
 
         // "안녕" — 사각형 가운데.
-        const hello = &self.hello.?;
+        const hello = &self.body.?;
         const hw = hello.measure("안녕");
         const hx = @as(f32, @floatFromInt((rx + rw / 2) * s)) - hw / 2.0;
         const hb: i32 = @intFromFloat(@round(@as(f32, @floatFromInt((ry + RECT_H / 2) * s)) + (hello.ascent - hello.descent) / 2.0));
@@ -89,7 +87,7 @@ fn usage() u8 {
 pub fn main(init: std.process.Init) !u8 {
     const alloc = init.gpa;
     var font_path: []const u8 = tk.FONT_PATH;
-    var gamma: f32 = 1.0;
+    var gamma: f32 = tk.text.GAMMA;
     const argv = try init.minimal.args.toSlice(init.arena.allocator());
     var i: usize = 1;
     while (i < argv.len) : (i += 1) {

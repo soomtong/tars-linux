@@ -539,6 +539,10 @@ run_chain() {
 # 부팅 2(root 셸)에서 양보 중에 다시 뜬 terminal이 죽지 않고 기다렸다 되찾는지. DY-M2: 부팅 3(홈 디스크에 base · gpu 묶음)에서
 # `tars-gpu-demo`가 SDL3 KMSDRM · OpenGL ES(llvmpipe)로 그리고 키를 udevd 없이 받는지. monitor 45507. 회차당 부팅 3회.
 #
+# TK 체인은 툴킷(`toolkit/`)을 본다. 셸에서 띄운 `tars-tk-demo`가 원래 모드(tars_menu_v1)로 셸 오른쪽 column이 되어 616 × 752를
+# 받고, 둥근 사각형(z2d)과 Pretendard 글자를 안티에일리어스로 그리며(screendump 좌표 색), Cmd+R의 1240 폭에 다시 그리고, 그린
+# 수만큼만 commit하고(idle 0), Cmd+Q에 스스로 끝나는지. 결정 4의 1배 PNG를 회차 로그 폴더에 남긴다. monitor 45509. 회차당 부팅 1회.
+#
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
 CHAINS=(
@@ -577,6 +581,7 @@ CHAINS=(
   "CO-M1:./cursor/check.sh"
   "DY-M2:./display/check.sh"
   "WY-M2:./wayland/check.sh"
+  "TK-M0:./toolkit/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면
@@ -808,8 +813,9 @@ export TARS_RENDER_VERIFY=1
 
 # GP-M2: 체인을 동시에 돌린다(docs/plans/2026-10-10-tars-gate-parallel-gp-m2.md).
 #
-# 빌드 단계. 체인이 부르는 빌드 명령은 종류가 여덟이고 그중 일곱을 여기서 한 번 돌려
-# 둔다. 그러면 동시에 도는 체인들의 빌드 호출은 전부 캐시 적중이라 같은 트리에 아무도
+# 빌드 단계. 체인이 부르는 빌드 명령은 종류가 아홉이고 그중 여덟을 여기서 한 번 돌려
+# 둔다(TK-M0이 아홉째 — toolkit 체인의 `zig build test`. toolkit의 `zig build`는 prepare.sh
+# 안이다). 그러면 동시에 도는 체인들의 빌드 호출은 전부 캐시 적중이라 같은 트리에 아무도
 # 안 쓴다. 체인이 빌드를 부르는 구조(require_build_steps)는 그대로다. 남는 하나
 # (make_iso.sh)는 아래 ISO 줄 안의 일이다. 이 단계 뒤에는 `skipping make`가 체인 수 ×
 # RUNS여야 한다 — 첫 체인도 커널을 안 빌드했다는 뜻이다.
@@ -817,6 +823,7 @@ prebuild() {
   (cd kernel && ./build.sh) &&
     (cd init && zig build && zig build test) &&
     (cd terminal && ./prepare.sh && zig build test) &&
+    (cd toolkit && zig build test) &&
     (cd kernel && ./make_initrd.sh) &&
     (cd boot && ./build.sh)
 }
