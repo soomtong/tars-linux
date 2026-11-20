@@ -8,6 +8,9 @@
 //! 2 CA — 더티 = 옛 ∪ 새, masks 조상이 자름, hidden · 붙지 않은 레이어.
 //! 3 부분 = 통째 — 무작위 트리에 속성을 여러 번 바꾸며 더티만 다시 그린 판과 새로 통째 그린 판을 바이트로 비교(clip 임시 판).
 //! 4 버퍼 나이 — 버퍼 둘을 번갈아(가끔 같은 것 두 번, 가끔 오래 쉼) 흉내 내 각 버퍼가 매번 통째 그림과 같은가.
+//! 5 애니메이션 — 지어낸 시각으로 tick: 값 · 이징 · 끝 · 프레임 수 · 더티 · 알림, 목록이 비면 아무것도 안 함(TK-M1 단계 B).
+//! 6 스택 — 세로 · 가로, 간격 · 여백 · 정렬 · 고정/신축의 프레임 표.
+//! 7 토큰 — 앱 색과 셸 색이 겹치지 않는다(comptime).
 
 const std = @import("std");
 const theme = @import("theme");
@@ -189,6 +192,10 @@ pub fn main(init: std.process.Init) !u8 {
     // ── 3 부분 = 통째 · 4 버퍼 나이 ─────────────────────────────────────
     try randomTrees(io, alloc, &f13, &lut1);
 
+    try animations(alloc);
+    try stacks(alloc);
+    tokenColours();
+
     if (failures != 0) {
         std.debug.print("tk_test: {d} failure(s)\n", .{failures});
         return 1;
@@ -354,4 +361,171 @@ fn randomTrees(io: std.Io, alloc: std.mem.Allocator, face: *text.Face, lut: *con
     check(partial_mismatch == 0 and partial_frames > 200, "partial = whole: {d} partial redraws over 6 random trees, {d} mismatch(es)", .{ partial_frames, partial_mismatch });
     check(masked_seen > 0, "the random trees had masking layers ({d} layer-steps)", .{masked_seen});
     check(age_mismatch == 0 and age_partial > 100 and age_whole_fallback > 0, "buffer age: {d} frames on 2 buffers ({d} partial, {d} whole by age), each = a whole redraw, {d} mismatch(es)", .{ age_frames, age_partial, age_whole_fallback, age_mismatch });
+}
+
+// ── 5 애니메이션 ──────────────────────────────────────────────────────
+
+const Events = struct {
+    starts: u32 = 0,
+    ends: u32 = 0,
+    last_frames: u32 = 0,
+    last_ms: u64 = 0,
+
+    fn on(ctx: *anyopaque, ev: ca.anim.Event) void {
+        const self: *Events = @ptrCast(@alignCast(ctx));
+        switch (ev) {
+            .start => self.starts += 1,
+            .end => |e| {
+                self.ends += 1;
+                self.last_frames = e.frames;
+                self.last_ms = e.ms;
+            },
+        }
+    }
+};
+
+fn near(a: f32, b: f32) bool {
+    return @abs(a - b) < 1e-4;
+}
+
+fn animations(alloc: std.mem.Allocator) !void {
+    const ms = std.time.ns_per_ms;
+    var t = ca.Tree.init(alloc);
+    defer t.deinit();
+    var evs: Events = .{};
+    t.hook = .{ .ctx = &evs, .on = Events.on };
+    const root = try t.create(.{ .frame = .{ .x = 0, .y = 0, .w = W, .h = H }, .background = theme.TK_BG });
+    const face = try t.create(.{ .frame = .{ .x = 20, .y = 30, .w = 64, .h = 32 }, .background = theme.TK_TEXT, .opacity = 0 });
+    try root.addChild(face);
+    t.setRoot(root);
+    _ = t.takeDirty();
+
+    t.tick(5 * ms);
+    check(!t.animating() and t.takeDirty() == null and evs.starts == 0, "no animation: tick does nothing (no dirty — idle commit 0)", .{});
+
+    try t.animate(face, .{ .opacity = 1 }, 100, .linear);
+    check(t.takeDirty() == null, "animate() itself dirties nothing — the first tick starts it", .{});
+    const t0: u64 = 1000 * ms;
+    t.tick(t0);
+    const d0 = t.takeDirty();
+    check(near(face.opacity, 0) and evs.starts == 1 and d0 != null and Rect.eql(d0.?, .{ .x = 20, .y = 30, .w = 64, .h = 32 }), "first tick: start event, value = from (0), the layer is dirty anyway", .{});
+    t.tick(t0 + 50 * ms);
+    check(near(face.opacity, 0.5), "linear at 50/100 ms: opacity {d:.3}", .{face.opacity});
+    t.tick(t0 + 99 * ms);
+    check(near(face.opacity, 0.99) and t.animating(), "linear at 99 ms: {d:.3}, still running", .{face.opacity});
+    t.tick(t0 + 130 * ms);
+    check(face.opacity == 1 and !t.animating() and evs.ends == 1 and evs.last_frames == 4 and evs.last_ms == 130, "past the end: exactly 1, removed, end event frames={d} ms={d}", .{ evs.last_frames, evs.last_ms });
+    _ = t.takeDirty();
+    t.tick(t0 + 200 * ms);
+    check(t.takeDirty() == null, "after the end no tick dirties anything", .{});
+
+    // 이징 · 다른 속성.
+    check(near(ca.Easing.ease_out_cubic.apply(0.5), 0.875) and near(ca.Easing.ease_out_cubic.apply(0), 0) and near(ca.Easing.ease_out_cubic.apply(1), 1), "easeOutCubic: 0 -> 0, 0.5 -> 0.875, 1 -> 1", .{});
+    try t.animate(face, .{ .frame = .{ .x = 120, .y = 30, .w = 64, .h = 32 } }, 200, .ease_out_cubic);
+    try t.animate(face, .{ .background = 0x000000 }, 200, .linear);
+    t.tick(0);
+    _ = t.takeDirty();
+    t.tick(100 * ms);
+    const d1 = t.takeDirty();
+    // x: 20 + 100 × 0.875 = 107.5 → 화면 107..172. 더티는 옛(20..84) 덮기 새.
+    check(near(face.frame.x, 107.5) and d1 != null and Rect.eql(d1.?, .{ .x = 20, .y = 30, .w = 152, .h = 32 }), "frame with easeOutCubic at half time: x {d:.2}, dirty = old cover new", .{face.frame.x});
+    // F4F6F8 → 000000의 반: 7A7B7C(반올림).
+    check(face.background.? == 0x7A7B7C, "background colour halfway: {x:0>6}", .{face.background.?});
+    t.tick(250 * ms);
+    check(!t.animating() and face.frame.x == 120 and face.background.? == 0, "both end on their exact targets", .{});
+    // 같은 레이어 · 같은 속성을 다시 걸면 바꿔 단다.
+    try t.animate(face, .{ .opacity = 0 }, 100, .linear);
+    try t.animate(face, .{ .opacity = 1 }, 100, .linear);
+    check(t.anims.items.len == 1, "re-animating the same property replaces the running animation", .{});
+}
+
+// ── 6 스택 ───────────────────────────────────────────────────────────
+
+fn frameIs(l: *const ca.Layer, x: f32, y: f32, w: f32, h: f32) bool {
+    return l.frame.x == x and l.frame.y == y and l.frame.w == w and l.frame.h == h;
+}
+
+fn stacks(alloc: std.mem.Allocator) !void {
+    var t = ca.Tree.init(alloc);
+    defer t.deinit();
+    var ls: [4]*ca.Layer = undefined;
+    for (&ls) |*l| l.* = try t.create(.{});
+
+    // 세로: 고정 40 · 신축 1 · 고정 24, 간격 8, 여백 16, fill — 616 × 752.
+    const v: ca.Stack = .{ .axis = .vertical, .spacing = 8, .padding = ca.stack.Insets.all(16), .alignment = .fill, .items = &.{
+        .{ .layer = ls[0], .size = 40 },
+        .{ .layer = ls[1], .flex = 1 },
+        .{ .layer = ls[2], .size = 24 },
+    } };
+    v.layout(.{ .x = 0, .y = 0, .w = 616, .h = 752 });
+    check(frameIs(ls[0], 16, 16, 584, 40) and frameIs(ls[1], 16, 64, 584, 640) and frameIs(ls[2], 16, 712, 584, 24), "vertical 40 / flex / 24, spacing 8, padding 16: y 16 · 64 · 712, flex height 640", .{});
+
+    // 가로 가운데: 고정 셋, 교차 크기 각각, 남는 공간은 그대로(신축 없음).
+    const h: ca.Stack = .{ .axis = .horizontal, .spacing = 10, .padding = .{ .left = 5, .top = 4, .bottom = 4 }, .alignment = .center, .items = &.{
+        .{ .layer = ls[0], .size = 30, .cross = 20 },
+        .{ .layer = ls[1], .size = 50, .cross = 41 },
+        .{ .layer = ls[2], .size = 20 },
+    } };
+    h.layout(.{ .x = 100, .y = 0, .w = 400, .h = 100 });
+    check(frameIs(ls[0], 105, 40, 30, 20) and frameIs(ls[1], 145, 29, 50, 41) and frameIs(ls[2], 205, 4, 20, 92), "horizontal centre: x 105 · 145 · 205, cross 20 at y 40, 41 at y 29 (4 + floor(51/2)), none = fill 92", .{});
+
+    // 신축 셋이 100을 나눈다 — 정수 경계, 마지막이 끝에 맞음.
+    const f: ca.Stack = .{ .axis = .horizontal, .alignment = .start, .items = &.{
+        .{ .layer = ls[0], .flex = 1, .cross = 10 },
+        .{ .layer = ls[1], .flex = 1, .cross = 10 },
+        .{ .layer = ls[2], .flex = 1, .cross = 10 },
+    } };
+    f.layout(.{ .x = 0, .y = 0, .w = 100, .h = 10 });
+    const sum = ls[0].frame.w + ls[1].frame.w + ls[2].frame.w;
+    check(sum == 100 and ls[1].frame.x == ls[0].frame.x + ls[0].frame.w and ls[2].frame.x + ls[2].frame.w == 100, "three flex children split 100 into integers {d} {d} {d} with no gap", .{ ls[0].frame.w, ls[1].frame.w, ls[2].frame.w });
+
+    // 넘침: 남은 공간이 음수면 신축은 0, 고정은 그대로.
+    const o: ca.Stack = .{ .axis = .vertical, .spacing = 4, .items = &.{
+        .{ .layer = ls[0], .size = 60 },
+        .{ .layer = ls[1], .flex = 2 },
+        .{ .layer = ls[3], .size = 60 },
+    } };
+    o.layout(.{ .x = 0, .y = 0, .w = 50, .h = 100 });
+    check(ls[1].frame.h == 0 and ls[3].frame.y == 68 and ls[3].frame.h == 60, "overflow: flex child gets 0, fixed ones keep their size (last at y 68)", .{});
+
+    // 데모의 배치(demo.zig 머리 주석의 숫자) — 616 폭.
+    const rw: f32 = 320;
+    const d: ca.Stack = .{ .axis = .vertical, .spacing = 16, .padding = .{ .top = 24 }, .alignment = .center, .items = &.{
+        .{ .layer = ls[0], .size = 96, .cross = rw },
+        .{ .layer = ls[1], .size = 156, .cross = 616 },
+        .{ .layer = ls[2], .size = 32, .cross = 64 },
+    } };
+    d.layout(.{ .x = 0, .y = 0, .w = 616, .h = 752 });
+    check(frameIs(ls[0], 148, 24, 320, 96) and frameIs(ls[1], 0, 136, 616, 156) and frameIs(ls[2], 276, 308, 64, 32), "the demo's stack at 616: rect 148,24 · samples 0,136 · face 276,308", .{});
+}
+
+// ── 7 토큰 ───────────────────────────────────────────────────────────
+
+fn isSizeName(comptime name: []const u8) bool {
+    for ([_][]const u8{ "TK_RADIUS", "TK_SPACE", "TK_PADDING", "TK_FONT" }) |p| {
+        if (std.mem.startsWith(u8, name, p)) return true;
+    }
+    return false;
+}
+
+fn tokenColours() void {
+    const decls = @typeInfo(theme).@"struct".decl_names;
+    comptime var app: u32 = 0;
+    comptime var shell: u32 = 0;
+    comptime {
+        @setEvalBranchQuota(20000);
+        for (decls) |a| {
+            if (!std.mem.startsWith(u8, a, "TK_") or isSizeName(a)) continue;
+            app += 1;
+            for (decls) |b| {
+                if (std.mem.startsWith(u8, b, "TK_")) continue;
+                if (@field(theme, a) == @field(theme, b))
+                    @compileError("theme: app colour " ++ a ++ " equals shell colour " ++ b);
+            }
+        }
+        for (decls) |b| {
+            if (!std.mem.startsWith(u8, b, "TK_")) shell += 1;
+        }
+    }
+    check(app == 7 and shell >= 18, "tokens: {d} app colours share no value with {d} shell colours (comptime)", .{ app, shell });
 }

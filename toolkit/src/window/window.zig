@@ -91,6 +91,10 @@ pub const Handler = struct {
     ctx: *anyopaque,
     draw: *const fn (ctx: *anyopaque, frame: Frame) anyerror!void,
     resize: ?*const fn (ctx: *anyopaque, width: u32, height: u32, scale: u32) void = null,
+    /// 애니메이션의 시계(TK-M1 plan 확정 6). 그릴 수 있을 때(configure 뒤, frame을 기다리지 않음, 빈 버퍼가 있음)마다 그리기 바로 앞에서
+    /// monotonic 시각(ns)으로 부른다 — 그래서 값을 바꾼 tick 하나 뒤에는 늘 그림 하나가 따르고, 그 그림의 frame 콜백이 다음 tick을
+    /// 부른다. 앱은 바뀐 것이 없으면 아무것도 안 하면 된다(idle commit 0).
+    tick: ?*const fn (ctx: *anyopaque, now_ns: u64) void = null,
     key: ?*const fn (ctx: *anyopaque, code: u32, pressed: bool) void = null,
 };
 
@@ -258,10 +262,11 @@ pub const Window = struct {
     /// 그릴 때인가 보고 그린다: configure를 받았고, 바뀐 것이 있고, frame을 기다리지 않고, 빈 버퍼가 있을 때.
     fn maybeDraw(self: *Window) void {
         if (!self.configured or self.frame_pending or !self.running) return;
-        const pending = self.pending orelse return;
         const b = for (&self.bufs) |*b| {
             if (b.buffer != null and !b.busy) break b;
         } else return; // 둘 다 붙어 있다 — release 뒤 루프에서 다시 온다.
+        if (self.handler.tick) |f| f(self.handler.ctx, nowNs());
+        const pending = self.pending orelse return;
 
         const bw = self.width * self.scale;
         const bh = self.height * self.scale;

@@ -46,8 +46,10 @@ pub const POINTER_EDGE: u32 = 0x00040810;
 
 // ── 앱 토큰(R-CA-5) ─────────────────────────────────────────────
 //
-// 툴킷의 색 · 간격 · 반지름 · 글꼴 크기(TK-M0 단계 B부터). 색은 위 셸 색 어느 것과도 다른 값이다 — 게이트가 screendump에서
-// 앱의 픽셀을 셸의 것과 가를 수 있게(셸 색과 같은 이유의 "전용 색"). 크기는 논리 픽셀이고 그릴 때 배율을 곱한다.
+// 툴킷의 색 · 간격 · 반지름 · 글꼴 크기(TK-M0 단계 B부터, TK-M1에서 한 벌로). 색은 위 셸 색 어느 것과도 다른 값이다 — 게이트가
+// screendump에서 앱의 픽셀을 셸의 것과 가를 수 있게(셸 색과 같은 이유의 "전용 색"). toolkit의 `tk_test`가 이것을 comptime으로
+// 지킨다(이름이 `TK_`로 시작하고 크기 이름 — RADIUS · SPACE · PADDING · FONT — 가 아닌 것이 앱 색, `TK_`가 아닌 것이 셸 색). 크기는
+// 논리 픽셀이고 그릴 때 배율을 곱한다. 앱 코드는 이 이름을 바로 부르지 않고 `tk.tokens`로 부른다.
 
 /// 창 바탕. 셸의 셀 배경(`CELL_BG`)보다 한 단 밝아 column 경계가 보인다.
 pub const TK_BG: u32 = 0x00202C3C;
@@ -56,8 +58,24 @@ pub const TK_ACCENT: u32 = 0x003C78D8;
 /// 본문 글자. 셸의 `CURSOR_COLOR`(F0F0F0) · `CELL_FG`(FFFFFF)와 다른 값이다.
 pub const TK_TEXT: u32 = 0x00F4F6F8;
 
-/// 모서리 반지름 · 간격 · 글꼴 크기(em, 13 본문 작은 것 · 14 본문).
+/// 바탕보다 한 단 밝은 면(패널 · 리스트 행의 바탕).
+pub const TK_SURFACE: u32 = 0x002A3850;
+/// 보조 글자(설명 · 크기 · 날짜 열).
+pub const TK_TEXT_DIM: u32 = 0x0098A4B4;
+/// 면 사이 구분선. 셸의 `SEPARATOR`(405060)와 다른 값이다.
+pub const TK_SEPARATOR: u32 = 0x0034425A;
+/// 선택 바탕. 지금은 강조 면과 같은 값이다 — 이름을 따로 두어 위젯이 뜻으로 부르게(TK-M1 plan 확정 8).
+pub const TK_SELECTION: u32 = TK_ACCENT;
+
+/// 모서리 반지름(작은 것 · 기본). 크기는 논리 픽셀.
+pub const TK_RADIUS_S: u32 = 6;
 pub const TK_RADIUS: u32 = 12;
+/// 간격(작은 것 · 기본 · 큰 것)과 창 안쪽 여백.
+pub const TK_SPACE_S: u32 = 4;
 pub const TK_SPACE: u32 = 8;
+pub const TK_SPACE_L: u32 = 16;
+pub const TK_PADDING: u32 = 16;
+/// 글꼴 크기(em): 13 본문 작은 것 · 14 본문 · 17 머리.
 pub const TK_FONT_SMALL: u32 = 13;
 pub const TK_FONT: u32 = 14;
+pub const TK_FONT_TITLE: u32 = 17;

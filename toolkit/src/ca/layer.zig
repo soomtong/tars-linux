@@ -18,6 +18,7 @@ const geom = @import("tk_geom");
 const Rect = geom.Rect;
 const RectF = geom.RectF;
 const Painter = @import("tk_cg").Painter;
+const anim = @import("anim.zig");
 
 pub const Content = struct {
     ctx: *anyopaque,
@@ -170,6 +171,10 @@ pub const Tree = struct {
     sink: ?Sink = null,
     /// 만든 레이어 전부(트리가 지운다).
     all: std.ArrayList(*Layer) = .empty,
+    /// 도는 애니메이션(anim.zig). 비면 `tick`이 아무것도 안 한다.
+    anims: std.ArrayList(anim.Anim) = .empty,
+    /// 애니메이션의 시작 · 끝 알림을 받는 곳(창 층의 줄).
+    hook: ?anim.Hook = null,
 
     pub fn init(alloc: std.mem.Allocator) Tree {
         return .{ .alloc = alloc };
@@ -181,6 +186,58 @@ pub const Tree = struct {
             self.alloc.destroy(l);
         }
         self.all.deinit(self.alloc);
+        self.anims.deinit(self.alloc);
+    }
+
+    /// 레이어 `l`의 속성 하나를 지금 값에서 `to`로 `dur_ms` 동안 옮긴다. 시작 시각은 다음 `tick`이다. 같은 레이어 · 같은 속성의
+    /// 애니메이션이 돌고 있으면 그것을 지금 값에서 새로 시작한다.
+    pub fn animate(self: *Tree, l: *Layer, to: anim.Value, dur_ms: u32, easing: anim.Easing) !void {
+        const prop = std.meta.activeTag(to);
+        for (self.anims.items, 0..) |a, i| {
+            if (a.layer == l and std.meta.activeTag(a.to) == prop) {
+                _ = self.anims.swapRemove(i);
+                break;
+            }
+        }
+        try self.anims.append(self.alloc, .{
+            .layer = l,
+            .from = anim.current(l, prop),
+            .to = to,
+            .dur_ns = @as(u64, dur_ms) * std.time.ns_per_ms,
+            .easing = easing,
+        });
+    }
+
+    pub fn animating(self: *const Tree) bool {
+        return self.anims.items.len != 0;
+    }
+
+    /// 시각 `now_ns`의 값을 넣는다. 끝난 애니메이션은 끝 값을 넣고 빠진다.
+    pub fn tick(self: *Tree, now_ns: u64) void {
+        var i: usize = 0;
+        while (i < self.anims.items.len) {
+            const a = &self.anims.items[i];
+            const prop = std.meta.activeTag(a.to);
+            const start = a.start_ns orelse blk: {
+                a.start_ns = now_ns;
+                if (self.hook) |h| h.on(h.ctx, .{ .start = .{ .prop = prop, .dur_ms = a.dur_ns / std.time.ns_per_ms } });
+                break :blk now_ns;
+            };
+            const el = now_ns -| start;
+            const t: f32 = if (a.dur_ns == 0) 1 else @floatCast(@min(1.0, @as(f64, @floatFromInt(el)) / @as(f64, @floatFromInt(a.dur_ns))));
+            const v = if (t >= 1) a.to else anim.interpolate(a.from, a.to, a.easing.apply(t));
+            const l = a.layer;
+            anim.set(l, v);
+            l.setNeedsDisplay(); // 값이 그대로여도 이 프레임을 그린다 — 다음 tick이 오게(anim.zig 머리).
+            a.frames += 1;
+            if (t >= 1) {
+                const ev: anim.Event = .{ .end = .{ .prop = prop, .frames = a.frames, .ms = el / std.time.ns_per_ms } };
+                _ = self.anims.swapRemove(i);
+                if (self.hook) |h| h.on(h.ctx, ev);
+                continue;
+            }
+            i += 1;
+        }
     }
 
     /// 새 레이어(어디에도 안 붙음). 메모리는 트리가 든다.
