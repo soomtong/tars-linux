@@ -17,6 +17,8 @@ const layout = @import("layout.zig");
 const pointer = @import("pointer.zig");
 const pty = @import("pty.zig");
 const screen_args = @import("screen_args");
+// WY-M3: 화살표의 마스크 늘리기(`presentComposed`).
+const scale = @import("scale.zig");
 const status = @import("status.zig");
 const touchpad = @import("touchpad.zig");
 const verify = @import("verify.zig");
@@ -718,7 +720,67 @@ fn paintBand(fb: drm.Framebuffer, cache: *font.Cache, st: Status, want: bool, cl
     if (grid_bottom < fb.height) clips.push(0, grid_bottom, fb.width, fb.height - grid_bottom);
 }
 
-/// 프레임을 내보낸다 — 화살표를 얹고 `present`. 실제 fb에만 부른다(그림자 버퍼에는
+/// 물리로 합성하는 창 하나(WY-M3 확정 7, design 결정 30) — 창 번호와 그 창이 놓인 논리 사각형(셸 프레임은 slot의
+/// `appArea`, app 프레임은 화면 전체). 화면 배율 > 1이고 buffer_scale > 1인 보이는 창만 든다.
+const PhysApp = struct { id: u32, area: wl_logic.Area };
+
+/// 이 프레임의 물리 합성 목록. 프레임(셸 · app)이 새로 짓고, 화살표만 옮기는 바퀴는 지난 프레임의 것을 쓴다 — 그 바퀴는
+/// 화면이 그대로인 회차라 창의 자리도 그대로다. 크기는 workspace의 slot 수다.
+const PhysList = struct {
+    items: [layout.MAX_LEAVES]PhysApp = undefined,
+    len: usize = 0,
+
+    fn add(self: *PhysList, id: u32, area: wl_logic.Area) void {
+        if (self.len == self.items.len) return;
+        self.items[self.len] = .{ .id = id, .area = area };
+        self.len += 1;
+    }
+
+    fn slice(self: *const PhysList) []const PhysApp {
+        return self.items[0..self.len];
+    }
+};
+
+/// 프레임을 화면에 낸다(WY-M3 확정 7, design 결정 30). 순서가 넷이다 — (1) `stage`: 그림자의 clip을 물리로 늘린다,
+/// (2) 물리 합성: 목록의 창마다 clip과 겹친 자리만 버퍼에서 물리로 바로 옮긴다(1의 늘리기가 덮은 자리를 다시 쓴다 —
+/// 반대 순서면 늘리기가 창을 덮는다), (3) 화살표가 그 창과 겹치면 화살표의 불투명 픽셀만 물리에 다시 찍는다(2가 덮었다),
+/// (4) `flush`. 배율 1이거나 목록이 비면 1 · 2 · 3이 없고 HS 전과 같은 `present`다. 물리로 옮긴 픽셀 수를 돌려준다(실측 줄).
+fn presentComposed(fb: drm.Framebuffer, sprite: *const pointer.Sprite, srv: ?*wls.Server, phys: *const PhysList, clips: *const drm.ClipList) !u64 {
+    const cs = clips.slice();
+    fb.stage(cs);
+    var px: u64 = 0;
+    if (srv) |sv| if (fb.scale > 1 and phys.len > 0) {
+        const s2: u64 = @as(u64, fb.scale) * fb.scale;
+        for (phys.slice()) |a| {
+            if (clips.whole) {
+                sv.paintPhys(a.id, fb.out, fb.out_pitch, fb.scale, a.area, a.area);
+                px += @as(u64, a.area.w) * a.area.h * s2;
+            } else for (cs) |cl| {
+                const ca: wl_logic.Area = .{ .x = cl.x1, .y = cl.y1, .w = @as(u32, cl.x2) - cl.x1, .h = @as(u32, cl.y2) - cl.y1 };
+                const hit = wl_logic.intersect(a.area, ca) orelse continue;
+                sv.paintPhys(a.id, fb.out, fb.out_pitch, fb.scale, a.area, hit);
+                px += @as(u64, hit.w) * hit.h * s2;
+            }
+        }
+        if (sprite.at) |at| {
+            const box: wl_logic.Area = .{
+                .x = at.x,
+                .y = at.y,
+                .w = if (at.x >= fb.width) 0 else @min(pointer.ARROW_W, fb.width - at.x),
+                .h = if (at.y >= fb.height) 0 else @min(pointer.ARROW_H, fb.height - at.y),
+            };
+            for (phys.slice()) |a| if (wl_logic.intersect(a.area, box) != null) {
+                const r: scale.Rect = .{ .x1 = box.x, .y1 = box.y, .x2 = box.x + box.w, .y2 = box.y + box.h };
+                scale.upscaleMasked(fb.pixels, fb.pitch, fb.out, fb.out_pitch, r, fb.scale, &pointer.ARROW_MASK, pointer.ARROW_W);
+                break;
+            };
+        }
+    };
+    try fb.flush(cs);
+    return px;
+}
+
+/// 프레임을 내보낸다 — 화살표를 얹고 `presentComposed`. 실제 fb에만 부른다(그림자 버퍼에는
 /// 안 된다, `drm.Framebuffer.shadow`). DR-M2가 clip을 넘길 자리가 여기 하나다.
 fn presentFrame(
     fb: drm.Framebuffer,
@@ -730,7 +792,10 @@ fn presentFrame(
     want: ?pointer.Spot,
     // 이 프레임이 다시 칠한 사각형들(DR-M2, design 결정 6). 화살표의 새 자리를 더해 넘긴다.
     clips: *drm.ClipList,
-) !void {
+    // 물리 합성(WY-M3). 서버가 없으면 null.
+    srv: ?*wls.Server,
+    phys: *const PhysList,
+) !u64 {
     // 무엇보다 위에 그린다 — 프롬프트와 상태 줄 뒤, `present` 앞이다. 그래서
     // 아래 덤프들이 화살표 픽셀을 읽는다(design 결정 4가 받아들였다). 화살표가
     // 보이는 것은 사람이 포인터를 움직인 뒤뿐이라 다른 체인의 덤프는 안 바뀐다.
@@ -738,7 +803,7 @@ fn presentFrame(
         sprite.show(fb, s);
         clips.push(s.x, s.y, pointer.ARROW_W, pointer.ARROW_H);
     }
-    try fb.present(clips.slice());
+    return presentComposed(fb, sprite, srv, phys, clips);
 }
 
 /// 한 층의 이미지를 z 순으로 그린다. 산수는 전부 `image.zig`에 있다.
@@ -1770,6 +1835,9 @@ fn wlMask(m: input.AppMods) wl_logic.Mask {
 
 /// 워크스페이스 수의 상한. Cmd+1~9가 번호라 아홉이다(WP design "모델" 절).
 const MAX_WORKSPACES = 9;
+
+/// 실측 줄(WY-M3)을 찍는 횟수. 늘 찍으면 포인터 움직임마다 줄이 는다.
+const PHYS_LINES: u8 = 4;
 
 /// app 워크스페이스에서 창 둘레의 색(WY design 결정 9 — 둘레는 검정이다).
 const APP_BACKDROP: u32 = 0x000000;
@@ -4154,6 +4222,10 @@ const App = struct {
     last_app_fit: ?wl_logic.Fit = null,
     /// 지난 프레임이 그린 app 창. 셸 프레임이면 null이다 — 다른 창이나 셸에서 오면 통째로 칠한다.
     last_app: ?u32 = null,
+    /// 지난 프레임의 물리 합성 목록(WY-M3 확정 7). 화살표만 옮기는 바퀴가 쓴다.
+    phys: PhysList = .{},
+    /// 실측 줄(`wl> frame full` · `wl> phys arrow`)을 찍은 수 — 처음 `PHYS_LINES`번만.
+    phys_lines: struct { frame: u8 = 0, arrow: u8 = 0 } = .{},
     /// 앞 셸 워크스페이스의 app slot 중 commit이 와서 다시 옮길 것(WY-M2 확정 5). slot 번호다. 셸 프레임이 옮기고
     /// 비운다 — 통째 프레임은 이것과 상관없이 보이는 app slot을 다 옮긴다.
     app_dirty: std.StaticBitSet(layout.MAX_LEAVES) = .empty,
@@ -5822,7 +5894,12 @@ const App = struct {
                     self.sprite.show(self.fb, s);
                     clips.push(s.x, s.y, pointer.ARROW_W, pointer.ARROW_H);
                 }
-                try self.fb.present(clips.slice());
+                // 화살표 상자가 물리로 합성한 창 위면 늘리기가 덮은 그 상자만 창에서 다시 옮긴다(WY-M3 확정 7).
+                const px = try presentComposed(self.fb, &self.sprite, self.wl, &self.phys, &clips);
+                if (px > 0 and self.phys_lines.arrow < PHYS_LINES) {
+                    self.phys_lines.arrow += 1;
+                    logline.print("terminal: wl> phys arrow px={d}\n", .{px});
+                }
                 if (self.verify) |*v| self.copyClips(v.screen, &clips);
             }
             dumpPointerAt(self.fb, &self.pointer_state, p.round, &self.sprite, p.before_spot);
@@ -5914,6 +5991,10 @@ const App = struct {
         // 창 slot(WY-M2 확정 5, design 결정 23). 통째 프레임이면 보이는 창 전부, 아니면 commit이 온 창만 다시 옮긴다.
         // 화면 밖 column의 창은 안 옮기고 frame `done`도 안 간다 — 그 창은 스스로 멈춘다(결정 10).
         var painted: [layout.MAX_LEAVES]?u32 = @splat(null);
+        // 물리 합성 목록(WY-M3 확정 7)은 보이는 창 전부로 다시 짓는다 — 이번에 다시 옮기지 않는 창도 화살표나 다른 clip이
+        // 그 위에 올 수 있다.
+        self.phys = .{};
+        var apps_seen: u32 = 0;
         if (self.wl) |srv| {
             var rs: [layout.MAX_LEAVES]layout.Rect = undefined;
             ws.strip.rects(self.whole, &rs);
@@ -5923,6 +6004,8 @@ const App = struct {
                     .shell => continue,
                 };
                 if (!ws.strip.visible(@intCast(leaf), self.whole)) continue;
+                apps_seen += 1;
+                if (self.fb.scale > 1 and srv.bufferScale(a.toplevel) > 1) self.phys.add(a.toplevel, appArea(rs[leaf]));
                 if (!full and !self.app_dirty.isSet(leaf)) continue;
                 const area = appArea(rs[leaf]);
                 // 둘레는 검정이다(WY design 결정 9) — 창이 pane보다 작거나 버퍼가 없으면 그 자리가 보인다.
@@ -6036,7 +6119,7 @@ const App = struct {
         // 화살표와 `present` 앞이다(DR design 위험 2). 그림자에는 화살표가 없으므로 비교도
         // 화살표가 실제 fb에 오르기 전에 한다.
         const verified = try self.verifyFrame(frame, ws);
-        try presentFrame(self.fb, &self.sprite, want, &clips);
+        const phys_px = try presentFrame(self.fb, &self.sprite, want, &clips, self.wl, &self.phys);
         // 옮긴 창의 frame 콜백에 `done`(결정 10) — 이 프레임을 낸 뒤다.
         if (self.wl) |srv| {
             const ms: u32 = @truncate(@as(u64, @intCast(self.nowMs())));
@@ -6045,6 +6128,11 @@ const App = struct {
         // clip의 판정은 `present` 뒤다 — 화면 흉내가 이 프레임의 clip을 받은 뒤에 fb와 비교한다.
         const clipped = self.verifyClips(&clips);
         frame.frame_us = @divTrunc(frame_start.untilNow(self.io, .awake).nanoseconds, 1000);
+        // 실측 3(WY-M3) — 창이 보이는 통째 프레임의 시간과 물리로 옮긴 픽셀 수. 처음 몇 번만.
+        if (full and apps_seen > 0 and self.phys_lines.frame < PHYS_LINES) {
+            self.phys_lines.frame += 1;
+            logline.print("terminal: wl> frame full us={d} apps={d} phys={d} px={d}\n", .{ frame.frame_us, apps_seen, self.phys.len, phys_px });
+        }
         if (!self.first_frame_timed) {
             self.first_frame_timed = true;
             logline.print("terminal: render> first frame {d}us\n", .{frame.frame_us});
@@ -6150,7 +6238,10 @@ const App = struct {
         self.last_app = id;
         self.last_current = self.current;
         self.last_strip = null;
-        try presentFrame(self.fb, &self.sprite, want, &clips);
+        // 물리 합성(WY-M3 확정 7) — 화면 전체가 그 창의 자리다.
+        self.phys = .{};
+        if (self.fb.scale > 1 and srv.bufferScale(id) > 1) self.phys.add(id, screen_area);
+        _ = try presentFrame(self.fb, &self.sprite, want, &clips, self.wl, &self.phys);
         if (self.verify) |*v| self.copyClips(v.screen, &clips);
         srv.presented(id, @truncate(@as(u64, @intCast(self.nowMs()))));
         frame.frame_us = @divTrunc(frame_start.untilNow(self.io, .awake).nanoseconds, 1000);

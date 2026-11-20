@@ -55,3 +55,25 @@ pub fn upscale(src: [*]const u8, src_pitch: usize, dst: [*]u8, dst_pitch: usize,
         }
     }
 }
+
+/// `upscale`의 마스크판(WY-M3, design 결정 30). 논리 사각형 `r` 안에서 `mask`가 참인 픽셀만 `s × s` 블록으로 옮긴다.
+/// `mask`는 `r`의 왼쪽 위에서 잰 `[dy * mask_w + dx]`이고 `r`보다 작지 않다. 화살표가 물리로 합성한 창 위에 있을 때
+/// 창을 옮긴 뒤 화살표의 불투명 픽셀만 다시 찍는 자리다 — 투명한 자리는 창의 물리 그림이 그대로 남는다.
+/// 범위 검사는 `upscale`과 같이 부르는 쪽 몫이다(`r`은 논리 fb 안으로 자른 것).
+pub fn upscaleMasked(src: [*]const u8, src_pitch: usize, dst: [*]u8, dst_pitch: usize, r: Rect, s: u32, mask: []const bool, mask_w: u32) void {
+    if (r.x2 <= r.x1 or r.y2 <= r.y1) return;
+    var y: usize = r.y1;
+    while (y < r.y2) : (y += 1) {
+        const line: [*]const u32 = @ptrCast(@alignCast(src + y * src_pitch));
+        const dy = y - r.y1;
+        var x: usize = r.x1;
+        while (x < r.x2) : (x += 1) {
+            if (!mask[dy * mask_w + (x - r.x1)]) continue;
+            var k: usize = 0;
+            while (k < s) : (k += 1) {
+                const out: [*]u32 = @ptrCast(@alignCast(dst + (y * s + k) * dst_pitch));
+                @memset(out[x * s ..][0..s], line[x]);
+            }
+        }
+    }
+}

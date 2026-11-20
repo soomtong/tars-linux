@@ -322,44 +322,46 @@ pub const Framebuffer = struct {
     ///
     /// DIRTYFB를 안 받는 드라이버(`dirty` false)는 clip을 무시하고 SETCRTC다.
     ///
-    /// 배율이 1보다 크면 `presentScaled`다(HS-M0). 배율 1은 아래 그대로다 — 기존 체인이
-    /// 그 길을 비트 단위로 밟는다(design 결정 2).
+    /// 배율이 1보다 크면 `stage`가 그림자를 물리로 늘리고 `flush`가 ×s clip으로 내보낸다(HS-M0). 둘을 나눈 것은 WY-M3이다
+    /// (design 결정 30) — buffer_scale > 1인 창은 둘 사이에서 물리 버퍼에 직접 옮긴다. 셸만 쓰는 자리는 이 하나를 부른다.
+    /// 배율 1은 `stage`가 아무것도 안 하고 `flush`가 HS 전 그대로다 — 기존 체인이 그 길을 비트 단위로 밟는다(design 결정 2).
     pub fn present(self: Framebuffer, clips: []const Clip) !void {
-        if (self.scale != 1) return self.presentScaled(clips);
-        if (!self.dirty) return self.modeset();
-        var cmd: DrmModeFbDirtyCmd = .{ .fb_id = self.fb_id };
-        if (clips.len > 0) {
-            cmd.num_clips = @intCast(clips.len);
-            cmd.clips_ptr = @intFromPtr(clips.ptr);
-        }
-        try drmIoctl(self.fd, drmIowr(DrmModeFbDirtyCmd, 0xB1), @ptrCast(&cmd));
+        self.stage(clips);
+        try self.flush(clips);
     }
 
-    /// 배율이 있는 `present`(HS design 결정 1). 논리 clip마다 그 사각형을 `scale × scale`
-    /// 블록으로 dumb 버퍼에 옮기고, `scale`을 곱한 clip으로 DIRTYFB한다. clip이 없으면(통째
-    /// 프레임) 논리 화면 전체를 옮기고 DIRTYFB도 clip 없이 보낸다 — 배율 1의 규칙과 같다.
+    /// 배율이 있는 화면의 앞 반(HS design 결정 1). 논리 clip마다 그 사각형을 `scale × scale` 블록으로 dumb 버퍼에 옮긴다.
+    /// clip이 없으면(통째 프레임) 논리 화면 전체를 옮긴다. 배율 1이면 아무것도 안 한다 — 그리기가 곧 dumb 버퍼다.
     ///
     /// 논리 × `scale`이 물리보다 작으면(나누어떨어지지 않는 화면) 남는 오른쪽 · 아래 띠는
     /// 아무도 안 쓴다. `open`이 처음에 검게 칠해 두었으므로 검은 채로 남는다.
-    fn presentScaled(self: Framebuffer, clips: []const Clip) !void {
-        const s = self.scale;
-        var big: [MAX_CLIPS]Clip = undefined;
+    pub fn stage(self: Framebuffer, clips: []const Clip) void {
+        if (self.scale == 1) return;
         if (clips.len == 0) {
             self.upscale(.{ .x1 = 0, .y1 = 0, .x2 = self.width, .y2 = self.height });
-        } else for (clips, big[0..clips.len]) |r, *b| {
+        } else for (clips) |r| {
             self.upscale(.{ .x1 = r.x1, .y1 = r.y1, .x2 = r.x2, .y2 = r.y2 });
-            b.* = .{
-                .x1 = @intCast(@as(u32, r.x1) * s),
-                .y1 = @intCast(@as(u32, r.y1) * s),
-                .x2 = @intCast(@as(u32, r.x2) * s),
-                .y2 = @intCast(@as(u32, r.y2) * s),
-            };
         }
+    }
+
+    /// 뒤 반 — DIRTYFB(또는 SETCRTC). 배율이 있으면 clip을 `scale`배로 곱해 보낸다. clip이 없으면 clip 없이(fb 전체 손상).
+    pub fn flush(self: Framebuffer, clips: []const Clip) !void {
         if (!self.dirty) return self.modeset();
         var cmd: DrmModeFbDirtyCmd = .{ .fb_id = self.fb_id };
+        var big: [MAX_CLIPS]Clip = undefined;
         if (clips.len > 0) {
             cmd.num_clips = @intCast(clips.len);
-            cmd.clips_ptr = @intFromPtr(&big);
+            cmd.clips_ptr = @intFromPtr(clips.ptr);
+            if (self.scale != 1) {
+                const s = self.scale;
+                for (clips, big[0..clips.len]) |r, *b| b.* = .{
+                    .x1 = @intCast(@as(u32, r.x1) * s),
+                    .y1 = @intCast(@as(u32, r.y1) * s),
+                    .x2 = @intCast(@as(u32, r.x2) * s),
+                    .y2 = @intCast(@as(u32, r.y2) * s),
+                };
+                cmd.clips_ptr = @intFromPtr(&big);
+            }
         }
         try drmIoctl(self.fd, drmIowr(DrmModeFbDirtyCmd, 0xB1), @ptrCast(&cmd));
     }

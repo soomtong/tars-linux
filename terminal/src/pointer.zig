@@ -488,6 +488,16 @@ pub fn arrowColor(dx: u32, dy: u32) ?u32 {
     };
 }
 
+/// 화살표의 불투명 자리(`arrowColor`가 null이 아닌 자리), `[dy * ARROW_W + dx]`(WY-M3). 물리로 합성한 창 위에서
+/// 화살표만 다시 찍을 때 `scale.upscaleMasked`가 쓴다 — 투명한 자리는 창의 물리 그림이 남아야 한다.
+pub const ARROW_MASK: [ARROW_H * ARROW_W]bool = blk: {
+    var m: [ARROW_H * ARROW_W]bool = undefined;
+    for (0..ARROW_H) |dy| for (0..ARROW_W) |dx| {
+        m[dy * ARROW_W + dx] = ARROW[dy][dx] != '.';
+    };
+    break :blk m;
+};
+
 /// 화살표의 자리. 대상의 픽셀 좌표이고 hotspot(왼쪽 위 끝)의 자리다.
 pub const Spot = struct { x: u32, y: u32 };
 

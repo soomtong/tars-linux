@@ -120,6 +120,60 @@ pub fn main() !void {
     }
     std.debug.print("wl_logic_test: buffer scale 5 cases, blit bs 3 cases\n", .{});
 
+    // WY-M3 단계 B: 물리 합성의 셈. 교집합 · × 배율, 그리고 잘라 옮기기 = 통째 blit의 그 사각형.
+    {
+        const a: logic.Area = .{ .x = 2, .y = 1, .w = 4, .h = 3 };
+        if (!std.meta.eql(logic.intersect(a, .{ .x = 4, .y = 0, .w = 5, .h = 2 }), logic.Area{ .x = 4, .y = 1, .w = 2, .h = 1 }))
+            return error.WrongIntersect;
+        if (logic.intersect(a, .{ .x = 6, .y = 1, .w = 2, .h = 2 }) != null) return error.WrongIntersect;
+        if (!std.meta.eql(logic.scaleArea(a, 2), logic.Area{ .x = 4, .y = 2, .w = 8, .h = 6 })) return error.WrongScaleArea;
+        const f: logic.Fit = .{ .k = 1, .x = 3, .y = 2, .w = 4, .h = 3, .ox = 1, .oy = 0 };
+        if (!std.meta.eql(logic.scaleFit(f, 2), logic.Fit{ .k = 2, .x = 6, .y = 4, .w = 8, .h = 6, .ox = 2, .oy = 0 }))
+            return error.WrongScaleFit;
+    }
+    // bs 2 버퍼(surface 3 × 2 → 버퍼 6 × 4)를 논리 (1, 1)에 k 1로 둔 자리를 배율 2 물리(12 × 8)에 — 1:1이라 버퍼가 그대로
+    // 물리 (2, 2)부터 놓인다. 그리고 clip 셋(창 안 조각 · 걸친 것 · 밖)으로 잘라 옮긴 것이 통째의 그 자리와 같고 밖은 손대지 않는다.
+    {
+        var src: [6 * 4]u32 = undefined;
+        for (&src, 0..) |*p, i| p.* = 0x1000 + @as(u32, @intCast(i));
+        const lf = logic.fitIn(.{ .x = 1, .y = 1, .w = 3, .h = 2 }, 3, 2).?;
+        const pf = logic.scaleFit(lf, 2);
+        if (pf.k != 2) return error.WrongScaleFit;
+        var whole: [12 * 8]u32 = @splat(0);
+        logic.blit(@ptrCast(&whole), 12 * 4, pf, @ptrCast(&src), 6 * 4, 2);
+        for (0..8) |y| for (0..12) |x| {
+            const in = x >= 2 and x < 8 and y >= 2 and y < 6;
+            const want: u32 = if (in) src[(y - 2) * 6 + (x - 2)] else 0;
+            if (whole[y * 12 + x] != want) {
+                std.debug.print("FAIL: physical 1:1 blit at {d},{d} = {x}, want {x}\n", .{ x, y, whole[y * 12 + x], want });
+                return error.WrongPhysicalBlit;
+            }
+        };
+        for ([_]logic.Area{ .{ .x = 3, .y = 3, .w = 2, .h = 2 }, .{ .x = 0, .y = 4, .w = 5, .h = 4 }, .{ .x = 9, .y = 0, .w = 3, .h = 8 } }) |c| {
+            var part: [12 * 8]u32 = @splat(0xDEAD);
+            logic.blitClip(@ptrCast(&part), 12 * 4, pf, @ptrCast(&src), 6 * 4, 2, c);
+            for (0..8) |y| for (0..12) |x| {
+                const in_clip = x >= c.x and x < c.x + c.w and y >= c.y and y < c.y + c.h;
+                const in_win = x >= 2 and x < 8 and y >= 2 and y < 6;
+                const want: u32 = if (in_clip and in_win) whole[y * 12 + x] else 0xDEAD;
+                if (part[y * 12 + x] != want) {
+                    std.debug.print("FAIL: blitClip {any} at {d},{d} = {x}, want {x}\n", .{ c, x, y, part[y * 12 + x], want });
+                    return error.WrongBlitClip;
+                }
+            };
+        }
+        // 솎는 갈래(k ≠ bs)도 잘라 옮기기가 통째와 같다 — 같은 버퍼를 논리(k 1, bs 2)로.
+        var lw: [5 * 4]u32 = @splat(0);
+        logic.blit(@ptrCast(&lw), 5 * 4, lf, @ptrCast(&src), 6 * 4, 2);
+        var lp: [5 * 4]u32 = @splat(0);
+        logic.blitClip(@ptrCast(&lp), 5 * 4, lf, @ptrCast(&src), 6 * 4, 2, .{ .x = 2, .y = 0, .w = 3, .h = 4 });
+        for (0..4) |y| for (0..5) |x| {
+            const want: u32 = if (x >= 2) lw[y * 5 + x] else 0;
+            if (lp[y * 5 + x] != want) return error.WrongBlitClip;
+        };
+    }
+    std.debug.print("wl_logic_test: physical compose 4 cases, 1:1 blit 1, blitClip 4 cases\n", .{});
+
     // configure 순서 — 첫 commit은 버퍼 없이(configure를 보낸다), ack 뒤 버퍼(보인다), 그 뒤는 다시 그린다.
     try expectStep(.fresh, false, false, .{ .action = .send_configure, .next = .configured });
     try expectStep(.fresh, false, true, .{ .action = .unconfigured_buffer, .next = .fresh });

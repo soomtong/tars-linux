@@ -454,6 +454,37 @@ pub const Server = struct {
         return f;
     }
 
+    /// 창 `id`의 buffer_scale(WY-M3). 창이나 버퍼가 없으면 1 — App이 물리 합성 목록에 넣을지 정한다(1이면 그림자 늘리기가
+    /// 같은 그림을 만든다, design 결정 30).
+    pub fn bufferScale(self: *Server, id: u32) u32 {
+        const t = self.find(id) orelse return 1;
+        const xs = t.xdg orelse return 1;
+        const s = xs.surface orelse return 1;
+        if (s.current == null) return 1;
+        return s.scale;
+    }
+
+    /// 물리 합성(WY-M3 확정 7, design 결정 30). 창 `id`의 버퍼를 물리 dumb 버퍼 `out`에 — 논리 사각형 `area` 안의 자리를
+    /// 지금 버퍼로 다시 셈한 `fit`을 × `s` 해서, 논리 `clip`과 겹친 자리만 옮긴다. `drm.Framebuffer.stage` 뒤 · `flush` 앞에
+    /// 부른다(반대면 같은 프레임의 늘리기가 덮는다). 자리를 `last_fit`이 아니라 지금 버퍼로 다시 세는 것은, commit이 하한 안에서
+    /// 그리기를 미룬 사이 화살표만 옮기는 바퀴가 올 수 있어서다 — 옛 자리로 새(작아진) 버퍼를 읽으면 버퍼 밖이다. buffer_scale이
+    /// 1이 됐으면 아무것도 안 한다(그림자 늘리기가 맞다).
+    pub fn paintPhys(self: *Server, id: u32, out: [*]u8, out_pitch: u32, s: u32, area: logic.Area, clip: logic.Area) void {
+        const t = self.find(id) orelse return;
+        const xs = t.xdg orelse return;
+        const sf = xs.surface orelse return;
+        if (sf.scale == 1) return;
+        const buf = sf.current orelse return;
+        const shm = wl.shm.Buffer.get(@ptrCast(buf)) orelse return;
+        if (!logic.formatOk(shm.getFormat())) return;
+        const sz = logic.surfaceSize(@intCast(shm.getWidth()), @intCast(shm.getHeight()), sf.scale);
+        const f = logic.fitIn(area, sz.w, sz.h) orelse return;
+        shm.beginAccess();
+        defer shm.endAccess();
+        const data: [*]const u8 = @ptrCast(shm.getData() orelse return);
+        logic.blitClip(out, out_pitch, logic.scaleFit(f, s), data, @intCast(shm.getStride()), sf.scale, logic.scaleArea(clip, s));
+    }
+
     /// toplevel `id`가 든 프레임을 화면에 냈다(확정 9) — 그 commit들의 frame 콜백에 `done`을 보낸다.
     pub fn presented(self: *Server, id: u32, ms: u32) void {
         const t = self.find(id) orelse return;

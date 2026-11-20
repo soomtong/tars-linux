@@ -7,6 +7,7 @@
 //! WY-M2가 다섯을 더했다 — pane 사각형 안의 자리(`fitIn`), configure의 states(`toplevelStates`), 그리고 포인터 셋
 //! (단계 C): 화면 좌표 → surface 좌표(`surfacePoint`), enter · leave와 버튼 grab(`PointerFocus`), 휠의 axis 값(`axisFor`).
 //! WY-M3(design 결정 28 · 29)이 버퍼 배율을 더했다 — surface 크기(`surfaceSize`), 버퍼 배율의 규칙(`scaleOk`), `blit`의 솎기(`bs`).
+//! 단계 B(결정 30)는 물리 합성의 셈 — 잘라 옮기기(`blitClip`), 교집합(`intersect`), × 배율(`scaleFit` · `scaleArea`).
 
 const std = @import("std");
 
@@ -99,18 +100,48 @@ pub fn sizeOk(buf_w: u32, buf_h: u32, bs: u32) bool {
 ///
 /// `src`는 `buf_h` 행이 다 있어야 하고 `dst`는 `f`의 사각형이 다 들어가야 한다 — 부르는 쪽이 크기를 본다.
 pub fn blit(dst: [*]u8, dst_pitch: u32, f: Fit, src: [*]const u8, src_stride: u32, bs: u32) void {
-    var y: u32 = 0;
-    while (y < f.h) : (y += 1) {
-        const sy = (f.oy + y) * bs / f.k;
+    blitClip(dst, dst_pitch, f, src, src_stride, bs, .{ .x = f.x, .y = f.y, .w = f.w, .h = f.h });
+}
+
+/// `blit`을 사각형 `clip`과 겹친 자리만 한다(WY-M3, design 결정 30). 물리 합성이 프레임의 clip마다 부른다 — 화살표만
+/// 옮기는 바퀴의 clip은 화살표 상자뿐이라 창 전체를 다시 옮기지 않는다. 겹치지 않으면 아무것도 안 한다.
+pub fn blitClip(dst: [*]u8, dst_pitch: u32, f: Fit, src: [*]const u8, src_stride: u32, bs: u32, clip: Area) void {
+    const r = intersect(.{ .x = f.x, .y = f.y, .w = f.w, .h = f.h }, clip) orelse return;
+    const lx = r.x - f.x;
+    var y: u32 = r.y;
+    while (y < r.y + r.h) : (y += 1) {
+        const sy = (f.oy + (y - f.y)) * bs / f.k;
         const srow: [*]align(1) const u32 = @ptrCast(src + @as(usize, sy) * src_stride);
-        const drow: [*]align(1) u32 = @ptrCast(dst + @as(usize, f.y + y) * dst_pitch + @as(usize, f.x) * 4);
+        const drow: [*]align(1) u32 = @ptrCast(dst + @as(usize, y) * dst_pitch + @as(usize, r.x) * 4);
         if (f.k == bs) {
-            @memcpy(drow[0..f.w], srow[f.ox .. f.ox + f.w]);
+            const from = f.ox + lx;
+            @memcpy(drow[0..r.w], srow[from .. from + r.w]);
             continue;
         }
         var x: u32 = 0;
-        while (x < f.w) : (x += 1) drow[x] = srow[(f.ox + x) * bs / f.k];
+        while (x < r.w) : (x += 1) drow[x] = srow[(f.ox + lx + x) * bs / f.k];
     }
+}
+
+/// 두 사각형이 겹친 자리. 겹치지 않으면 null.
+pub fn intersect(a: Area, b: Area) ?Area {
+    const x0 = @max(a.x, b.x);
+    const y0 = @max(a.y, b.y);
+    const x1 = @min(a.x + a.w, b.x + b.w);
+    const y1 = @min(a.y + a.h, b.y + b.h);
+    if (x1 <= x0 or y1 <= y0) return null;
+    return .{ .x = x0, .y = y0, .w = x1 - x0, .h = y1 - y0 };
+}
+
+/// 논리 사각형의 물리 자리(× `s`).
+pub fn scaleArea(a: Area, s: u32) Area {
+    return .{ .x = a.x * s, .y = a.y * s, .w = a.w * s, .h = a.h * s };
+}
+
+/// 논리 프레임버퍼 위의 자리 `f`를 물리 버퍼의 자리로(× `s`, design 결정 30). 물리 픽셀 `k · s`개가 surface 단위 하나다 —
+/// `blit(…, bs)`에 이것을 넘기면 `k · s == bs`일 때 1:1(행 memcpy)이다(configure를 따른 column은 k = 1이라 bs == 배율).
+pub fn scaleFit(f: Fit, s: u32) Fit {
+    return .{ .k = f.k * s, .x = f.x * s, .y = f.y * s, .w = f.w * s, .h = f.h * s, .ox = f.ox * s, .oy = f.oy * s };
 }
 
 // ── configure의 순서(xdg-shell) ─────────────────────────────────────────

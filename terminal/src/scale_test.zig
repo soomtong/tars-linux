@@ -83,4 +83,26 @@ pub fn main() !void {
         try expectUpscale(5, 4, .{ .x1 = 2, .y1 = 2, .x2 = 2, .y2 = 3 }, s);
     }
     std.debug.print("scale_test: 3. upscale writes s x s blocks inside the rect and nothing outside OK\n", .{});
+
+    // ── 검사 4: 마스크 늘리기(WY-M3) — 마스크가 참인 픽셀만 블록, 나머지 물리는 그대로 ──────────
+    // 논리 4 × 3의 사각형 (1, 1)–(3, 3)(2 × 2)에 대각선 마스크. 배율 2 → 참인 두 블록만 바뀐다.
+    {
+        const s: u32 = 2;
+        var src: [4 * 3]u32 = undefined;
+        for (&src, 0..) |*p, i| p.* = 0x100 + @as(u32, @intCast(i));
+        var dst: [8 * 6]u32 = @splat(SENTINEL);
+        const mask = [_]bool{ true, false, false, true };
+        scale.upscaleMasked(@ptrCast(&src), 4 * 4, @ptrCast(&dst), 8 * 4, .{ .x1 = 1, .y1 = 1, .x2 = 3, .y2 = 3 }, s, &mask, 2);
+        for (0..6) |y| for (0..8) |x| {
+            const lx = x / s;
+            const ly = y / s;
+            const on = lx >= 1 and lx < 3 and ly >= 1 and ly < 3 and mask[(ly - 1) * 2 + (lx - 1)];
+            const want = if (on) src[ly * 4 + lx] else SENTINEL;
+            if (dst[y * 8 + x] != want) {
+                std.debug.print("FAIL: upscaleMasked physical ({d},{d}) = {x}, want {x}\n", .{ x, y, dst[y * 8 + x], want });
+                return error.WrongMaskedUpscale;
+            }
+        };
+    }
+    std.debug.print("scale_test: 4. upscaleMasked writes only the masked pixels as s x s blocks OK\n", .{});
 }
