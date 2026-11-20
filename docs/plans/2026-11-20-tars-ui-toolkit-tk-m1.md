@@ -67,3 +67,19 @@ Status: 진행 중. 브랜치 `app-layer-0-3`.
 1. 게스트의 `tk> draw us=` 통째 · 애니메이션 한 프레임과 같은 프레임의 서버 `wl> blit us=`, 게스트/네이티브 비. 2. 애니메이션 하나의 프레임 수와 간격
 (16 ms 하한에 붙는가). 3. 버퍼 나이가 실제로 2로 도는가. 4. 부분 그리기 뒤 좌표 색 판정이 그대로인가. 5. 호스트 검사의 MaxRSS. 6. `/dev/ttyS0`로 꺼낸 줄이
 쪼개지지 않는가.
+
+## 결과
+
+구현은 `tk-m1`(Herdr, Opus — 조사도 같은 에이전트), lead는 대조 · 게이트 · commit.
+
+1. 단계 A `d3eaa34`: 층을 디렉터리 · 모듈로(`window/` → `cg/` → `ca/`, 그리고 순수 값 `geom`). 위 층 파일을 경로로 부르면 두 모듈에 들어 컴파일 오류 —
+   그것이 층 경계를 막는 장치다. CG `Painter`(fillRect 빠른 길 · fillRoundedRect · drawGlyphs · pushClip/popClip · translate, 프레임 clip이 판 전체가 아니면
+   임시 판 + 행 복사, masks clip을 넘는 둥근 사각형은 작은 임시 판 + `compositeOver`), CA `Layer` · `Tree`(setter의 더티 = 옛 ∪ 새, 바깥 반올림), 창 층의
+   `invalidate(rect)` · `age.zig`(history 4) · `damage_buffer` = pending · `run` 루프(앱 콜백 안의 여러 바꿈이 한 프레임). 데모를 트리로 — 결정 4의 PNG가 TK-M0과
+   픽셀 차 0. ReleaseSafe 누수 보고가 셸을 채우던 것(TK-M0부터)을 `deinit`으로 고쳤다.
+2. 호스트 검사: 무작위 트리 여섯 × 바꾸기 60(부분 다시 그리기 222번) · 버퍼 둘 번갈아 197프레임에서 부분 = 통째 다름 0. 일부러 망가뜨린 셋(history 무시 ·
+   겹친 clip 무시 · 길 선택에 프레임 clip을 섞음)이 모두 다름을 냈다 — 검사가 잡는다. 체인 단독 toolkit 두 번 · terminal PASS.
+3. 실측(게스트, `space`로 면 불투명도 0 ↔ 1 일곱 번): 첫 그림 65 ms(글리프 굽기), 첫 `space`는 새 버퍼라 통째 15.4 ms(`damage=24,300,64,32`), 그 뒤 여섯 번
+   `age=2` · `dirty=24,300,64,32` · 120~952 µs. 서버 `wl> blit x=668 y=320 w=64 h=32` 일곱 줄 — 면의 화면 사각형 그대로. 데모 VmRSS 10 MB. 호스트 검사 MaxRSS 476 MB.
+4. 단계 A에서 달라진 것: 창 층이 CG를 모른다(버퍼마다 z2d Surface를 안 든다 — design 결정 9 문장을 고쳤다), `Handler.resize`, 로그에 ` age=N`, 데모의 면(단계 B가
+   애니메이션으로). `tk>` 줄 꺼내기는 `/dev/console`(체인의 `type_text`가 대문자 `S`를 못 친다).
