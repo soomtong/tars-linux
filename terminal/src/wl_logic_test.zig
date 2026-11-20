@@ -174,6 +174,48 @@ pub fn main() !void {
     }
     std.debug.print("wl_logic_test: physical compose 4 cases, 1:1 blit 1, blitClip 4 cases\n", .{});
 
+    // damage(WY-M6 단계 B, design 결정 47) — 쌓기 · 자르기 · 화면 자리.
+    {
+        // 빈 사각형은 damage가 아니다. `damage`(surface 좌표)는 × buffer_scale.
+        if (logic.boxOf(0, 0, 0, 5, 1) != null or logic.boxOf(0, 0, 5, -1, 1) != null) return error.WrongDamage;
+        const s2 = logic.boxOf(3, 4, 5, 6, 2).?;
+        if (!std.meta.eql(s2, logic.Box{ .x0 = 6, .y0 = 8, .x1 = 16, .y1 = 20 })) return error.WrongDamage;
+        // `damage_buffer(0, 0, INT32_MAX, INT32_MAX)`(tars-wl-test · SDL의 통째)는 버퍼 전체로 잘린다. 음수 자리도 자른다.
+        const all = logic.boxOf(0, 0, std.math.maxInt(i32), std.math.maxInt(i32), 1).?;
+        if (!std.meta.eql(logic.boxClamp(all, 300, 200), logic.Area{ .x = 0, .y = 0, .w = 300, .h = 200 })) return error.WrongDamage;
+        const neg = logic.boxOf(-10, -10, 20, 15, 1).?;
+        if (!std.meta.eql(logic.boxClamp(neg, 300, 200), logic.Area{ .x = 0, .y = 0, .w = 10, .h = 5 })) return error.WrongDamage;
+        if (logic.boxClamp(logic.boxOf(400, 0, 10, 10, 1).?, 300, 200) != null) return error.WrongDamage;
+        // 합집합 — 한 commit에 `damage_buffer` 하나와 `damage` 하나(실측 4의 모양), 그리고 commit 둘(실측 7).
+        const u = logic.boxUnion(logic.boxOf(0, 0, 32, 32, 1), logic.boxOf(64, 0, 32, 32, 1).?);
+        if (!std.meta.eql(logic.boxClamp(u, 616, 752), logic.Area{ .x = 0, .y = 0, .w = 96, .h = 32 })) return error.WrongDamage;
+        const au = logic.areaUnion(.{ .x = 0, .y = 64, .w = 32, .h = 32 }, .{ .x = 64, .y = 64, .w = 32, .h = 32 });
+        if (!std.meta.eql(au, logic.Area{ .x = 0, .y = 64, .w = 96, .h = 32 })) return error.WrongDamage;
+        if (!std.meta.eql(logic.areaUnion(null, au), au)) return error.WrongDamage;
+
+        const r: logic.Area = .{ .x = 3, .y = 5, .w = 4, .h = 2 };
+        const cases = [_]struct { f: logic.Fit, bs: u32, want: ?logic.Area }{
+            // k 1 · bs 1 — column을 1배로 채운 창(x 644, y 20): 그대로 옮긴다.
+            .{ .f = .{ .k = 1, .x = 644, .y = 20, .w = 616, .h = 752, .ox = 0, .oy = 0 }, .bs = 1, .want = .{ .x = 647, .y = 25, .w = 4, .h = 2 } },
+            // k 2 · bs 1 — 2배로 늘린 창: 자리와 크기가 둘 다 두 배.
+            .{ .f = .{ .k = 2, .x = 40, .y = 0, .w = 600, .h = 400, .ox = 0, .oy = 0 }, .bs = 1, .want = .{ .x = 46, .y = 10, .w = 8, .h = 4 } },
+            // k 1 · bs 2 — 배율 2 화면의 논리 그림자에 bs 2 버퍼(솎기): 버퍼 [3, 7) → 화면 [1, 4)(바깥으로), [5, 7) → [2, 4).
+            .{ .f = .{ .k = 1, .x = 0, .y = 0, .w = 100, .h = 100, .ox = 0, .oy = 0 }, .bs = 2, .want = .{ .x = 1, .y = 2, .w = 3, .h = 2 } },
+            // 잘린 창(버퍼가 사각형보다 크다, ox 4 · oy 0) — [3, 7)의 보이는 쪽 [4, 7)이 화면 x 10 + 0부터 3.
+            .{ .f = .{ .k = 1, .x = 10, .y = 0, .w = 20, .h = 20, .ox = 4, .oy = 0 }, .bs = 1, .want = .{ .x = 10, .y = 5, .w = 3, .h = 2 } },
+            // 보이는 자리 밖(ox가 damage보다 오른쪽) — null.
+            .{ .f = .{ .k = 1, .x = 10, .y = 0, .w = 20, .h = 20, .ox = 8, .oy = 0 }, .bs = 1, .want = null },
+        };
+        for (cases) |cs| {
+            const got = logic.damageScreen(cs.f, cs.bs, r);
+            if (!std.meta.eql(got, cs.want)) {
+                std.debug.print("FAIL: damageScreen({any}, bs {d}) = {any}, want {any}\n", .{ cs.f, cs.bs, got, cs.want });
+                return error.WrongDamage;
+            }
+        }
+    }
+    std.debug.print("wl_logic_test: damage box 7 cases, damageScreen 5 cases\n", .{});
+
     // configure 순서 — 첫 commit은 버퍼 없이(configure를 보낸다), ack 뒤 버퍼(보인다), 그 뒤는 다시 그린다.
     try expectStep(.fresh, false, false, .{ .action = .send_configure, .next = .configured });
     try expectStep(.fresh, false, true, .{ .action = .unconfigured_buffer, .next = .fresh });

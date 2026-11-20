@@ -66,6 +66,25 @@ const F_SEAL_SHRINK = 0x2;
 const F_SEAL_GROW = 0x4;
 const F_SEAL_WRITE = 0x8;
 
+/// `Server.damageFor`의 답(WY-M6 단계 B, design 결정 47). `part`는 화면(프레임버퍼) 좌표의 사각형이다.
+pub const Damage = union(enum) {
+    whole,
+    none,
+    part: logic.Area,
+};
+
+/// `wl> blit` 줄의 창마다 상한(WY-M6 확정 7). 통째는 둘(첫 그림과 그다음 — 체인의 창마다 두 줄), 부분은 판정 30의 `--damage` 창
+/// 하나가 다 찍히도록 열여섯.
+const BLIT_WHOLE_LINES: u8 = 2;
+const BLIT_PART_LINES: u8 = 16;
+
+/// 단조 시계(ns) — `wl> blit`의 `us=`. 서버는 `std.Io`를 들지 않아 시스템 콜을 바로 부른다.
+fn monoNs() u64 {
+    var ts: linux.timespec = undefined;
+    _ = linux.clock_gettime(.MONOTONIC, &ts);
+    return @as(u64, @intCast(ts.sec)) * 1_000_000_000 + @as(u64, @intCast(ts.nsec));
+}
+
 /// App이 바퀴마다 꺼내는 일(`takeEvents`).
 pub const Event = union(enum) {
     /// toplevel이 첫 commit을 했다(WY-M2 확정 3) — App이 자리를 정해 `placeWorkspace`나 `placeColumn`을 부르거나, 자리가
@@ -590,9 +609,37 @@ pub const Server = struct {
         sendConfigure(t, want.w, want.h, want.act);
     }
 
+    /// 다음 프레임에 창 `id`를 사각형 `area` 안에 어떻게 옮길지(WY-M6 단계 B, design 결정 47). `whole`이면 통째(둘레 검정 + 창 전체),
+    /// `part`면 그 화면 사각형만(둘레는 안 건드린다 — 프레임버퍼에 이 창의 직전 그림이 그 자리 그대로 있다), `none`이면 옮길 것이 없다
+    /// (frame 콜백만 기다린 commit). 통째인 때: 첫 그림, 버퍼 크기나 buffer_scale이 바뀜, 놓는 자리(`fit`)가 마지막으로 옮긴 자리와
+    /// 다름, damage가 버퍼 전체. 통째 프레임 · 앞 창이 바뀐 프레임은 부르는 쪽이 이것을 묻지 않고 통째로 옮긴다.
+    pub fn damageFor(self: *Server, id: u32, area: logic.Area) Damage {
+        const t = self.find(id) orelse return .whole;
+        const xs = t.xdg orelse return .whole;
+        const s = xs.surface orelse return .whole;
+        const buf = s.current orelse return .whole;
+        const shm = wl.shm.Buffer.get(@ptrCast(buf)) orelse return .whole;
+        if (s.damage_whole) return .whole;
+        const bw: u32 = @intCast(shm.getWidth());
+        const bh: u32 = @intCast(shm.getHeight());
+        const sz = logic.surfaceSize(bw, bh, s.scale);
+        const f = logic.fitIn(area, sz.w, sz.h) orelse return .whole;
+        const last = t.last_fit orelse return .whole;
+        if (!std.meta.eql(last, f)) return .whole;
+        const d = s.damage orelse return .none;
+        if (d.x == 0 and d.y == 0 and d.w == bw and d.h == bh) return .whole;
+        const r = logic.damageScreen(f, s.scale, d) orelse {
+            // damage가 보이는 자리 밖이다(잘린 창의 가장자리) — 옮길 것이 없다. 쌓인 것은 버린다.
+            s.damage = null;
+            return .none;
+        };
+        return .{ .part = r };
+    }
+
     /// toplevel `id`의 버퍼를 프레임버퍼의 사각형 `area` 안에 옮긴다(확정 8, WY-M2 확정 5). 그린 사각형을 돌려준다.
-    /// 버퍼가 없거나 받지 않는 형식이면 null이다 — 그 자리는 부르는 쪽이 검정으로 둔다.
-    pub fn paint(self: *Server, id: u32, dst: [*]u8, pitch: u32, area: logic.Area) ?logic.Fit {
+    /// 버퍼가 없거나 받지 않는 형식이면 null이다 — 그 자리는 부르는 쪽이 검정으로 둔다. `clip`이 있으면(WY-M6 `damageFor`의
+    /// `part`) 그 화면 사각형만 옮긴다. 옮긴 뒤 쌓인 damage를 비운다 — 이제 화면이 이 버퍼와 같다.
+    pub fn paint(self: *Server, id: u32, dst: [*]u8, pitch: u32, area: logic.Area, clip: ?logic.Area) ?logic.Fit {
         const t = self.find(id) orelse return null;
         const xs = t.xdg orelse return null;
         const s = xs.surface orelse return null;
@@ -602,13 +649,27 @@ pub const Server = struct {
         // 창의 크기는 surface 크기(버퍼 ÷ buffer_scale)다(WY-M3, design 결정 29) — `last_fit`과 포인터 좌표가 이 단위다.
         const sz = logic.surfaceSize(@intCast(shm.getWidth()), @intCast(shm.getHeight()), s.scale);
         const f = logic.fitIn(area, sz.w, sz.h) orelse return null;
-        // 클라이언트가 풀을 줄였으면 읽기가 SIGBUS다 — libwayland이 그 틈을 막는다(begin · end).
-        shm.beginAccess();
-        defer shm.endAccess();
-        const data: [*]const u8 = @ptrCast(shm.getData() orelse return null);
-        logic.blit(dst, pitch, f, data, @intCast(shm.getStride()), s.scale);
+        const rect: logic.Area = if (clip) |c| logic.intersect(c, .{ .x = f.x, .y = f.y, .w = f.w, .h = f.h }) orelse c else .{ .x = f.x, .y = f.y, .w = f.w, .h = f.h };
+        const t0 = monoNs();
+        {
+            // 클라이언트가 풀을 줄였으면 읽기가 SIGBUS다 — libwayland이 그 틈을 막는다(begin · end).
+            shm.beginAccess();
+            defer shm.endAccess();
+            const data: [*]const u8 = @ptrCast(shm.getData() orelse return null);
+            logic.blitClip(dst, pitch, f, data, @intCast(shm.getStride()), s.scale, rect);
+        }
+        const us = (monoNs() - t0) / 1000;
         // 포인터 좌표를 거꾸로 셀 자리(단계 C).
         t.last_fit = f;
+        s.damage = null;
+        s.damage_whole = false;
+        // 실측 줄(WY-M6 확정 7) — 창마다 통째 · 부분을 따로 처음 몇 번만(같은 창의 통째와 부분을 맞대려고 창마다다).
+        const n = if (clip != null) &t.blit_lines.part else &t.blit_lines.whole;
+        const cap: u8 = if (clip != null) BLIT_PART_LINES else BLIT_WHOLE_LINES;
+        if (n.* < cap) {
+            n.* += 1;
+            logline.print("terminal: wl> blit id={d} x={d} y={d} w={d} h={d} us={d}\n", .{ id, rect.x, rect.y, rect.w, rect.h, us });
+        }
         return f;
     }
 
@@ -1027,6 +1088,17 @@ const Surface = struct {
     /// 다른 길로는 둘 다 안 바뀐다(xml).
     pending_scale: u32 = 1,
     scale: u32 = 1,
+    /// damage(WY-M6 단계 B, design 결정 47). commit 전의 둘 — `damage`(surface 좌표, commit의 buffer_scale로 곱한다)와
+    /// `damage_buffer`(버퍼 좌표). commit이 버퍼로 잘라 `damage`(아직 화면에 안 옮긴 것의 합집합, 버퍼 좌표)에 더한다.
+    pending_damage: ?logic.Box = null,
+    pending_damage_surface: ?logic.Box = null,
+    damage: ?logic.Area = null,
+    /// 다음 옮기기는 통째다 — 첫 버퍼, 버퍼 크기나 buffer_scale이 바뀜. `paint`가 지운다.
+    damage_whole: bool = true,
+    /// 마지막 commit의 버퍼 크기와 buffer_scale(바뀌면 통째).
+    dims: ?Dims = null,
+
+    const Dims = struct { w: i32, h: i32, bs: u32 };
 };
 
 fn surfaceRequest(res: *wl.Surface, req: wl.Surface.Request, s: *Surface) void {
@@ -1057,9 +1129,16 @@ fn surfaceRequest(res: *wl.Surface, req: wl.Surface.Request, s: *Surface) void {
             if (!logic.scaleOk(r.scale)) return res.postError(.invalid_scale, "buffer scale must be greater than 0");
             s.pending_scale = @intCast(r.scale);
         },
-        // damage는 아직 안 본다 — 통째 blit이다(부분 blit은 M5, R-WY-10). `offset`(판 5)은 받아서 버린다 — toplevel
-        // 하나뿐이고 놓는 자리는 서버가 정한다(design 결정 28).
-        .damage, .damage_buffer, .set_opaque_region, .set_input_region, .set_buffer_transform, .offset => {},
+        // damage(WY-M6 단계 B, design 결정 47) — 둘 다 pending이고 commit에서 적용된다(xml). `damage`는 surface 좌표라 곱할
+        // buffer_scale이 commit에서 정해진다 — 그래서 따로 쌓는다.
+        .damage => |d| if (logic.boxOf(d.x, d.y, d.width, d.height, 1)) |b| {
+            s.pending_damage_surface = logic.boxUnion(s.pending_damage_surface, b);
+        },
+        .damage_buffer => |d| if (logic.boxOf(d.x, d.y, d.width, d.height, 1)) |b| {
+            s.pending_damage = logic.boxUnion(s.pending_damage, b);
+        },
+        // `offset`(판 5)은 받아서 버린다 — toplevel 하나뿐이고 놓는 자리는 서버가 정한다(design 결정 28).
+        .set_opaque_region, .set_input_region, .set_buffer_transform, .offset => {},
     }
 }
 
@@ -1112,6 +1191,7 @@ fn commit(s: *Surface) void {
         if (!logic.sizeOk(@intCast(shm.getWidth()), @intCast(shm.getHeight()), s.scale))
             return s.resource.postError(.invalid_size, "buffer size is not a multiple of the buffer scale");
     };
+    if (takeDamage(s)) changed = true;
     const waiting = !s.pending_frames.empty();
     s.frames.appendList(&s.pending_frames);
 
@@ -1130,6 +1210,31 @@ fn commit(s: *Surface) void {
         },
     }
     xs.phase = step.next;
+}
+
+/// commit의 damage 적용(WY-M6 단계 B, design 결정 47). pending 둘을 버퍼 좌표로 맞춰(`damage`는 × buffer_scale) 지금 버퍼로 자르고
+/// 아직 안 옮긴 합집합에 더한다 — commit 둘이 한 프레임에 모이면 둘을 덮는 사각형이 된다. 버퍼 크기나 buffer_scale이 바뀌었으면
+/// 다음 옮기기는 통째다. 보이는 내용이 바뀌었으면(damage가 버퍼에 닿았다) 참 — 같은 버퍼를 다시 붙인 commit도 다시 그린다.
+fn takeDamage(s: *Surface) bool {
+    const surf = s.pending_damage_surface;
+    const buf = s.pending_damage;
+    s.pending_damage_surface = null;
+    s.pending_damage = null;
+    const cur = s.current orelse return false;
+    const shm = wl.shm.Buffer.get(@ptrCast(cur)) orelse return false;
+    const dims: Surface.Dims = .{ .w = shm.getWidth(), .h = shm.getHeight(), .bs = s.scale };
+    if (s.dims) |d| {
+        if (!std.meta.eql(d, dims)) s.damage_whole = true;
+    } else s.damage_whole = true;
+    s.dims = dims;
+    var box = buf;
+    if (surf) |b| {
+        const m: i64 = s.scale;
+        box = logic.boxUnion(box, .{ .x0 = b.x0 * m, .y0 = b.y0 * m, .x1 = b.x1 * m, .y1 = b.y1 * m });
+    }
+    const area = logic.boxClamp(box orelse return false, @intCast(dims.w), @intCast(dims.h)) orelse return false;
+    s.damage = logic.areaUnion(s.damage, area);
+    return true;
 }
 
 /// `wl> commit` 줄(확정 5) — 버퍼 크기나 놓는 자리가 바뀔 때만.
@@ -1371,6 +1476,8 @@ const Toplevel = struct {
     last_fit: ?logic.Fit = null,
     /// 이 창의 클라이언트가 `set_cursor(NULL)`을 보냈다(확정 10).
     cursor_hidden: bool = false,
+    /// `wl> blit` 줄을 찍은 수(WY-M6 확정 7).
+    blit_lines: struct { whole: u8 = 0, part: u8 = 0 } = .{},
 
     const Sig = struct { w: i32, h: i32, fit: logic.Fit, bs: u32 };
     const Sent = struct { w: u32, h: u32, act: bool };

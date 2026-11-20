@@ -19,6 +19,10 @@
 //! `preedit text=… cursor=a,b` · `done serial=N match=1|0`(serial이 내가 보낸 commit 수와 같은가).
 //! WY-M6(plan 확정 3): `--native`면 창보다 먼저 `tars_menu_manager_v1`을 bind한다 — 원래 모드라 Cmd가 Super(`mods depressed=0x40`)로
 //! 온다. 없으면 호환 모드라 서버가 Super를 Ctrl(`0x4`)로 보인다(design 결정 45 · 46). bind하면 `native` 한 줄.
+//! WY-M6 단계 B(plan 확정 8): `--damage`면 버퍼 넷의 고리로 그린다(하나를 붙인 동안 다른 것에 쓴다 — `release`를 기다린다). 첫 그림은
+//! 통째, 그 뒤 frame마다 한 걸음: 1 섞은 commit(상자 A(0,0)는 `damage_buffer`, B(64,0)는 `damage` — 실측 4), 2 몰아친 commit(상자 C(0,64)
+//! commit 하나, D(64,64) commit 하나를 frame을 안 기다리고 — 실측 7), 3~10 A의 색만 바꿔 그 자리만 `damage_buffer`. 상자는 32 × 32
+//! (surface 단위, 버퍼는 × buffer_scale), A의 마지막 색은 00FF00, 나머지는 흰색. 걸음마다 `damage step=N`, 10에서 frame을 그친다.
 //! `wl_surface.enter`의 줄에 `enter`라는 낱말을 안 쓰는 것은 wayland 체인 판정 16이 이 로그의 `enter`(키보드)를 세기 때문이다.
 //!
 //! 바인딩은 terminal의 서버와 같은 스캐너가 만든 것이다(`build.zig`의 `wayland` 모듈 — 서버는 `server`, 이쪽은
@@ -114,6 +118,8 @@ const Args = struct {
     text_input: bool = false,
     /// `--native`(WY-M6) — `tars_menu_manager_v1`을 bind해 원래 모드(Cmd = Super)로 받는다.
     native: bool = false,
+    /// `--damage`(WY-M6 단계 B) — 상자만 다시 그리고 그 자리만 damage로 알린다.
+    damage: bool = false,
 };
 
 /// 바둑판의 둘째 색. 둘레의 검정과 갈리게 흰색이다.
@@ -164,6 +170,8 @@ fn parseArgs(argv: []const []const u8) ?Args {
             args.text_input = true;
         } else if (std.mem.eql(u8, a, "--native")) {
             args.native = true;
+        } else if (std.mem.eql(u8, a, "--damage")) {
+            args.damage = true;
         } else if (std.mem.eql(u8, a, "--copy")) {
             i += 1;
             if (i == argv.len) return null;
@@ -183,7 +191,7 @@ fn usage() u8 {
     writeAll(2,
         \\usage: tars-wl-test [--color RRGGBB] [--size WxH] [--ignore-close] [--follow-size] [--fullscreen]
         \\       [--hide-cursor] [--buffer-scale N] [--checker] [--copy TEXT] [--paste] [--paste-drop]
-        \\       [--text-input] [--native]
+        \\       [--text-input] [--native] [--damage]
         \\  open one xdg_toplevel filled with one colour (default 3366CC, 320x200) and
         \\  print what the compositor sends, one line each. Ends on close, unless
         \\  --ignore-close (then close and ping are ignored). The buffer keeps its
@@ -201,6 +209,8 @@ fn usage() u8 {
         \\  commit and preedit text the compositor sends, at each done.
         \\  --native binds tars_menu_manager_v1 so Cmd comes as Super; without it
         \\  the compositor shows Cmd as Ctrl (compat mode).
+        \\  --damage redraws only 32x32 boxes after the first frame and tells the
+        \\  compositor just those rectangles (damage), from a ring of four buffers.
         \\
     );
     return EXIT_USAGE;
@@ -266,7 +276,157 @@ const State = struct {
     frames: u32 = 0,
     running: bool = true,
     failed: bool = false,
+    /// `--damage`(WY-M6 단계 B)의 버퍼 고리 · 지금 그림의 상자 · 걸음.
+    ring: [RING]RingBuf = @splat(.{}),
+    boxes: [4]?Box = @splat(null),
+    dmg_step: u32 = 0,
 };
+
+// ── `--damage`의 고리(WY-M6 단계 B) ───────────────────────────────────
+
+/// 버퍼 넷. 붙인 버퍼는 서버가 `release`를 보낼 때까지 쓰지 않는다 — 서버는 commit 때 복사하지 않고 그릴 때 읽는다. 걸음 2가 frame을
+/// 안 기다리고 둘을 붙이므로 셋으로는 모자랄 수 있다(지금 것 · 방금 둘).
+const RING = 4;
+const RingBuf = struct {
+    buffer: ?*wl.Buffer = null,
+    pixels: [*]u32 = undefined,
+    bytes: usize = 0,
+    busy: bool = false,
+};
+/// 상자 하나(surface 단위 자리, 색 0xRRGGBB). 크기는 `BOX`.
+const Box = struct { x: u32, y: u32, color: u32 };
+const BOX: u32 = 32;
+const BOX_WHITE: u32 = 0xFFFFFF;
+/// 걸음 3~10의 A 색 — 짝수 걸음 00FF00, 홀수 FF00FF. 마지막(10)이 00FF00이다.
+const BOX_EVEN: u32 = 0x00FF00;
+const BOX_ODD: u32 = 0xFF00FF;
+const DAMAGE_LAST_STEP: u32 = 10;
+
+fn ringRelease(_: *wl.Buffer, event: wl.Buffer.Event, rb: *RingBuf) void {
+    switch (event) {
+        .release => rb.busy = false,
+    }
+}
+
+/// 고리를 (다시) 만든다 — 크기가 바뀌면 옛것을 지운다. 버퍼마다 memfd · 풀 하나, 매핑은 끝까지 둔다.
+fn makeRing(state: *State) !void {
+    const bs = state.args.buffer_scale;
+    const bw = state.width * bs;
+    const bh = state.height * bs;
+    const stride = bw * 4;
+    const size: usize = @as(usize, stride) * bh;
+    for (&state.ring) |*rb| {
+        if (rb.buffer) |b| {
+            b.destroy();
+            _ = linux.munmap(@ptrCast(rb.pixels), rb.bytes);
+        }
+        rb.* = .{};
+        const fd_rc = linux.memfd_create("tars-wl-test-ring", 0);
+        if (linux.errno(fd_rc) != .SUCCESS) return error.MemfdFailed;
+        const fd: i32 = @intCast(fd_rc);
+        defer _ = linux.close(fd);
+        if (linux.errno(linux.ftruncate(fd, @intCast(size))) != .SUCCESS) return error.FtruncateFailed;
+        const addr = linux.mmap(null, size, .{ .READ = true, .WRITE = true }, .{ .TYPE = .SHARED }, fd, 0);
+        if (linux.errno(addr) != .SUCCESS) return error.MmapFailed;
+        const pool = try state.shm.createPool(fd, @intCast(size));
+        defer pool.destroy();
+        const b = try pool.createBuffer(0, @intCast(bw), @intCast(bh), @intCast(stride), .argb8888);
+        rb.* = .{ .buffer = b, .pixels = @ptrFromInt(addr), .bytes = size };
+        b.setListener(*RingBuf, ringRelease, rb);
+    }
+}
+
+/// 쓸 수 있는 고리 버퍼에 지금 그림 전체(바탕 + 상자)를 그린다. 모두 붙어 있으면 null.
+fn ringPaint(state: *State) ?*RingBuf {
+    const rb = for (&state.ring) |*r| {
+        if (r.buffer != null and !r.busy) break r;
+    } else return null;
+    const bs = state.args.buffer_scale;
+    const bw = state.width * bs;
+    const bh = state.height * bs;
+    @memset(rb.pixels[0 .. @as(usize, bw) * bh], 0xFF000000 | state.args.color);
+    for (state.boxes) |maybe| if (maybe) |bx| {
+        var y = bx.y * bs;
+        while (y < @min((bx.y + BOX) * bs, bh)) : (y += 1) {
+            var x = bx.x * bs;
+            while (x < @min((bx.x + BOX) * bs, bw)) : (x += 1) rb.pixels[@as(usize, y) * bw + x] = 0xFF000000 | bx.color;
+        }
+    };
+    return rb;
+}
+
+/// 고리 버퍼를 붙인다(damage는 부르는 쪽이 이 뒤 · commit 앞에 준다).
+fn ringAttach(state: *State, rb: *RingBuf) void {
+    if (state.args.buffer_scale != 1) state.surface.setBufferScale(@intCast(state.args.buffer_scale));
+    state.surface.attach(rb.buffer.?, 0, 0);
+    rb.busy = true;
+}
+
+/// 상자 하나의 자리를 버퍼 좌표 `damage_buffer`로.
+fn damageBox(state: *State, bx: Box) void {
+    const bs: i32 = @intCast(state.args.buffer_scale);
+    state.surface.damageBuffer(@as(i32, @intCast(bx.x)) * bs, @as(i32, @intCast(bx.y)) * bs, @as(i32, BOX) * bs, @as(i32, BOX) * bs);
+}
+
+/// frame `done`마다 한 걸음(파일 머리). 버퍼가 다 붙어 있으면 그 걸음을 다음 frame으로 미룬다.
+fn damageStep(state: *State) void {
+    if (state.dmg_step >= DAMAGE_LAST_STEP) return;
+    const next = state.dmg_step + 1;
+    switch (next) {
+        1 => {
+            state.boxes[0] = .{ .x = 0, .y = 0, .color = BOX_WHITE };
+            state.boxes[1] = .{ .x = 64, .y = 0, .color = BOX_WHITE };
+            const rb = ringPaint(state) orelse return retryFrame(state);
+            ringAttach(state, rb);
+            // A는 버퍼 좌표, B는 surface 좌표 — 한 commit에 둘을 섞는다(실측 4).
+            damageBox(state, state.boxes[0].?);
+            state.surface.damage(64, 0, BOX, BOX);
+            requestFrame(state);
+            state.surface.commit();
+            say("damage step=1 mixed", .{});
+        },
+        2 => {
+            state.boxes[2] = .{ .x = 0, .y = 64, .color = BOX_WHITE };
+            const first = ringPaint(state) orelse {
+                state.boxes[2] = null;
+                return retryFrame(state);
+            };
+            ringAttach(state, first);
+            damageBox(state, state.boxes[2].?);
+            state.surface.commit();
+            // frame을 안 기다리고 곧바로 둘째 commit — 서버가 한 프레임에 둘을 모을 수 있다(실측 7).
+            state.boxes[3] = .{ .x = 64, .y = 64, .color = BOX_WHITE };
+            const second = ringPaint(state) orelse {
+                // 버퍼가 모자라면 D는 그리지 않고 첫 commit만으로 둔다 — 줄로 남긴다(판정 30의 D 자리가 빨개진다).
+                state.boxes[3] = null;
+                say("damage step=2 burst=1", .{});
+                state.dmg_step = next;
+                return retryFrame(state);
+            };
+            ringAttach(state, second);
+            damageBox(state, state.boxes[3].?);
+            requestFrame(state);
+            state.surface.commit();
+            say("damage step=2 burst=2", .{});
+        },
+        else => {
+            state.boxes[0].?.color = if (next % 2 == 0) BOX_EVEN else BOX_ODD;
+            const rb = ringPaint(state) orelse return retryFrame(state);
+            ringAttach(state, rb);
+            damageBox(state, state.boxes[0].?);
+            if (next < DAMAGE_LAST_STEP) requestFrame(state);
+            state.surface.commit();
+            say("damage step={d}", .{next});
+        },
+    }
+    state.dmg_step = next;
+}
+
+/// 걸음을 못 했다(버퍼가 다 붙어 있다) — 빈 commit으로 frame만 다시 건다.
+fn retryFrame(state: *State) void {
+    requestFrame(state);
+    state.surface.commit();
+}
 
 // ── 버퍼 ───────────────────────────────────────────────────────────
 
@@ -302,6 +462,7 @@ fn makeBuffer(state: *State) !*wl.Buffer {
 
 /// 버퍼를 붙이고 frame 콜백을 건 뒤 commit한다. `fresh`이면 버퍼를 다시 만든다(크기가 바뀌었을 때).
 fn draw(state: *State, fresh: bool) void {
+    if (state.args.damage) return drawRing(state, fresh);
     if (fresh or state.buffer == null) {
         if (state.buffer) |old| old.destroy();
         state.buffer = makeBuffer(state) catch |e| {
@@ -316,6 +477,22 @@ fn draw(state: *State, fresh: bool) void {
     state.surface.attach(state.buffer.?, 0, 0);
     state.surface.damageBuffer(0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
     requestFrame(state);
+    state.surface.commit();
+}
+
+/// `--damage`의 통째 그림(첫 configure · 크기가 바뀐 configure · 다시 온 configure). 지금 그림 전체를 고리 버퍼에 그려 통째 damage.
+fn drawRing(state: *State, fresh: bool) void {
+    if (fresh or state.ring[0].buffer == null) makeRing(state) catch |e| {
+        say("error buffer={s}", .{@errorName(e)});
+        state.failed = true;
+        state.running = false;
+        return;
+    };
+    const rb = ringPaint(state) orelse return retryFrame(state);
+    ringAttach(state, rb);
+    state.surface.damageBuffer(0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
+    // 걸음이 끝났으면 frame을 더 걸지 않는다 — 다시 온 configure가 걸음을 다시 돌리지 않게.
+    if (state.dmg_step < DAMAGE_LAST_STEP) requestFrame(state);
     state.surface.commit();
 }
 
@@ -433,6 +610,7 @@ fn frameListener(cb: *wl.Callback, event: wl.Callback.Event, state: *State) void
             cb.destroy();
             state.frames += 1;
             if (state.frames <= FRAME_LINES) say("frame n={d}", .{state.frames});
+            if (state.args.damage) return damageStep(state);
             // 내용은 같다 — 콜백이 계속 도는지 보려고 다음 프레임을 다시 건다.
             requestFrame(state);
             state.surface.commit();

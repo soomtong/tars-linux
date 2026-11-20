@@ -28,7 +28,8 @@ cd "$(dirname "$0")" || exit 1
 #   먹은 키는 `wl_keyboard`로 안 가고 확정이 그 뒤의 키보다 먼저 간다, 포커스를 잃으면(Cmd+[ · 셸 클릭) 조합을 그 창에 확정한다,
 #   켜지 않은 창은 한글이 켜져 있어도 지금처럼 키를 받는다.
 # WY-M6: 판정 29(28 뒤 · 9 앞) — `tars_menu_v1`을 bind하지 않은 창(호환 모드)은 Cmd+V를 Ctrl(0x4)+V로 받고 Cmd+1은 여전히
-#   compositor의 것이다, `--native`로 bind한 창(원래 모드)은 Cmd를 Super(0x40)로 받는다.
+#   compositor의 것이다, `--native`로 bind한 창(원래 모드)은 Cmd를 Super(0x40)로 받는다. 판정 30(29 뒤 · 9 앞) — `--damage` 창의
+#   32 × 32 상자만 바뀐 commit은 서버가 그 화면 사각형만 옮기고(`wl> blit … w=32 h=32`) 상자 넷과 둘레가 화면에 맞다.
 # WY-M2(단계 B): 창 모드로 띄운 창은 셸 오른쪽 column이 된다(판정 16 · 17 · 22) — `wl> column`, pane 픽셀 크기의 configure
 #   (activated · tiled), 포커스 slot이 창이면 키가 그 창으로, Cmd+[로 셸에 오면 activated를 잃고 keyboard leave, Cmd+R의 새
 #   configure, Cmd+Q에 slot이 닫히고 셸이 전체 폭을 되찾는다. 자기 workspace를 보는 판정 2~8은 `--fullscreen`으로 띄운다.
@@ -758,6 +759,36 @@ type_keys ret
 wait_for_screen '\| c29-[1-9]-0-[1-9]-0-1' || report_failure "(29) the clients' logs do not show Ctrl in the compat window and Super in the native one"
 echo "(29): Cmd+V reached the compat window as Ctrl+V and the native window as Super+V, Cmd+1 stayed with the compositor"
 
+# ── 판정 30: damage — 바뀐 상자만 옮긴다(WY-M6 단계 B, design 결정 47) ─────────────────────────
+# 셸만 남은 자리다(판정 29 끝). `--damage` 창은 판정 16과 같은 자리(x 644 · y 20, 616 × 752)에 3366CC로 서고, 첫 그림 뒤에는 32 × 32
+# 상자만 다시 그려 그 자리만 damage로 알린다(tars-wl-test 머리). 걸음 3~10은 상자 A(창의 0,0)만이라 서버는 화면 (644, 20)의 32 × 32만
+# 옮긴다 — `wl> blit id=ID x=644 y=20 w=32 h=32` 여덟 줄. 그다음 screendump: A는 마지막 색 00FF00, B(64,0) · C(0,64) · D(64,64)는 흰색,
+# 상자 밖은 3366CC. 둘레 검정 칠하기가 없는 부분 길이 clip 밖을 건드리면 판정 9(verify의 clip 판정)가 빨개진다.
+echo "=== (30) damage: only the changed boxes are copied ==="
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size --damage --color 3366CC > /tmp/wl10.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(30) the damage client did not open as a column"
+DMG_ID="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+wait_for_count "terminal: wl> blit id=${DMG_ID} x=644 y=20 w=32 h=32 " 8 ||
+  report_failure "(30) fewer than eight partial blits of box A (no 8 x 'wl> blit id=${DMG_ID} x=644 y=20 w=32 h=32')"
+wait_for_log 'terminal: wl> frame part us=[0-9]+ px=0([^0-9]|$)' || report_failure "(30) no 'wl> frame part' line for a frame with a partial blit"
+sleep 0.5
+SHOT30="${SCREENS_DIR}/damage.ppm"
+screendump "$SHOT30" || report_failure "(30) screendump did not write ${SHOT30}"
+for spot in "648 24 00ff00 A" "712 24 ffffff B" "648 88 ffffff C" "712 88 ffffff D" "900 300 3366cc outside"; do
+  read -r sx sy want name <<<"$spot"
+  got="$(ppm_ink "$SHOT30" "$sx" "$sy" 24 24)"
+  [ "$got" = "bg=${want} ink=0" ] || report_failure "(30) box ${name} at ${sx},${sy} is not ${want} (${got})"
+done
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${DMG_ID} ws=1 slot=1" || report_failure "(30) Cmd+Q did not close the damage window"
+# 클라이언트가 한 것: 걸음 열 줄과 몰아친 commit 둘(버퍼가 모자라 하나로 그친 적이 없다).
+type_text 'echo c30-(grep -c damage.step /tmp/wl10.log)-(grep -c burst.2 /tmp/wl10.log)'
+type_keys ret
+wait_for_screen '\| c30-10-1' || report_failure "(30) the client's log does not have ten damage steps with a two-commit burst"
+echo "(30): box A was copied alone eight times, all four boxes and the window around them are on screen"
+
 # ── 판정 9: render verify ───────────────────────────────────────────────
 #
 # 루트 게이트는 모든 체인의 로그에서 `verify>` 줄을 본다(check.sh의 check_verify_lines). 단독 실행(`make check`)에도
@@ -909,4 +940,4 @@ fi
 echo "(15): wl> key lines $(count_log 'terminal: wl> key '), verify lines $(count_log 'terminal: verify> '), no mismatch"
 stop_boot
 
-echo "PASS: WY-M0 · WY-M1 · WY-M2 · WY-M4 · WY-M5 · WY-M6 — a window without tars_menu_v1 gets Cmd as Ctrl and one that binds it gets Cmd as Super; in a window with text input Hangul composes as preedit and commits before the next key, the eaten keys are not sent, losing the focus commits the composition, a window without text input still gets keys; a copy in the shell is pasted in a window and a copy in a window is pasted in the shell even after it closes, an EPIPE on the clipboard pipe does not kill terminal and the shell's children still die of SIGPIPE; a window without fullscreen opens as a column right of the shell and follows its size (Cmd+R), a click gives it the keys and the pointer, a hidden cursor is not drawn; the shell has WAYLAND_DISPLAY, tars-wl-test becomes workspace 2 drawn 4x in the middle, its keys go to it as evdev codes, Cmd+1 · Cmd+2 go back and forth, Cmd+C · Cmd+Q type nothing in the shell, a stopped client does not stop the shell, Cmd+Q closes and a client that ignores close is killed after 2 s; with the doom bundle tars-doom fills the screen at 4x, fires on Ctrl, waits behind the shell and leaves by itself on Cmd+Q"
+echo "PASS: WY-M0 · WY-M1 · WY-M2 · WY-M4 · WY-M5 · WY-M6 — a window without tars_menu_v1 gets Cmd as Ctrl and one that binds it gets Cmd as Super, a commit that damages a 32x32 box is copied as that box alone; in a window with text input Hangul composes as preedit and commits before the next key, the eaten keys are not sent, losing the focus commits the composition, a window without text input still gets keys; a copy in the shell is pasted in a window and a copy in a window is pasted in the shell even after it closes, an EPIPE on the clipboard pipe does not kill terminal and the shell's children still die of SIGPIPE; a window without fullscreen opens as a column right of the shell and follows its size (Cmd+R), a click gives it the keys and the pointer, a hidden cursor is not drawn; the shell has WAYLAND_DISPLAY, tars-wl-test becomes workspace 2 drawn 4x in the middle, its keys go to it as evdev codes, Cmd+1 · Cmd+2 go back and forth, Cmd+C · Cmd+Q type nothing in the shell, a stopped client does not stop the shell, Cmd+Q closes and a client that ignores close is killed after 2 s; with the doom bundle tars-doom fills the screen at 4x, fires on Ctrl, waits behind the shell and leaves by itself on Cmd+Q"

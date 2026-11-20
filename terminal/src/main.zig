@@ -747,6 +747,10 @@ const PhysList = struct {
 /// (4) `flush`. 배율 1이거나 목록이 비면 1 · 2 · 3이 없고 HS 전과 같은 `present`다. 물리로 옮긴 픽셀 수를 돌려준다(실측 줄).
 fn presentComposed(fb: drm.Framebuffer, sprite: *const pointer.Sprite, srv: ?*wls.Server, phys: *const PhysList, clips: *const drm.ClipList) !u64 {
     const cs = clips.slice();
+    // 바뀐 것이 하나도 없는 프레임(WY-M6 단계 B) — damage가 없는 commit(frame 콜백만 기다린 것)만 온 바퀴다. 내보낼 것이 없다.
+    // `stage` · `flush`에 빈 목록은 "화면 전체"라(DIRTYFB의 관례) 그대로 넘기면 그림자 전체가 물리로 늘려져 물리로 합성한 창
+    // (buffer_scale 2)을 덮고, 물리 합성 루프는 clip을 따라 돌므로 그 창을 다시 옮기지 않는다 — hidpi 판정 6이 잡았다.
+    if (!clips.whole and cs.len == 0) return 0;
     fb.stage(cs);
     var px: u64 = 0;
     if (srv) |sv| if (fb.scale > 1 and phys.len > 0) {
@@ -1853,6 +1857,8 @@ const MAX_WORKSPACES = 9;
 
 /// 실측 줄(WY-M3)을 찍는 횟수. 늘 찍으면 포인터 움직임마다 줄이 는다.
 const PHYS_LINES: u8 = 4;
+/// `wl> frame part` 줄의 상한(WY-M6 실측 5) — 판정 30의 `--damage` 창 하나가 다 찍히게 `wl> blit`의 부분 상한과 같다.
+const PART_LINES: u8 = 16;
 
 /// app 워크스페이스에서 창 둘레의 색(WY design 결정 9 — 둘레는 검정이다).
 const APP_BACKDROP: u32 = 0x000000;
@@ -4241,7 +4247,7 @@ const App = struct {
     /// 지난 프레임의 물리 합성 목록(WY-M3 확정 7). 화살표만 옮기는 바퀴가 쓴다.
     phys: PhysList = .{},
     /// 실측 줄(`wl> frame full` · `wl> phys arrow`)을 찍은 수 — 처음 `PHYS_LINES`번만.
-    phys_lines: struct { frame: u8 = 0, arrow: u8 = 0 } = .{},
+    phys_lines: struct { frame: u8 = 0, arrow: u8 = 0, part: u8 = 0 } = .{},
     /// 앞 셸 워크스페이스의 app slot 중 commit이 와서 다시 옮길 것(WY-M2 확정 5). slot 번호다. 셸 프레임이 옮기고
     /// 비운다 — 통째 프레임은 이것과 상관없이 보이는 app slot을 다 옮긴다.
     app_dirty: std.StaticBitSet(layout.MAX_LEAVES) = .empty,
@@ -6061,6 +6067,7 @@ const App = struct {
         // 그 위에 올 수 있다.
         self.phys = .{};
         var apps_seen: u32 = 0;
+        var part_seen = false;
         if (self.wl) |srv| {
             var rs: [layout.MAX_LEAVES]layout.Rect = undefined;
             ws.strip.rects(self.whole, &rs);
@@ -6074,10 +6081,24 @@ const App = struct {
                 if (self.fb.scale > 1 and srv.bufferScale(a.toplevel) > 1) self.phys.add(a.toplevel, appArea(rs[leaf]));
                 if (!full and !self.app_dirty.isSet(leaf)) continue;
                 const area = appArea(rs[leaf]);
-                // 둘레는 검정이다(WY design 결정 9) — 창이 pane보다 작거나 버퍼가 없으면 그 자리가 보인다.
-                self.fb.fillRect(area.x, area.y, area.w, area.h, APP_BACKDROP);
-                _ = srv.paint(a.toplevel, self.fb.pixels, self.fb.pitch, area);
-                clips.push(area.x, area.y, area.w, area.h);
+                // damage(WY-M6 단계 B, design 결정 47). 통째 프레임은 묻지 않고 통째다.
+                const dmg: wls.Damage = if (full) .whole else srv.damageFor(a.toplevel, area);
+                switch (dmg) {
+                    .whole => {
+                        // 둘레는 검정이다(WY design 결정 9) — 창이 pane보다 작거나 버퍼가 없으면 그 자리가 보인다.
+                        self.fb.fillRect(area.x, area.y, area.w, area.h, APP_BACKDROP);
+                        _ = srv.paint(a.toplevel, self.fb.pixels, self.fb.pitch, area, null);
+                        clips.push(area.x, area.y, area.w, area.h);
+                    },
+                    // 바뀐 사각형만 — 둘레는 그대로다(그 자리는 직전 프레임의 그림이다).
+                    .part => |r| {
+                        _ = srv.paint(a.toplevel, self.fb.pixels, self.fb.pitch, area, r);
+                        clips.push(r.x, r.y, r.w, r.h);
+                        part_seen = true;
+                    },
+                    // frame 콜백만 기다린 commit — 옮길 것이 없고 `done`만 간다.
+                    .none => {},
+                }
                 painted[leaf] = a.toplevel;
             }
         }
@@ -6199,6 +6220,8 @@ const App = struct {
             self.phys_lines.frame += 1;
             logline.print("terminal: wl> frame full us={d} apps={d} phys={d} px={d}\n", .{ frame.frame_us, apps_seen, self.phys.len, phys_px });
         }
+        // 부분 blit이 든 프레임(WY-M6 실측 5) — 처음 몇 번만.
+        if (part_seen) self.logPartFrame(frame.frame_us, phys_px);
         if (!self.first_frame_timed) {
             self.first_frame_timed = true;
             logline.print("terminal: render> first frame {d}us\n", .{frame.frame_us});
@@ -6278,6 +6301,13 @@ const App = struct {
     /// `presentFrame` → 그 창의 frame 콜백에 `done`. 상태 줄 · 프롬프트는 없다(늘 chrome 없음). render verify도
     /// 안 한다(결정 17) — 화면 흉내(`verify.screen`)에는 이 프레임의 clip을 옮겨 두어 다음 셸 프레임의 clip 판정이
     /// 어긋나지 않게 한다.
+    /// `wl> frame part us= px=`(WY-M6 실측 5) — 부분 blit이 든 프레임의 시간과 물리로 옮긴 픽셀 수. 처음 `PART_LINES`번만.
+    fn logPartFrame(self: *App, us: i96, px: u64) void {
+        if (self.phys_lines.part >= PART_LINES) return;
+        self.phys_lines.part += 1;
+        logline.print("terminal: wl> frame part us={d} px={d}\n", .{ us, px });
+    }
+
     fn renderApp(self: *App, frame: *Frame, want: ?pointer.Spot, id: u32) !void {
         frame.app = id;
         const frame_start = std.Io.Clock.now(.awake, self.io);
@@ -6293,13 +6323,28 @@ const App = struct {
             clips.all();
         }
         const screen_area: wl_logic.Area = .{ .x = 0, .y = 0, .w = self.fb.width, .h = self.fb.height };
-        const fit = srv.paint(id, self.fb.pixels, self.fb.pitch, screen_area);
-        if (!full and !std.meta.eql(fit, before)) {
-            // 창의 크기나 자리가 바뀌었다. 칠한 위에 둘레를 다시 검정으로 — 통째로 칠하고 다시 옮긴다.
-            self.fb.fill(APP_BACKDROP);
-            _ = srv.paint(id, self.fb.pixels, self.fb.pitch, screen_area);
-            clips.all();
-        } else if (fit) |f| clips.push(f.x, f.y, f.w, f.h);
+        // damage(WY-M6 단계 B, design 결정 47). 통째 프레임은 묻지 않고 통째다.
+        const dmg: wls.Damage = if (full) .whole else srv.damageFor(id, screen_area);
+        var part = false;
+        const fit: ?wl_logic.Fit = switch (dmg) {
+            .whole => whole: {
+                const f = srv.paint(id, self.fb.pixels, self.fb.pitch, screen_area, null);
+                if (!full and !std.meta.eql(f, before)) {
+                    // 창의 크기나 자리가 바뀌었다. 칠한 위에 둘레를 다시 검정으로 — 통째로 칠하고 다시 옮긴다.
+                    self.fb.fill(APP_BACKDROP);
+                    _ = srv.paint(id, self.fb.pixels, self.fb.pitch, screen_area, null);
+                    clips.all();
+                } else if (f) |ff| clips.push(ff.x, ff.y, ff.w, ff.h);
+                break :whole f;
+            },
+            // 바뀐 사각형만 — 자리는 그대로다(`damageFor`가 같은 `fit`일 때만 part를 준다).
+            .part => |r| p: {
+                part = true;
+                clips.push(r.x, r.y, r.w, r.h);
+                break :p srv.paint(id, self.fb.pixels, self.fb.pitch, screen_area, r);
+            },
+            .none => before,
+        };
         self.last_app_fit = fit;
         self.last_app = id;
         self.last_current = self.current;
@@ -6307,10 +6352,11 @@ const App = struct {
         // 물리 합성(WY-M3 확정 7) — 화면 전체가 그 창의 자리다.
         self.phys = .{};
         if (self.fb.scale > 1 and srv.bufferScale(id) > 1) self.phys.add(id, screen_area);
-        _ = try presentFrame(self.fb, &self.sprite, want, &clips, self.wl, &self.phys);
+        const phys_px = try presentFrame(self.fb, &self.sprite, want, &clips, self.wl, &self.phys);
         if (self.verify) |*v| self.copyClips(v.screen, &clips);
         srv.presented(id, @truncate(@as(u64, @intCast(self.nowMs()))));
         frame.frame_us = @divTrunc(frame_start.untilNow(self.io, .awake).nanoseconds, 1000);
+        if (part) self.logPartFrame(frame.frame_us, phys_px);
     }
 
     /// app 프레임의 `pane>` 줄(WY-M0). 셸의 것과 같은 자리 · 같은 규칙(바뀐 프레임만)이고 패널 대신 창 번호다.

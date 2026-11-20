@@ -136,6 +136,72 @@ pub fn intersect(a: Area, b: Area) ?Area {
     return .{ .x = x0, .y = y0, .w = x1 - x0, .h = y1 - y0 };
 }
 
+// ── damage(WY-M6 단계 B, design 결정 47, R-WY-10) ─────────────────────────
+
+/// commit 전에 쌓는 damage — 버퍼 좌표, 반열린 [x0, x1) × [y0, y1). 클라이언트가 준 값 그대로라 음수 · 버퍼 밖 · `INT32_MAX`가 들
+/// 수 있어 i64다(`damage`는 × buffer_scale을 하므로 i32를 넘을 수 있다). 버퍼로 자르는 것은 commit 때다(`boxClamp`) — attach가 같은
+/// commit 안에서 damage보다 늦게 올 수 있어 그 전에는 버퍼 크기를 모른다.
+pub const Box = struct { x0: i64, y0: i64, x1: i64, y1: i64 };
+
+/// `damage`(surface 좌표, `mul` = buffer_scale)나 `damage_buffer`(버퍼 좌표, `mul` = 1)의 사각형 하나. 폭이나 높이가 0 이하면 null —
+/// 비어 있는 damage다(xml은 오류로 정하지 않는다).
+pub fn boxOf(x: i32, y: i32, w: i32, h: i32, mul: u32) ?Box {
+    if (w <= 0 or h <= 0) return null;
+    const m: i64 = mul;
+    return .{ .x0 = @as(i64, x) * m, .y0 = @as(i64, y) * m, .x1 = (@as(i64, x) + w) * m, .y1 = (@as(i64, y) + h) * m };
+}
+
+/// 두 상자를 덮는 가장 작은 상자(합집합 사각형 하나 — 결정 47, 목록은 숫자가 바랄 때).
+pub fn boxUnion(a: ?Box, b: Box) Box {
+    const p = a orelse return b;
+    return .{ .x0 = @min(p.x0, b.x0), .y0 = @min(p.y0, b.y0), .x1 = @max(p.x1, b.x1), .y1 = @max(p.y1, b.y1) };
+}
+
+/// 상자를 버퍼 `bw × bh` 안으로 자른다. 겹치지 않으면 null.
+pub fn boxClamp(b: Box, bw: u32, bh: u32) ?Area {
+    const x0 = @max(b.x0, 0);
+    const y0 = @max(b.y0, 0);
+    const x1 = @min(b.x1, @as(i64, bw));
+    const y1 = @min(b.y1, @as(i64, bh));
+    if (x1 <= x0 or y1 <= y0) return null;
+    return .{ .x = @intCast(x0), .y = @intCast(y0), .w = @intCast(x1 - x0), .h = @intCast(y1 - y0) };
+}
+
+/// 두 사각형을 덮는 가장 작은 사각형. commit이 둘 이상 한 프레임에 모이면 그 damage를 이것으로 잇는다.
+pub fn areaUnion(a: ?Area, b: Area) Area {
+    const p = a orelse return b;
+    const x0 = @min(p.x, b.x);
+    const y0 = @min(p.y, b.y);
+    const x1 = @max(p.x + p.w, b.x + b.w);
+    const y1 = @max(p.y + p.h, b.y + b.h);
+    return .{ .x = x0, .y = y0, .w = x1 - x0, .h = y1 - y0 };
+}
+
+/// 버퍼 좌표의 damage `r`가 화면(프레임버퍼)에서 차지하는 자리 — 창이 놓인 `f`(surface 크기로 셈한 것)와 buffer_scale `bs`로.
+/// `blitClip`은 늘린 그림의 픽셀 `p`를 버퍼 픽셀 `p · bs / k`에서 읽으므로, 버퍼 [x0, x1)을 읽는 화면 픽셀은 [⌊x0 · k / bs⌋,
+/// ⌈x1 · k / bs⌉)에 든다(바깥으로 반올림 — 덜 옮기는 일이 없다). 거기서 `ox` · `oy`(잘린 창)를 빼고 `f`의 사각형으로 자른다.
+/// 보이는 자리 밖이면 null.
+pub fn damageScreen(f: Fit, bs: u32, r: Area) ?Area {
+    const k: u64 = f.k;
+    const b: u64 = bs;
+    const px0 = @as(u64, r.x) * k / b;
+    const py0 = @as(u64, r.y) * k / b;
+    const px1 = (@as(u64, r.x + r.w) * k + b - 1) / b;
+    const py1 = (@as(u64, r.y + r.h) * k + b - 1) / b;
+    // 늘린 그림의 보이는 창은 [ox, ox + w) × [oy, oy + h)다.
+    const vx0 = @max(px0, f.ox);
+    const vy0 = @max(py0, f.oy);
+    const vx1 = @min(px1, @as(u64, f.ox) + f.w);
+    const vy1 = @min(py1, @as(u64, f.oy) + f.h);
+    if (vx1 <= vx0 or vy1 <= vy0) return null;
+    return .{
+        .x = f.x + @as(u32, @intCast(vx0 - f.ox)),
+        .y = f.y + @as(u32, @intCast(vy0 - f.oy)),
+        .w = @intCast(vx1 - vx0),
+        .h = @intCast(vy1 - vy0),
+    };
+}
+
 /// 논리 사각형의 물리 자리(× `s`).
 pub fn scaleArea(a: Area, s: u32) Area {
     return .{ .x = a.x * s, .y = a.y * s, .w = a.w * s, .h = a.h * s };

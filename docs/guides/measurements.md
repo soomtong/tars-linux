@@ -589,3 +589,11 @@ go `test` 0.7 · rust `rustlib/src` 8.0(rust-analyzer). base의 `libc6-dbg` 8.3�
 (개발 컨테이너의 `x86_64-linux-gnu-objdump`, 큰 ELF 셋의 합). Go로 지은 도구는 런타임의 AVX 분기 코드 때문에 숫자가 0이 아니지만 옛 판과
 같으면 문제가 없다. 같은 날 pgdg의 `postgresql-common` 294+는 `systemd | systemd-standalone-sysusers`를 요구해, 이름으로 standalone을 주지
 않으면 apt가 systemd 전체를 거둔다(TU design 결정 4).
+
+107. 서버 쪽 damage 부분 blit(WY-M6, TCG · `TARS_RENDER_VERIFY=1`, `tars-wl-test --follow-size --damage`, 32 × 32 상자). `wl> blit`의 `us`는
+옮기기 하나만 잰 값이다. 배율 1(wayland 체인, 616 × 752 column, bs 1): 통째 616 × 752 1,024 · 1,230 µs, 부분 32 × 32 23~31 µs(여덟 번) —
+약 40배. 배율 2(hidpi 화면 2880 × 1800, 696 × 848 column, bs 2 — 그림자에는 솎아 옮긴다): 통째 8,648 µs, 부분 32 × 32 37~41 µs. 그 프레임의
+물리 합성 픽셀(`wl> frame part px=`)은 4,096(32 × 32 × 4)이고 통째면 2,360,832(696 × 848 × 4)다. 한 commit에 `damage_buffer` 하나와
+`damage` 하나를 섞어도, frame을 안 기다린 commit 둘이 한 프레임에 모여도 서버는 둘을 덮는 사각형 하나(`w=96 h=32`)를 옮긴다. 프레임 전체의
+`frame part us=`(배율 1 15.7~17.1 ms, 배율 2 14.4~15.6 ms)는 render verify의 그림자 비교가 대부분이라 옮기기의 이득을 가린다 — 이득은
+`blit`의 `us`로 본다.
