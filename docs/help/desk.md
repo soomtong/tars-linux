@@ -67,6 +67,7 @@ sudo tars-config reload terminal
 
 copy mode(`Cmd+Shift+C`)에서 `y`(또는 마우스로 끌어 놓기)로 잡은 글자는 어느 패널에서든 `Cmd+V`로 붙습니다. 클립보드는 화면이
 다시 뜨거나 재부팅하면 비워집니다.
+셸에서 복사한 것은 Wayland 앱이 붙이고, 앱에서 복사한 것은 셸이 붙입니다(앱을 닫은 뒤에도). 앱 안의 복사 · 붙여넣기 키는 앱의 것입니다 — 앱에는 `Cmd`가 `Super`로 가므로(`tars-wl-test`는 `Cmd+C` · `Cmd+V`), 붙여넣기를 `Ctrl+V`로 받는 SDL · GTK 앱에서는 아직 `Ctrl+C` · `Ctrl+V`를 칩니다.
 
 ## 배터리 · 밝기 · 절전
 

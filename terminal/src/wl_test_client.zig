@@ -11,6 +11,9 @@
 //! 1 버퍼 픽셀 바둑판. 서버가 알리는 배율을 `preferred scale=N` · `surface on output` · `output mode=WxH scale=N` 줄로 찍는다.
 //! WY-M4(plan 확정 10): `--copy TEXT`면 C 키(evdev 46) 누름에서 source를 만들어 SDL3처럼 텍스트 mime 다섯을 offer하고
 //! `set_selection(그 키의 serial)`을 보낸다. `send`를 받으면 TEXT를 쓰고 닫은 뒤 `send mime= len=`, `cancelled`면 `cancelled`.
+//! WY-M4 단계 B: `--paste`면 서버의 selection offer를 기억해 `offer mimes=…`(없으면 `offer none`)를 찍고, V 키(47) 누름에서
+//! `receive` → EOF까지 읽어 `paste len=N text=…`(offer가 없으면 `paste none`). `--paste-drop`은 SIGPIPE 시험이다 — 파이프의 읽기
+//! 끝을 먼저 닫고 `receive`를 보내므로 서버의 쓰기는 반드시 EPIPE다(design 결정 35, wayland 판정 25).
 //! `wl_surface.enter`의 줄에 `enter`라는 낱말을 안 쓰는 것은 wayland 체인 판정 16이 이 로그의 `enter`(키보드)를 세기 때문이다.
 //!
 //! 바인딩은 terminal의 서버와 같은 스캐너가 만든 것이다(`build.zig`의 `wayland` 모듈 — 서버는 `server`, 이쪽은
@@ -39,6 +42,13 @@ const COPY_MIMES = [_][*:0]const u8{ "text/plain;charset=utf-8", "text/plain", "
 
 /// evdev KEY_C — `--copy`의 방아쇠. app pane의 `Cmd+C`가 이 코드(+ super)로 온다.
 const KEY_C: u32 = 46;
+/// evdev KEY_V — `--paste`의 방아쇠(`Cmd+V`).
+const KEY_V: u32 = 47;
+/// `--paste`가 청하는 mime(서버가 내는 넷의 첫째).
+const PASTE_MIME: [*:0]const u8 = "text/plain;charset=utf-8";
+
+extern "c" fn pipe2(fds: *[2]c_int, flags: c_int) c_int;
+const O_CLOEXEC: c_int = 0o2000000;
 
 /// `frame` 줄은 처음 열 번만 찍는다 — 체인은 콜백이 도는지만 보고, 그 뒤로는 로그가 프레임마다 불어난다.
 const FRAME_LINES: u32 = 10;
@@ -85,6 +95,10 @@ const Args = struct {
     checker: bool = false,
     /// `--copy TEXT`(WY-M4) — C 키 누름에서 이 글을 selection으로 낸다.
     copy: ?[]const u8 = null,
+    /// `--paste`(WY-M4 단계 B) — V 키 누름에서 selection을 받아 찍는다.
+    paste: bool = false,
+    /// `--paste-drop` — V 키 누름에서 읽기 끝을 닫은 파이프로 `receive`(SIGPIPE 시험).
+    paste_drop: bool = false,
 };
 
 /// 바둑판의 둘째 색. 둘레의 검정과 갈리게 흰색이다.
@@ -127,6 +141,10 @@ fn parseArgs(argv: []const []const u8) ?Args {
             i += 1;
             if (i == argv.len or argv[i].len != 6) return null;
             args.color = std.fmt.parseInt(u32, argv[i], 16) catch return null;
+        } else if (std.mem.eql(u8, a, "--paste")) {
+            args.paste = true;
+        } else if (std.mem.eql(u8, a, "--paste-drop")) {
+            args.paste_drop = true;
         } else if (std.mem.eql(u8, a, "--copy")) {
             i += 1;
             if (i == argv.len) return null;
@@ -145,7 +163,7 @@ fn parseArgs(argv: []const []const u8) ?Args {
 fn usage() u8 {
     writeAll(2,
         \\usage: tars-wl-test [--color RRGGBB] [--size WxH] [--ignore-close] [--follow-size] [--fullscreen]
-        \\       [--hide-cursor] [--buffer-scale N] [--checker] [--copy TEXT]
+        \\       [--hide-cursor] [--buffer-scale N] [--checker] [--copy TEXT] [--paste] [--paste-drop]
         \\  open one xdg_toplevel filled with one colour (default 3366CC, 320x200) and
         \\  print what the compositor sends, one line each. Ends on close, unless
         \\  --ignore-close (then close and ping are ignored). The buffer keeps its
@@ -157,6 +175,8 @@ fn usage() u8 {
         \\  that buffer scale; sizes (--size, configure) stay in surface units.
         \\  --checker fills a one-buffer-pixel checkerboard of the colour and white.
         \\  --copy TEXT sets the selection to TEXT when C is pressed in the window.
+        \\  --paste prints the selection when V is pressed; --paste-drop asks for it
+        \\  through a pipe whose read end is already closed (a SIGPIPE test).
         \\
     );
     return EXIT_USAGE;
@@ -197,9 +217,16 @@ const State = struct {
     pending_states: [48]u8 = undefined,
     pending_states_len: usize = 0,
     configured: bool = false,
-    /// 클립보드(WY-M4). 장치는 `--copy`일 때만 얻는다.
+    /// 클립보드(WY-M4). 장치는 `--copy` · `--paste` · `--paste-drop`일 때만 얻는다.
     data_device_manager: ?*wl.DataDeviceManager = null,
     data_device: ?*wl.DataDevice = null,
+    /// `receive` 뒤 flush를 부를 곳(단계 B).
+    display: ?*wl.Display = null,
+    /// 지금 selection offer(서버가 준 것). 새 selection이 오면 옛것을 지운다.
+    offer: ?*wl.DataOffer = null,
+    /// 막 온 offer의 mime들(`a,b,c`) — `selection`에서 한 줄로 찍는다.
+    mimes: [160]u8 = undefined,
+    mimes_len: usize = 0,
     frames: u32 = 0,
     running: bool = true,
     failed: bool = false,
@@ -424,6 +451,7 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, state: *State) vo
         .key => |k| {
             say("key code={d} state={d}", .{ k.key, @backingInt(k.state) });
             if (k.key == KEY_C and k.state == .pressed) copySelection(state, k.serial);
+            if (k.key == KEY_V and k.state == .pressed) pasteSelection(state);
         },
         .modifiers => |m| say("mods depressed=0x{x}", .{m.mods_depressed}),
         // 키보드 포커스(WY-M2 확정 9) — column 창은 포커스 slot이 될 때 enter, 셸로 옮기면 leave.
@@ -465,12 +493,66 @@ fn sourceListener(src: *wl.DataSource, event: wl.DataSource.Event, state: *State
     }
 }
 
-/// 서버의 offer(단계 B)는 아직 쓰지 않는다 — 받은 selection offer는 곧바로 지운다(xml: 새 selection을 받으면 옛 offer를 지운다).
-fn dataDeviceListener(_: *wl.DataDevice, event: wl.DataDevice.Event, _: *State) void {
+/// 서버의 offer. `data_offer` 바로 뒤에 `offer` 이벤트들이 오고, 그 뒤 `selection`이 그것을 selection으로 정한다(xml).
+/// 새 selection을 받으면 옛 offer를 지운다(xml).
+fn dataDeviceListener(_: *wl.DataDevice, event: wl.DataDevice.Event, state: *State) void {
     switch (event) {
-        .selection => |s| if (s.id) |o| o.destroy(),
+        .data_offer => |d| {
+            state.mimes_len = 0;
+            d.id.setListener(*State, offerListener, state);
+        },
+        .selection => |s| {
+            if (state.offer) |old| if (s.id != old) old.destroy();
+            state.offer = s.id;
+            if (s.id == null) return say("offer none", .{});
+            say("offer mimes={s}", .{state.mimes[0..state.mimes_len]});
+        },
         else => {},
     }
+}
+
+fn offerListener(_: *wl.DataOffer, event: wl.DataOffer.Event, state: *State) void {
+    switch (event) {
+        .offer => |o| {
+            const m = std.mem.span(o.mime_type);
+            const sep: usize = if (state.mimes_len > 0) 1 else 0;
+            if (state.mimes_len + sep + m.len > state.mimes.len) return;
+            if (sep == 1) state.mimes[state.mimes_len] = ',';
+            @memcpy(state.mimes[state.mimes_len + sep ..][0..m.len], m);
+            state.mimes_len += sep + m.len;
+        },
+    }
+}
+
+/// `--paste`: `receive` → flush → 쓰기 끝 닫기 → EOF까지 읽는다(SDL3와 같은 순서, 다만 블록 읽기). 서버는 요청 처리기 안에서
+/// 쓰고 닫으므로 여기서 기다리는 것은 서버의 다음 dispatch까지다. 한 줄에 찍으므로 앞 200바이트만 본다.
+/// `--paste-drop`: 읽기 끝을 먼저 닫고 `receive`를 보낸다 — 서버의 쓰기는 EPIPE다.
+fn pasteSelection(state: *State) void {
+    if (!state.args.paste and !state.args.paste_drop) return;
+    const o = state.offer orelse return say("paste none", .{});
+    const display = state.display orelse return;
+    var fds: [2]c_int = undefined;
+    if (pipe2(&fds, O_CLOEXEC) != 0) return say("paste pipe failed", .{});
+    if (state.args.paste_drop) {
+        _ = linux.close(fds[0]);
+        o.receive(PASTE_MIME, fds[1]);
+        _ = display.flush();
+        _ = linux.close(fds[1]);
+        return say("paste dropped", .{});
+    }
+    o.receive(PASTE_MIME, fds[1]);
+    _ = display.flush();
+    _ = linux.close(fds[1]);
+    var buf: [200]u8 = undefined;
+    var n: usize = 0;
+    while (n < buf.len) {
+        const r = linux.read(fds[0], buf[n..].ptr, buf.len - n);
+        if (linux.errno(r) == .INTR) continue;
+        if (linux.errno(r) != .SUCCESS or r == 0) break;
+        n += r;
+    }
+    _ = linux.close(fds[0]);
+    say("paste len={d} text={s}", .{ n, buf[0..n] });
 }
 
 // ── 실행 ───────────────────────────────────────────────────────────
@@ -514,8 +596,10 @@ fn run(args: Args) !u8 {
     wm_base.setListener(*State, wmBaseListener, &state);
     // seat가 없어도 창은 뜬다 — 키 줄만 안 나온다.
     if (g.seat) |seat| seat.setListener(*State, seatListener, &state);
-    // 클립보드 장치(WY-M4) — `--copy`일 때만. seat 하나에 장치 하나다.
-    if (args.copy != null) if (g.data_device_manager) |mgr| if (g.seat) |seat| {
+    // 클립보드 장치(WY-M4) — `--copy` · `--paste` · `--paste-drop`일 때만. seat 하나에 장치 하나다. 창보다 먼저 얻으므로 첫
+    // 포커스의 `selection`(키보드 `enter` 앞)을 놓치지 않는다.
+    state.display = display;
+    if (args.copy != null or args.paste or args.paste_drop) if (g.data_device_manager) |mgr| if (g.seat) |seat| {
         const dev = try mgr.getDataDevice(seat);
         dev.setListener(*State, dataDeviceListener, &state);
         state.data_device_manager = mgr;

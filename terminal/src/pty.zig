@@ -99,6 +99,10 @@ pub fn spawn(
     if (pid < 0) return error.ForkptyFailed;
 
     if (pid == 0) {
+        // terminal은 SIGPIPE를 무시한다(WY-M4, design 결정 35 — 클립보드 파이프의 읽는 쪽이 닫아도 terminal이 안 죽게).
+        // 무시는 execve를 넘어 남으므로 셸에는 기본으로 되돌린다 — 안 되돌리면 `seq … | head`의 seq가 SIGPIPE로 끝나지
+        // 않고 EPIPE를 만나 "write error"를 낸다. `install.zig`의 도구 자식과 같은 모양이다.
+        restoreSigpipe();
         if (account) |acct| {
             if (!dropTo(acct)) {
                 // root로 이어 띄우지 않는다. 이 글은 패널(pty)에 보이고, 셸이 바로 끝나므로
@@ -226,4 +230,24 @@ pub fn write(fd: c_int, bytes: []const u8) void {
         if (n <= 0) return;
         sent += @intCast(n);
     }
+}
+
+/// SIGPIPE를 무시한다 — terminal이 시작할 때 한 번(WY-M4, design 결정 35). 셸 자식은 `spawn`에서 `restoreSigpipe`로
+/// 되돌린다. 자식을 띄우는 자리가 `spawn` 하나뿐이라 짝이 여기 함께 있다.
+pub fn ignoreSigpipe() void {
+    const act: std.os.linux.Sigaction = .{
+        .handler = .{ .handler = std.os.linux.SIG.IGN },
+        .mask = std.os.linux.sigemptyset(),
+        .flags = 0,
+    };
+    _ = std.os.linux.sigaction(.PIPE, &act, null);
+}
+
+fn restoreSigpipe() void {
+    const act: std.os.linux.Sigaction = .{
+        .handler = .{ .handler = std.os.linux.SIG.DFL },
+        .mask = std.os.linux.sigemptyset(),
+        .flags = 0,
+    };
+    _ = std.os.linux.sigaction(.PIPE, &act, null);
 }

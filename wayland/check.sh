@@ -21,6 +21,9 @@ cd "$(dirname "$0")" || exit 1
 #
 # WY-M2(단계 C): 판정 18~21 — USB 마우스로 창 위 enter · 누름(272)이 창에 가고 클릭이 포커스를 옮기며, 셸을 누르면
 #   pointer leave와 키보드 포커스가 돌아오고, 휠은 axis -10, 커서를 숨긴 창(`--hide-cursor`) 위에는 화살표가 없다.
+# WY-M4: 판정 23~25(22 뒤 · 9 앞, 셸만 남은 자리) — 셸의 copy mode 복사가 창의 포커스에 offer로 가고 창의 Cmd+V가 받는다,
+#   창의 Cmd+C가 셸 클립보드(`clip>`)에 들어가고 창을 닫은 뒤에도 셸의 Cmd+V로 붙는다, 읽기 끝을 닫은 파이프로 receive해도
+#   terminal은 SIGPIPE로 안 죽고 셸의 `seq | head`는 여전히 SIGPIPE(141)로 끝난다.
 # WY-M2(단계 B): 창 모드로 띄운 창은 셸 오른쪽 column이 된다(판정 16 · 17 · 22) — `wl> column`, pane 픽셀 크기의 configure
 #   (activated · tiled), 포커스 slot이 창이면 키가 그 창으로, Cmd+[로 셸에 오면 activated를 잃고 keyboard leave, Cmd+R의 새
 #   configure, Cmd+Q에 slot이 닫히고 셸이 전체 폭을 되찾는다. 자기 workspace를 보는 판정 2~8은 `--fullscreen`으로 띄운다.
@@ -136,6 +139,7 @@ type_text() {
       '(') keys+=(shift-9) ;;
       ')') keys+=(shift-0) ;;
       _) keys+=(shift-minus) ;;
+      '|') keys+=(shift-backslash) ;;
       [A-Z]) keys+=("shift-${ch,,}") ;;
       *) keys+=("$ch") ;;
     esac
@@ -548,6 +552,78 @@ type_keys ret
 wait_for_screen 'c22-1-1' || report_failure "(22) the client's log does not have the 1240 configure and the close"
 echo "(22): Cmd+Q closed the window, its column went and the shell is whole again"
 
+# ── 판정 23: 셸 → 앱 — 셸에서 복사한 것을 창이 붙인다(WY-M4) ─────────────────
+# 셸만 남은 자리다(판정 22 끝). 출력 줄 `wy23-clip`을 copy mode(`Cmd+Shift+C` · `k` · `Shift+V` · `y`)로 잡는다 — 친 줄
+# `echo wy23-clip`과 갈리는 것은 화면 덤프에서 출력 줄만 ` | `로 시작해서다. 창은 `--paste --copy`로 띄워 판정 24까지 쓴다.
+echo "=== (23) a copy in the shell is offered to the window and pasted there ==="
+type_text 'echo wy23-clip'
+type_keys ret
+wait_for_screen '\| wy23-clip( \||$)' || report_failure "(23) the shell did not print wy23-clip"
+type_keys alt-shift-c
+type_keys k shift-v y
+wait_for_log 'terminal: clip> len=9 text=wy23-clip' || report_failure "(23) copy mode did not copy wy23-clip (no 'clip> len=9 text=wy23-clip')"
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size --paste --copy wy24-app > /tmp/wl4.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(23) the clipboard client did not open as a column"
+CLIP_ID="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+# 포커스를 받을 때 키보드 `enter` 바로 앞에서 offer가 간다(design 결정 34).
+wait_for_log "terminal: wl> offer to=${CLIP_ID} len=9" || report_failure "(23) the window got no offer of the shell's copy (no 'wl> offer to=${CLIP_ID} len=9')"
+type_keys alt-v
+wait_for_log "terminal: wl> receive to=${CLIP_ID} mime=text/plain;charset=utf-8 len=9 first=9" ||
+  report_failure "(23) Cmd+V in the window did not receive the 9 bytes in the request handler"
+echo "(23): wy23-clip was offered to window ${CLIP_ID} on focus and written in one go on its receive"
+
+# ── 판정 24: 앱 → 셸 — 창에서 복사한 것을 셸이 붙인다, 창이 끝난 뒤에도(WY-M4) ─────────
+echo "=== (24) a copy in the window reaches the shell's clipboard, and pastes after the window is gone ==="
+type_keys alt-c
+wait_for_log "terminal: wl> selection from=${CLIP_ID} mime=text/plain;charset=utf-8" ||
+  report_failure "(24) Cmd+C in the window set no selection (no 'wl> selection from=${CLIP_ID} mime=text/plain;charset=utf-8')"
+wait_for_log 'terminal: clip> len=8 text=wy24-app' || report_failure "(24) the window's copy did not reach the shell's clipboard"
+# 사본이 바뀌면 포커스 클라이언트에도 새 offer다(그 source 자신).
+wait_for_log "terminal: wl> offer to=${CLIP_ID} len=8" || report_failure "(24) the window was not offered the new selection"
+WHOLE="$(count_log 'terminal: pane> ws=1/1 panes=1 focus=0 rect=0,0 155x47 ')"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${CLIP_ID} ws=1 slot=1" || report_failure "(24) Cmd+Q did not close the clipboard window"
+wait_for_count 'terminal: pane> ws=1/1 panes=1 focus=0 rect=0,0 155x47 ' $((WHOLE + 1)) || report_failure "(24) the shell did not take the whole width back"
+type_text 'echo '
+type_keys alt-v
+wait_for_log 'terminal: clip> paste len=8 bracketed=1' || report_failure "(24) Cmd+V in the shell did not paste the 8 bytes"
+type_keys ret
+wait_for_screen '\| wy24-app( \||$)' || report_failure "(24) the shell did not print wy24-app on its own line"
+# 클라이언트가 본 것: 판정 23의 붙여넣기 하나, 서버의 send 하나, offer 둘(포커스 · 자기 복사 뒤).
+type_text 'echo c24-(grep -c paste.len.9.text.wy23-clip /tmp/wl4.log)-(grep -c send.mime /tmp/wl4.log)-(grep -c offer.mimes /tmp/wl4.log)'
+type_keys ret
+wait_for_screen '\| c24-1-1-2' || report_failure "(24) the client's log does not have the paste of wy23-clip, one send and two offers"
+echo "(24): wy24-app went from the window to the shell's clipboard and pasted after the window closed"
+
+# ── 판정 25: SIGPIPE — terminal은 안 죽고 셸의 자식은 전과 같다(WY-M4, design 결정 35) ─────
+# (가) 읽기 끝을 먼저 닫은 파이프로 receive하는 창(`--paste-drop`). 서버의 쓰기는 반드시 EPIPE다 — SIGPIPE가 기본 처분이면
+# terminal(셸 전부)이 여기서 죽어 `receive closed` 줄이 안 나온다.
+echo "=== (25) a receive on a closed pipe does not kill terminal, and the shell's children still die of SIGPIPE ==="
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size --paste-drop > /tmp/wl5.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(25) the drop client did not open as a column"
+DROP_ID="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+wait_for_log "terminal: wl> offer to=${DROP_ID} len=8" || report_failure "(25) the drop client got no offer"
+type_keys alt-v
+wait_for_log "terminal: wl> receive closed to=${DROP_ID}" || report_failure "(25) no 'wl> receive closed to=${DROP_ID}' — did terminal die of SIGPIPE?"
+WHOLE="$(count_log 'terminal: pane> ws=1/1 panes=1 focus=0 rect=0,0 155x47 ')"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${DROP_ID} ws=1 slot=1" || report_failure "(25) Cmd+Q did not close the drop client"
+wait_for_count 'terminal: pane> ws=1/1 panes=1 focus=0 rect=0,0 155x47 ' $((WHOLE + 1)) || report_failure "(25) the shell did not take the whole width back"
+# (나) 셸의 자식에게는 기본으로 되돌렸다(`pty.spawn`). seq가 SIGPIPE로 끝나면 fish는 141이다 — 무시가 새어 들어갔으면
+# seq는 EPIPE를 만나 "write error"를 내고 1로 끝난다.
+type_text 'seq 1000000 | head -n1'
+type_keys ret
+# 게스트의 fish가 펼칠 글자다 — 여기서 펼치면 안 된다.
+# shellcheck disable=SC2016
+type_text 'echo p25-$pipestatus'
+type_keys ret
+wait_for_screen 'p25-141 p25-0' || report_failure "(25) seq in a pipe did not die of SIGPIPE (want p25-141 p25-0)"
+echo "(25): terminal survived an EPIPE on the clipboard pipe, and the shell's seq | head still ends by SIGPIPE (141)"
+
 # ── 판정 9: render verify ───────────────────────────────────────────────
 #
 # 루트 게이트는 모든 체인의 로그에서 `verify>` 줄을 본다(check.sh의 check_verify_lines). 단독 실행(`make check`)에도
@@ -699,4 +775,4 @@ fi
 echo "(15): wl> key lines $(count_log 'terminal: wl> key '), verify lines $(count_log 'terminal: verify> '), no mismatch"
 stop_boot
 
-echo "PASS: WY-M0 · WY-M1 · WY-M2 — a window without fullscreen opens as a column right of the shell and follows its size (Cmd+R), a click gives it the keys and the pointer, a hidden cursor is not drawn; the shell has WAYLAND_DISPLAY, tars-wl-test becomes workspace 2 drawn 4x in the middle, its keys go to it as evdev codes, Cmd+1 · Cmd+2 go back and forth, Cmd+C · Cmd+Q type nothing in the shell, a stopped client does not stop the shell, Cmd+Q closes and a client that ignores close is killed after 2 s; with the doom bundle tars-doom fills the screen at 4x, fires on Ctrl, waits behind the shell and leaves by itself on Cmd+Q"
+echo "PASS: WY-M0 · WY-M1 · WY-M2 · WY-M4 — a copy in the shell is pasted in a window and a copy in a window is pasted in the shell even after it closes, an EPIPE on the clipboard pipe does not kill terminal and the shell's children still die of SIGPIPE; a window without fullscreen opens as a column right of the shell and follows its size (Cmd+R), a click gives it the keys and the pointer, a hidden cursor is not drawn; the shell has WAYLAND_DISPLAY, tars-wl-test becomes workspace 2 drawn 4x in the middle, its keys go to it as evdev codes, Cmd+1 · Cmd+2 go back and forth, Cmd+C · Cmd+Q type nothing in the shell, a stopped client does not stop the shell, Cmd+Q closes and a client that ignores close is killed after 2 s; with the doom bundle tars-doom fills the screen at 4x, fires on Ctrl, waits behind the shell and leaves by itself on Cmd+Q"

@@ -1737,6 +1737,9 @@ fn freePaneBuffers(alloc: std.mem.Allocator, pane: *const Pane) void {
 const Clips = struct {
     scope: clipboard.Scope,
     shared: clipboard.Clipboard,
+    /// Wayland 서버(WY-M4 단계 B, design 결정 34). 셸의 복사가 서버 사본으로도 간다 — 앱이 붙인다. 부팅에 한 번 정해진다
+    /// (서버가 못 떴으면 null).
+    wl: ?*wls.Server = null,
 
     fn of(self: *Clips, pane: *Pane) *clipboard.Clipboard {
         return clipboard.pick(self.scope, &self.shared, &pane.clip);
@@ -1744,13 +1747,25 @@ const Clips = struct {
 
     /// `y`. 선택을 고른 칸에 넣고 `clip>` 줄을 찍는다.
     fn yank(self: *Clips, pane: *Pane) !void {
-        dumpClip(try pane.screen.copyYank(self.of(pane)));
+        const text = try pane.screen.copyYank(self.of(pane));
+        dumpClip(text);
+        self.share(text);
     }
 
     /// 포인터 뗌(SE design 결정 1). `yank`와 같은 칸 · 같은 `clip>` 줄이지만 선택은
     /// 화면에 남는다 — Shift 클릭이 그것을 늘린다.
     fn release(self: *Clips, pane: *Pane) !void {
-        dumpClip(try pane.screen.copyRelease(self.of(pane)));
+        const text = try pane.screen.copyRelease(self.of(pane));
+        dumpClip(text);
+        self.share(text);
+    }
+
+    /// 셸의 복사를 서버 사본으로(WY-M4, design 결정 34 · 37). `shared`일 때만이다 — `pane`이면 셸과 앱을 잇지 않는다.
+    /// 아무것도 안 잡혔으면(null) 클립보드가 안 바뀌었으므로 보내지 않는다 — 앱이 쥔 selection을 헛되이 거두지 않게.
+    fn share(self: *Clips, text: ?[]const u8) void {
+        if (self.scope != .shared) return;
+        const srv = self.wl orelse return;
+        srv.setClipboard(text orelse return);
     }
 
     /// `Cmd+V`. 목적지가 여기서 갈린다(FP design 결정 3) — 검색 프롬프트가
@@ -4659,7 +4674,7 @@ const App = struct {
             self.user_name = user;
         }
 
-        self.clips = .{ .scope = clip_scope, .shared = .init(self.allocator) };
+        self.clips = .{ .scope = clip_scope, .shared = .init(self.allocator), .wl = self.wl };
 
         // 부팅은 패널 하나짜리 워크스페이스 하나다(WP-M0). 패널의 사각형도
         // strip에서 받는다 — 하나면 격자 전체지만, 분할이 생기는 M1에서 이
@@ -6703,6 +6718,9 @@ const YieldOps = struct {
 };
 
 pub fn main(init: std.process.Init) !void {
+    // 셸을 띄우기 전에(WY-M4, design 결정 35). 클립보드의 `receive`가 읽는 쪽이 닫은 파이프에 써도 terminal(셸 전부)이
+    // 죽지 않고 EPIPE를 받는다. 셸 자식은 `pty.spawn`이 기본으로 되돌린다.
+    pty.ignoreSigpipe();
     var app = try App.open(init, std.heap.page_allocator);
     defer app.close();
     while (try app.tick()) {}

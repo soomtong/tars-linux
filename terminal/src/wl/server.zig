@@ -42,6 +42,7 @@ const DATA_DEVICE_MANAGER_VERSION = 2;
 const O_NONBLOCK: usize = 0o4000;
 const O_CLOEXEC: c_int = 0o2000000;
 const F_SETFL = 4;
+const F_GETFL = 3;
 
 /// 키 반복(design 결정 6 — terminal의 반복 설정과 같은 값). terminal은 반복을 스스로 안 하고 커널 evdev의
 /// 자동 반복을 받는다. 그 기본값이 지연 250ms · 간격 33ms(초당 약 30)이다.
@@ -130,6 +131,8 @@ pub const Server = struct {
     /// 서버 사본(design 결정 33) — 클라이언트에서 다 받은 바이트. 셸 클립보드와 따로 드는 것은 `clipboard=pane`에서도
     /// 클라이언트끼리의 클립보드가 서야 해서다(결정 37). 단계 B에서 셸의 복사도 여기로 온다.
     clip: ?[]u8 = null,
+    /// 서버 사본의 세대(WY-M4 단계 B). 사본이 바뀔 때마다 는다 — 옛 세대의 offer에 온 `receive`는 fd만 닫는다(확정 6).
+    clip_gen: u32 = 0,
     /// 진행 중인 받기(하나뿐 — 새 `set_selection`이 오면 옛것을 버린다).
     intake: ?*Intake = null,
 
@@ -253,6 +256,8 @@ pub const Server = struct {
         const sr = surfaceOf(t) orelse return;
         // 이 클라이언트가 가장 최근의 포커스다 — 셸로 가도 남는다(design 결정 36).
         self.gate.focus(@intFromPtr(sr.getClient()));
+        // selection은 키보드 `enter` 바로 앞이다(xml `wl_data_device.selection`, design 결정 34).
+        self.offerTo(sr.getClient());
         var it = self.keyboards.iterator(.forward);
         while (it.next()) |kb| if (kb.getClient() == sr.getClient()) self.enterKeyboard(kb, sr);
         self.sent_mods = mods;
@@ -631,8 +636,12 @@ pub const Server = struct {
                 };
                 if (self.clip) |old| self.allocator.free(old);
                 self.clip = bytes;
+                self.clip_gen +%= 1;
                 logline.print("terminal: wl> selection len={d}\n", .{bytes.len});
                 self.push(.selection);
+                // 사본이 바뀌면 늘 포커스 클라이언트에 새 offer다 — 대개 그 source 자신이다(SDL은 자기 source가 있으면
+                // offer 대신 내부 데이터를 쓴다).
+                self.offerFocused();
             },
             .too_big => logline.print("terminal: wl> selection too-big\n", .{}),
             .timeout => logline.print("terminal: wl> selection timeout\n", .{}),
@@ -640,7 +649,135 @@ pub const Server = struct {
             .dropped => logline.print("terminal: wl> selection dropped\n", .{}),
         }
     }
+
+    // ── 클립보드: 셸 → 앱(WY-M4 단계 B, design 결정 34) ──
+
+    /// 셸이 복사했다(copy mode `y` · 포인터 뗌, `clipboard=shared`일 때만 — 결정 37). 서버 사본을 갈고, 클라이언트가 쥔
+    /// selection은 바뀌었으니 그 source에 `cancelled`, 진행 중 받기는 버린다. 포커스 클라이언트가 있으면 새 offer다 —
+    /// 셸에서 복사하는 동안은 대개 없고, 다음 포커스의 `enter` 앞에서 간다(`setFocus`).
+    ///
+    /// 받기와 같은 한도(1 MiB)를 넘는 글은 내지 않는다 — 사본을 비우고 클라이언트에는 빈 selection이다. 셸 클립보드는
+    /// 그대로다(셸 안의 `Cmd+V`는 한도가 없다).
+    pub fn setClipboard(self: *Server, bytes: []const u8) void {
+        if (self.sel_source) |old| old.resource.sendCancelled();
+        self.sel_source = null;
+        self.endIntake(.dropped);
+        if (self.clip) |old| self.allocator.free(old);
+        self.clip = null;
+        self.clip_gen +%= 1;
+        if (bytes.len > logic.SELECTION_MAX_BYTES) {
+            logline.print("terminal: wl> clipboard too-big len={d}\n", .{bytes.len});
+        } else {
+            self.clip = self.allocator.dupe(u8, bytes) catch blk: {
+                logline.print("terminal: wl> clipboard dropped (no memory)\n", .{});
+                break :blk null;
+            };
+        }
+        self.offerFocused();
+    }
+
+    /// 키보드 포커스 창의 클라이언트에 지금 사본의 offer. 포커스가 셸이면 아무것도 안 한다.
+    fn offerFocused(self: *Server) void {
+        const t = self.find(self.focused orelse return) orelse return;
+        const sr = surfaceOf(t) orelse return;
+        self.offerTo(sr.getClient());
+    }
+
+    /// 클라이언트의 모든 data device에 지금 사본을 offer한다 — `data_offer` → `offer` × 4 → `selection`. 사본이 없으면
+    /// `selection(null)`. 장치가 하나라도 있었으면 줄 하나를 찍는다.
+    fn offerTo(self: *Server, client: *wl.Client) void {
+        var sent = false;
+        var it = self.data_devices.iterator(.forward);
+        while (it.next()) |dev| if (dev.getClient() == client) {
+            self.offerDevice(dev);
+            sent = true;
+        };
+        if (!sent) return;
+        if (self.clip) |c|
+            logline.print("terminal: wl> offer to={d} len={d}\n", .{ self.toplevelOf(client), c.len })
+        else
+            logline.print("terminal: wl> offer to={d} none\n", .{self.toplevelOf(client)});
+    }
+
+    fn offerDevice(self: *Server, dev: *wl.DataDevice) void {
+        if (self.clip == null) return dev.sendSelection(null);
+        const res = wl.DataOffer.create(dev.getClient(), dev.getVersion(), 0) catch return dev.postNoMemory();
+        const o = self.allocator.create(Offer) catch {
+            res.destroy();
+            return dev.postNoMemory();
+        };
+        o.* = .{ .srv = self, .gen = self.clip_gen };
+        res.setHandler(*Offer, offerRequest, offerDestroyed, o);
+        dev.sendDataOffer(res);
+        for (logic.OFFER_MIMES) |m| res.sendOffer(m);
+        dev.sendSelection(res);
+    }
+
+    /// `receive`(확정 7). 받은 fd에 O_NONBLOCK을 걸고 요청 처리기 안에서 곧바로 쓴다 — SDL은 파이프를 14 ms만 기다린다.
+    /// 다 썼으면 닫고, 남았으면(64 KiB 파이프를 넘는 글) 남은 것을 복사해 writable에 이어 쓴다(2초 기한). 읽는 쪽이 이미
+    /// 닫았으면 EPIPE다 — terminal은 SIGPIPE를 무시하므로(결정 35) 죽지 않고 조용히 닫는다. fd는 서버가 닫는다.
+    fn receive(self: *Server, o: *Offer, client: *wl.Client, mime: [*:0]const u8, out_fd: i32) void {
+        const id = self.toplevelOf(client);
+        const bytes = self.clip orelse {
+            _ = linux.close(out_fd);
+            return;
+        };
+        if (o.gen != self.clip_gen) {
+            logline.print("terminal: wl> receive stale to={d}\n", .{id});
+            _ = linux.close(out_fd);
+            return;
+        }
+        const fl = linux.fcntl(out_fd, F_GETFL, 0);
+        if (linux.errno(fl) != .SUCCESS or linux.errno(linux.fcntl(out_fd, F_SETFL, fl | O_NONBLOCK)) != .SUCCESS) {
+            _ = linux.close(out_fd);
+            return;
+        }
+        const first = writeSome(out_fd, bytes);
+        logline.print("terminal: wl> receive to={d} mime={s} len={d} first={d}\n", .{ id, mime, bytes.len, first.n });
+        if (first.broken) {
+            logline.print("terminal: wl> receive closed to={d}\n", .{id});
+            _ = linux.close(out_fd);
+            return;
+        }
+        if (first.n == bytes.len) {
+            _ = linux.close(out_fd);
+            return;
+        }
+        self.startOutgo(out_fd, bytes[first.n..]) catch {
+            logline.print("terminal: wl> receive dropped to={d}\n", .{id});
+            _ = linux.close(out_fd);
+        };
+    }
+
+    /// 남은 쓰기 하나를 epoll에 싣는다(writable + 2초 기한). 남은 바이트는 복사한다 — 사본은 그 사이에 바뀔 수 있다.
+    fn startOutgo(self: *Server, out_fd: i32, rest: []const u8) !void {
+        const out = try self.allocator.create(Outgo);
+        errdefer self.allocator.destroy(out);
+        const buf = try self.allocator.dupe(u8, rest);
+        errdefer self.allocator.free(buf);
+        out.* = .{ .srv = self, .fd = out_fd, .buf = buf, .writable = undefined, .timer = undefined };
+        out.writable = try self.loop.addFd(*Outgo, out_fd, .{ .writable = true }, outgoWritable, out);
+        errdefer out.writable.remove();
+        out.timer = try self.loop.addTimer(*Outgo, outgoTimeout, out);
+        errdefer out.timer.remove();
+        try out.timer.timerUpdate(logic.SELECTION_TIMEOUT_MS);
+    }
 };
+
+/// 비블록 쓰기를 EAGAIN이나 끝까지. `broken`이면 읽는 쪽이 닫았다(EPIPE)거나 다른 오류다.
+fn writeSome(fd: i32, bytes: []const u8) struct { n: usize, broken: bool } {
+    var off: usize = 0;
+    while (off < bytes.len) {
+        const n = linux.write(fd, bytes[off..].ptr, bytes.len - off);
+        switch (linux.errno(n)) {
+            .SUCCESS => off += n,
+            .INTR => continue,
+            .AGAIN => return .{ .n = off, .broken = false },
+            else => return .{ .n = off, .broken = true },
+        }
+    }
+    return .{ .n = off, .broken = false };
+}
 
 /// 봉인한 memfd 하나에 키맵 텍스트와 NUL을 쓴다(design 결정 6). 크기는 NUL까지다 — 클라이언트(libxkbcommon)가
 /// 문자열로 읽는다.
@@ -1283,6 +1420,9 @@ fn dataDeviceManagerRequest(m: *wl.DataDeviceManager, req: wl.DataDeviceManager.
             const dev = wl.DataDevice.create(client, m.getVersion(), r.id) catch return m.postNoMemory();
             dev.setHandler(*Server, dataDeviceRequest, dataDeviceDestroyed, srv);
             srv.data_devices.append(dev);
+            // 포커스 클라이언트가 장치를 나중에 얻었다 — 이 장치에도 지금 selection(키보드의 늦은 `get_keyboard`와 같은 까닭).
+            if (srv.focused) |id| if (srv.find(id)) |t| if (surfaceOf(t)) |sr| if (sr.getClient() == client)
+                srv.offerDevice(dev);
         },
     }
 }
@@ -1361,5 +1501,60 @@ fn intakeReadable(fd: c_int, _: wl.EventMask, in: *Intake) c_int {
 
 fn intakeTimeout(in: *Intake) c_int {
     in.srv.endIntake(.timeout);
+    return 0;
+}
+
+// ── wl_data_offer와 남은 쓰기(WY-M4 단계 B, design 결정 34) ──────────────────
+
+/// 서버가 만든 offer 하나. 만든 때의 사본 세대를 든다 — 사본이 바뀐 뒤의 `receive`는 fd만 닫는다.
+const Offer = struct {
+    srv: *Server,
+    gen: u32,
+};
+
+fn offerRequest(res: *wl.DataOffer, req: wl.DataOffer.Request, o: *Offer) void {
+    switch (req) {
+        .receive => |r| o.srv.receive(o, res.getClient(), r.mime_type, r.fd),
+        // drag-and-drop의 피드백이다(판 2) — selection에는 뜻이 없다.
+        .accept => {},
+        .destroy => res.destroy(),
+    }
+}
+
+fn offerDestroyed(_: *wl.DataOffer, o: *Offer) void {
+    o.srv.allocator.destroy(o);
+}
+
+/// 요청 처리기 안에서 다 못 쓴 `receive` 하나. 쓰기 끝(비블록)과 2초 기한이 서버의 epoll에 실려 있고, 끝나면 스스로 지운다.
+const Outgo = struct {
+    srv: *Server,
+    fd: i32,
+    buf: []u8,
+    off: usize = 0,
+    writable: *wl.EventSource,
+    timer: *wl.EventSource,
+};
+
+/// 남은 쓰기를 끝낸다 — epoll source 둘을 지우고(`remove`는 그 복제 fd를 닫는다) 원래 fd를 닫는다.
+fn endOutgo(out: *Outgo) void {
+    const srv = out.srv;
+    out.writable.remove();
+    out.timer.remove();
+    _ = linux.close(out.fd);
+    srv.allocator.free(out.buf);
+    srv.allocator.destroy(out);
+}
+
+fn outgoWritable(fd: c_int, _: wl.EventMask, out: *Outgo) c_int {
+    const r = writeSome(fd, out.buf[out.off..]);
+    out.off += r.n;
+    if (r.broken) logline.print("terminal: wl> receive closed\n", .{});
+    if (r.broken or out.off == out.buf.len) endOutgo(out);
+    return 0;
+}
+
+fn outgoTimeout(out: *Outgo) c_int {
+    logline.print("terminal: wl> receive timeout off={d} len={d}\n", .{ out.off, out.buf.len });
+    endOutgo(out);
     return 0;
 }
