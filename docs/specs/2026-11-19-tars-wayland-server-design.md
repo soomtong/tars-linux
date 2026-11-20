@@ -232,6 +232,23 @@ WY-M4를 열며(2026-11-20, 조사 `wy-m4` — HEAD `34c721d`, SDL 3.2.10 소스
 37. `clipboard=pane`이면 Wayland 쪽을 셸과 잇지 않는다(서버 사본은 클라이언트끼리만). `shared`(기본)에서만 양방향이다. app pane의 `Cmd+V`는
     Super+V로 가므로 SDL · GTK 앱의 붙여넣기 키는 WY-M6 호환 모드까지 기다린다 — 이번 끝나는 조건은 `tars-wl-test`와 셸이다.
 
+WY-M5를 열며(2026-11-20, 조사 `wy-m5` — HEAD `1cb942a`, wayland-protocols 1.44의 text-input xml, SDL 3.2.10 소스, 근거는 plan WY-M5의 확인 절):
+
+38. IME는 `zwp_text_input_manager_v3` 1 하나다. `zwp_input_method_v2`(외부 IME)는 안 낸다 — R-WY-9가 IME를 TARS 오토마타 하나로 정했다.
+    text-input v1 · v2도 지금은 안 낸다 — Chromium이 v3로 서는지는 CR design에서 잰다(요구사항 위험 6). 상태 요청(surrounding · content_type ·
+    cursor_rectangle · change_cause)은 받기만 한다 — 오토마타가 앞뒤 글자를 안 보고 후보 창이 없다. content_type은 로그 한 줄.
+39. 오토마타 · 한/영 상태 · 조합 버퍼는 `input.State` 하나다(R-KEY-6 "상태는 compositor의 것"). 서버는 오토마타를 모른다 — "포커스 창의
+    text_input이 켜졌나"(`imeActive`)를 알려 주고 commit/preedit을 받아 보내는(`imeSend`) 관이다. 서버가 자기 음절을 들면 셸과 앱의 한/영이 둘로 갈린다.
+40. app 쪽 한글 층은 text_input을 enable한 창에서만 돈다(R-KEY-6의 "app pane에서도 같다"를 이렇게 읽는다). 켜지 않은 창(둠 · `tars-wl-test` 기본)은
+    키 길이 WY-M4와 한 바이트도 다르지 않다 — 둠의 Ctrl(쏘기) tap이 한/영을 뒤집으면 안 된다. 켠 창에서는 셸의 `hangulLayer` 갈래를 그대로 쓴다.
+41. IME가 먹은 키는 `wl_keyboard`로 보내지 않는다 — xml은 말이 없지만 SDL3는 켜진 동안 받은 키마다 글자를 만들어, 둘 다 보내면 두 번 찍힌다.
+    확정은 그 뒤의 키보다 먼저 간다(`commit_string` → `done` → 키). 한 `done`에 확정과 다음 조합을 같이 싣는다.
+42. 포커스를 잃으면 조합을 확정한다(버리지 않는다 — 셸의 `.cancel`과 같다). 자리는 `syncFocus` 하나 — 옛 창에 `commit_string` + 빈 preedit + `done`,
+    그다음 text_input `leave` · 키보드 `leave`. 조합의 주인(셸 · 앱)을 `input.State`에 두고 셸 조합이 앱으로 새지 않게 같은 자리에서 셸 PTY로 확정한다.
+    창이 닫혀 잃으면 버린다. 수정키 tap 상태는 키보드 포커스가 셸 ↔ 앱으로 바뀔 때 리셋한다(앱에서 누른 Ctrl을 셸에서 뗀 것이 tap이 되지 않게).
+43. text_input의 `enter` · `leave`는 키보드 포커스를 따른다. 순서는 `selection` → text_input `enter` → 키보드 `enter`. "켜졌나"는 포커스 surface가
+    맞으면 참이다 — SDL처럼 키보드 `enter`에 enable하는 클라이언트도, text_input `enter`에 enable하는 클라이언트도 받힌다.
+
 ## Milestone
 
 로드맵의 WY-M0을 둘로 나눈다. 서버 뼈대 · 키 · workspace · 보호만으로도 milestone 하나의 크기이고, 둠은 별도
@@ -244,5 +261,5 @@ WY-M4를 열며(2026-11-20, 조사 `wy-m4` — HEAD `34c721d`, SDL 3.2.10 소스
 | WY-M2 | app이 strip의 column(결정 20~23) · `wl_pointer` · 클릭 포커스(24) · decoration server_side(25) · `tars-gpu-demo --window` | SDL3 프로그램이 수정 없이 셸 오른쪽 column에 뜸(gpu 묶음 부팅), `tars-wl-test`의 포인터 · 클릭 포커스 · `Cmd+R` configure |
 | WY-M3 | 배율(결정 5 · 27~31) — `wl_output` 물리 mode + scale, `wl_compositor` 6 · `preferred_buffer_scale`, `set_buffer_scale`, present 단계의 물리 합성. viewporter는 안 냄 | `hidpi` 체인에 app pane 검사(`tars-wl-test --buffer-scale` · `--checker`, 물리 1픽셀 바둑판) |
 | WY-M4 | 클립보드 `wl_data_device_manager` 2(결정 32~37) — 즉시 받기, 포커스 앞 selection, SIGPIPE | 테스트 클라이언트와 셸 사이 양방향 붙여넣기(wayland 판정 23 · 24) |
-| WY-M5 | 한글 `text-input-v3` | 조합 · 확정, 두 번 찍히지 않음. 녹화 B |
+| WY-M5 | 한글 `text-input-v3`(결정 38~43) — 오토마타 하나, 켠 창에서만, 먹은 키는 안 보냄, 포커스를 잃으면 확정 | 조합 · 확정, 두 번 찍히지 않음(wayland 판정 26~28). 녹화 B |
 | WY-M6 | `xdg-decoration` · 서버 쪽 장식 · `xdg_popup` · damage 부분 blit · 호환 모드 | popup 위치, 장식의 좌표 색, 호환 모드의 키 판정 |
