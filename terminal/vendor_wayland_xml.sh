@@ -7,6 +7,7 @@
 #   viewporter.xml  wayland-protocols 1.44 — M2(SDL3의 2단)가 generate한다. 지금은 받기만 한다
 #   xdg-decoration-unstable-v1.xml  wayland-protocols 1.44 — WY-M2(design 결정 25). 장식 관리자가 늘 server_side로 답해
 #                   SDL3가 libdecor 길로 가지 않는다
+#   text-input-unstable-v3.xml  wayland-protocols 1.44 — WY-M5(design 결정 38). 한글 IME(`zwp_text_input_manager_v3` 1)
 #
 # sha256은 태그의 raw 파일과 Debian 패키지가 까는 파일(/usr/share/wayland/wayland.xml ·
 # /usr/share/wayland-protocols/stable/…)을 따로 재어 같은 값이었다(2026-11-19). 판을 올릴 때 함께 고친다.
@@ -38,3 +39,5 @@ fetch "https://gitlab.freedesktop.org/wayland/wayland-protocols/-/raw/${PROTOCOL
   viewporter.xml dcb12279a03746301fe490aaed4b38a403485a925abfce2ccfceb644e104fe71
 fetch "https://gitlab.freedesktop.org/wayland/wayland-protocols/-/raw/${PROTOCOLS_TAG}/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml" \
   xdg-decoration-unstable-v1.xml 73101094eedd2295ac48972a2562d6f99881fee68f3d4d403675837434ab7c70
+fetch "https://gitlab.freedesktop.org/wayland/wayland-protocols/-/raw/${PROTOCOLS_TAG}/unstable/text-input/text-input-unstable-v3.xml" \
+  text-input-unstable-v3.xml 49048087a67011a8840bca889cd2b0ba374382be1ed54ec98adf7837fdca1982

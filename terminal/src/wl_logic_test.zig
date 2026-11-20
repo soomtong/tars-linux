@@ -389,5 +389,56 @@ pub fn main() !void {
     // 한도(design 결정 33) — 숫자를 여기 한 번 더 적어, 바꾸면 이 줄도 함께 고치게 한다.
     if (logic.SELECTION_MAX_BYTES != 1048576 or logic.SELECTION_TIMEOUT_MS != 2000) return error.WrongLimit;
     std.debug.print("wl_logic_test: selection limits 1 MiB 2000 ms\n", .{});
+
+    // text_input 상태(WY-M5, design 결정 43).
+    {
+        var t: logic.TextInput = .{};
+        // 들어가기 전의 enable · commit — 적용하지 않지만 commit은 센다(serial은 클라이언트가 보낸 commit 수).
+        t.enable();
+        t.commit();
+        if (t.enabled or t.commits != 1) return error.WrongTextInput;
+        // enter(surface 7) 뒤 enable + commit → 켜짐. 다른 surface에서는 켜진 것이 아니다.
+        t.enter(7);
+        if (t.activeOn(7)) return error.WrongTextInput;
+        t.enable();
+        if (t.activeOn(7)) return error.WrongTextInput; // commit 전에는 pending뿐
+        t.commit();
+        if (!t.activeOn(7) or t.activeOn(8) or t.activeOn(0) or t.commits != 2) return error.WrongTextInput;
+        // enable 없는 commit은 current를 안 바꾼다.
+        t.commit();
+        if (!t.activeOn(7) or t.commits != 3) return error.WrongTextInput;
+        // 연속 enable · disable — 마지막 것이 이긴다.
+        t.enable();
+        t.disable();
+        t.commit();
+        if (t.activeOn(7) or t.commits != 4) return error.WrongTextInput;
+        t.disable();
+        t.enable();
+        t.enable();
+        t.commit();
+        if (!t.activeOn(7)) return error.WrongTextInput;
+        // leave → 꺼짐. leave 뒤의 enable + commit은 무시되지만 센다.
+        t.leave();
+        if (t.activeOn(7)) return error.WrongTextInput;
+        t.enable();
+        t.commit();
+        if (t.enabled or t.commits != 6) return error.WrongTextInput;
+        // 다시 enter — 상태는 무효(pending도 버린다). enable 없이 commit하면 꺼진 채다.
+        t.enable();
+        t.enter(9);
+        t.commit();
+        if (t.activeOn(9) or t.commits != 7) return error.WrongTextInput;
+        // 켜진 채로 다른 surface에 enter — 무효가 된다(SDL은 키보드 enter에 다시 enable한다).
+        t.enable();
+        t.commit();
+        if (!t.activeOn(9)) return error.WrongTextInput;
+        t.enter(11);
+        if (t.activeOn(9) or t.activeOn(11)) return error.WrongTextInput;
+        // 키보드 enter에 enable하는 클라이언트(SDL)도 받힌다 — 서버가 enter를 먼저 보냈으므로 요청이 올 때 entered가 서 있다.
+        t.enable();
+        t.commit();
+        if (!t.activeOn(11) or t.commits != 9) return error.WrongTextInput;
+    }
+    std.debug.print("wl_logic_test: text_input 13 cases\n", .{});
     std.debug.print("wl_logic_test: all checks passed\n", .{});
 }

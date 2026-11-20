@@ -14,6 +14,9 @@
 //! WY-M4 단계 B: `--paste`면 서버의 selection offer를 기억해 `offer mimes=…`(없으면 `offer none`)를 찍고, V 키(47) 누름에서
 //! `receive` → EOF까지 읽어 `paste len=N text=…`(offer가 없으면 `paste none`). `--paste-drop`은 SIGPIPE 시험이다 — 파이프의 읽기
 //! 끝을 먼저 닫고 `receive`를 보내므로 서버의 쓰기는 반드시 EPIPE다(design 결정 35, wayland 판정 25).
+//! WY-M5(plan 확정 8): `--text-input`이면 창보다 먼저 `zwp_text_input_v3`를 얻고, 그 `enter`에 enable + content_type + commit
+//! (`ti enter`), `leave`에 `ti leave`. preedit · commit은 받아 두었다가 `done`에서 찍는다(이중 버퍼) — `commit text=…`(있을 때) ·
+//! `preedit text=… cursor=a,b` · `done serial=N match=1|0`(serial이 내가 보낸 commit 수와 같은가).
 //! `wl_surface.enter`의 줄에 `enter`라는 낱말을 안 쓰는 것은 wayland 체인 판정 16이 이 로그의 `enter`(키보드)를 세기 때문이다.
 //!
 //! 바인딩은 terminal의 서버와 같은 스캐너가 만든 것이다(`build.zig`의 `wayland` 모듈 — 서버는 `server`, 이쪽은
@@ -24,6 +27,7 @@ const linux = std.os.linux;
 const wayland = @import("wayland");
 const wl = wayland.client.wl;
 const xdg = wayland.client.xdg;
+const zwp = wayland.client.zwp;
 
 const EXIT_USAGE: u8 = 2;
 
@@ -35,6 +39,8 @@ const SEAT_VERSION: u32 = 7;
 const WM_BASE_VERSION: u32 = 5;
 /// 클립보드(WY-M4, design 결정 32).
 const DATA_DEVICE_MANAGER_VERSION: u32 = 2;
+/// 한글 IME(WY-M5, design 결정 38).
+const TEXT_INPUT_MANAGER_VERSION: u32 = 1;
 
 /// `--copy`가 offer하는 mime — SDL3 3.2.10의 텍스트 다섯과 같은 순서다(`SDL_waylandclipboard.c` text_mime_types). 서버가
 /// 그중에서 고르는 것(`wl_logic.pickMime`)을 남의 클라이언트와 같은 목록으로 본다.
@@ -99,6 +105,8 @@ const Args = struct {
     paste: bool = false,
     /// `--paste-drop` — V 키 누름에서 읽기 끝을 닫은 파이프로 `receive`(SIGPIPE 시험).
     paste_drop: bool = false,
+    /// `--text-input`(WY-M5) — text_input을 얻어 enter마다 켜고 preedit · commit을 찍는다.
+    text_input: bool = false,
 };
 
 /// 바둑판의 둘째 색. 둘레의 검정과 갈리게 흰색이다.
@@ -145,6 +153,8 @@ fn parseArgs(argv: []const []const u8) ?Args {
             args.paste = true;
         } else if (std.mem.eql(u8, a, "--paste-drop")) {
             args.paste_drop = true;
+        } else if (std.mem.eql(u8, a, "--text-input")) {
+            args.text_input = true;
         } else if (std.mem.eql(u8, a, "--copy")) {
             i += 1;
             if (i == argv.len) return null;
@@ -164,6 +174,7 @@ fn usage() u8 {
     writeAll(2,
         \\usage: tars-wl-test [--color RRGGBB] [--size WxH] [--ignore-close] [--follow-size] [--fullscreen]
         \\       [--hide-cursor] [--buffer-scale N] [--checker] [--copy TEXT] [--paste] [--paste-drop]
+        \\       [--text-input]
         \\  open one xdg_toplevel filled with one colour (default 3366CC, 320x200) and
         \\  print what the compositor sends, one line each. Ends on close, unless
         \\  --ignore-close (then close and ping are ignored). The buffer keeps its
@@ -177,6 +188,8 @@ fn usage() u8 {
         \\  --copy TEXT sets the selection to TEXT when C is pressed in the window.
         \\  --paste prints the selection when V is pressed; --paste-drop asks for it
         \\  through a pipe whose read end is already closed (a SIGPIPE test).
+        \\  --text-input enables a zwp_text_input_v3 on every enter and prints the
+        \\  commit and preedit text the compositor sends, at each done.
         \\
     );
     return EXIT_USAGE;
@@ -191,6 +204,7 @@ const Globals = struct {
     wm_base: ?*xdg.WmBase = null,
     output: ?*wl.Output = null,
     data_device_manager: ?*wl.DataDeviceManager = null,
+    text_input_manager: ?*zwp.TextInputManagerV3 = null,
     /// output의 mode · scale을 `done`까지 모은다. listener는 bind하는 자리에서 건다 — output의 이벤트는 첫 roundtrip이 끝난
     /// 뒤의 같은 읽기에 섞여 올 수 있고, listener 없는 proxy의 이벤트는 버려진다.
     out_info: OutputInfo = .{},
@@ -227,6 +241,15 @@ const State = struct {
     /// 막 온 offer의 mime들(`a,b,c`) — `selection`에서 한 줄로 찍는다.
     mimes: [160]u8 = undefined,
     mimes_len: usize = 0,
+    /// 한글 IME(WY-M5). `ti_commits`는 내가 보낸 `commit` 수 — 서버의 `done(serial)`과 같아야 한다.
+    text_input: ?*zwp.TextInputV3 = null,
+    ti_commits: u32 = 0,
+    /// `done`까지 모으는 pending(xml의 초기값은 빈 문자열 · 커서 0).
+    ti_commit: [64]u8 = undefined,
+    ti_commit_len: usize = 0,
+    ti_preedit: [64]u8 = undefined,
+    ti_preedit_len: usize = 0,
+    ti_cursor: [2]i32 = .{ 0, 0 },
     frames: u32 = 0,
     running: bool = true,
     failed: bool = false,
@@ -308,6 +331,8 @@ fn registryListener(registry: *wl.Registry, event: wl.Registry.Event, g: *Global
                 g.output = o;
             } else if (std.mem.eql(u8, name, std.mem.span(wl.DataDeviceManager.interface.name))) {
                 g.data_device_manager = registry.bind(global.name, wl.DataDeviceManager, @min(global.version, DATA_DEVICE_MANAGER_VERSION)) catch return;
+            } else if (std.mem.eql(u8, name, std.mem.span(zwp.TextInputManagerV3.interface.name))) {
+                g.text_input_manager = registry.bind(global.name, zwp.TextInputManagerV3, @min(global.version, TEXT_INPUT_MANAGER_VERSION)) catch return;
             }
         },
         .global_remove => {},
@@ -461,6 +486,52 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, state: *State) vo
     }
 }
 
+// ── 한글 IME(WY-M5) ─────────────────────────────────────────────────
+
+/// text_input 이벤트. `enter`에 켜고(enable · content_type · commit), preedit · commit은 pending에 담아 `done`에서 찍는다 —
+/// xml의 이중 버퍼 그대로다. 한 `done`에 확정과 다음 조합이 함께 오면 두 줄이 같은 done 앞에 찍힌다.
+fn textInputListener(ti: *zwp.TextInputV3, event: zwp.TextInputV3.Event, state: *State) void {
+    switch (event) {
+        .enter => {
+            say("ti enter", .{});
+            ti.enable();
+            ti.setContentType(.{}, .normal);
+            ti.commit();
+            state.ti_commits +%= 1;
+        },
+        .leave => {
+            say("ti leave", .{});
+            state.ti_commit_len = 0;
+            state.ti_preedit_len = 0;
+            state.ti_cursor = .{ 0, 0 };
+        },
+        .preedit_string => |e| {
+            state.ti_preedit_len = copyText(&state.ti_preedit, e.text);
+            state.ti_cursor = .{ e.cursor_begin, e.cursor_end };
+        },
+        .commit_string => |e| state.ti_commit_len = copyText(&state.ti_commit, e.text),
+        // 서버는 이것을 보내지 않는다(design 결정 38). 오면 보이게 찍는다.
+        .delete_surrounding_text => |e| say("ti delete before={d} after={d}", .{ e.before_length, e.after_length }),
+        .done => |e| {
+            if (state.ti_commit_len > 0) say("commit text={s}", .{state.ti_commit[0..state.ti_commit_len]});
+            say("preedit text={s} cursor={d},{d}", .{ state.ti_preedit[0..state.ti_preedit_len], state.ti_cursor[0], state.ti_cursor[1] });
+            say("done serial={d} match={d}", .{ e.serial, @intFromBool(e.serial == state.ti_commits) });
+            // done에서 pending은 초기값으로 돌아간다(xml).
+            state.ti_commit_len = 0;
+            state.ti_preedit_len = 0;
+            state.ti_cursor = .{ 0, 0 };
+        },
+    }
+}
+
+/// 이벤트의 글(null이면 빈 것)을 칸에 옮긴다. 넘치면 자른다 — 조합 · 확정은 많아야 몇 글자다.
+fn copyText(dst: []u8, text: ?[*:0]const u8) usize {
+    const t = std.mem.span(text orelse return 0);
+    const n = @min(t.len, dst.len);
+    @memcpy(dst[0..n], t[0..n]);
+    return n;
+}
+
 // ── 클립보드(WY-M4) ─────────────────────────────────────────────────
 
 /// `--copy`: source 하나를 만들어 mime 다섯을 offer하고 `set_selection(serial)`. serial은 방금 받은 키의 것이다(SDL3도 마지막
@@ -604,6 +675,13 @@ fn run(args: Args) !u8 {
         dev.setListener(*State, dataDeviceListener, &state);
         state.data_device_manager = mgr;
         state.data_device = dev;
+    };
+    // text_input(WY-M5) — `--text-input`일 때만, 창보다 먼저. 첫 포커스의 `enter`를 놓치지 않는다(서버는 늦은
+    // `get_text_input`에도 그 자리에서 enter를 보내지만, 이 클라이언트는 정석 순서 하나만 쓴다).
+    if (args.text_input) if (g.text_input_manager) |mgr| if (g.seat) |seat| {
+        const ti = try mgr.getTextInput(seat);
+        ti.setListener(*State, textInputListener, &state);
+        state.text_input = ti;
     };
     // seat의 capabilities를 여기서 받아 `get_keyboard` · `get_pointer`를 첫 commit보다 먼저 보낸다(WY-M3 단계 A). 서버는
     // 요청을 차례로 처리하므로 첫 configure가 나갈 때 키보드가 이미 있다 — 체인이 configure를 보자마자 친 키의 누름이

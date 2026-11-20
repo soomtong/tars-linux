@@ -21,6 +21,7 @@ const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const xdg = wayland.server.xdg;
 const zxdg = wayland.server.zxdg;
+const zwp = wayland.server.zwp;
 const logic = @import("../wl_logic.zig");
 const logline = @import("../logline.zig");
 
@@ -35,6 +36,8 @@ const WM_BASE_VERSION = 5;
 const DECORATION_VERSION = 1;
 /// 클립보드(WY-M4, design 결정 32). 판 2 — 판 3의 새 요청은 전부 drag-and-drop 액션이다.
 const DATA_DEVICE_MANAGER_VERSION = 2;
+/// 한글 IME(WY-M5, design 결정 38). 판 1뿐이다.
+const TEXT_INPUT_MANAGER_VERSION = 1;
 
 /// 파이프의 깃발(값은 asm-generic/fcntl.h — x86_64도 같다). 받기의 읽기 끝만 비블록이다 — epoll이 깨운 만큼만 읽는다.
 /// `pipe2`에 O_NONBLOCK을 주면 클라이언트가 받는 쓰기 끝까지 비블록이 되어, EAGAIN을 다루지 않는 클라이언트가 64 KiB를
@@ -135,6 +138,8 @@ pub const Server = struct {
     clip_gen: u32 = 0,
     /// 진행 중인 받기(하나뿐 — 새 `set_selection`이 오면 옛것을 버린다).
     intake: ?*Intake = null,
+    /// 모든 `zwp_text_input_v3`(WY-M5, design 결정 43). enter · leave는 키보드 포커스를 따라 클라이언트로 골라 보낸다.
+    text_inputs: std.ArrayList(*TextInput) = .empty,
 
     /// 소켓을 연다(design 결정 3, 확정 4). `/run/user/<uid>`(0700, 그 계정의 것)를 만들고 `XDG_RUNTIME_DIR`을 거기로
     /// 둔 뒤 `wayland-0`을 열고, 소켓과 lock의 주인을 계정으로 바꾼다. 성공하면 `WAYLAND_DISPLAY=wayland-0`도 둔다 —
@@ -191,6 +196,7 @@ pub const Server = struct {
         _ = try wl.Global.create(display, xdg.WmBase, WM_BASE_VERSION, *Server, self, bindWmBase);
         _ = try wl.Global.create(display, zxdg.DecorationManagerV1, DECORATION_VERSION, *Server, self, bindDecorationManager);
         _ = try wl.Global.create(display, wl.DataDeviceManager, DATA_DEVICE_MANAGER_VERSION, *Server, self, bindDataDeviceManager);
+        _ = try wl.Global.create(display, zwp.TextInputManagerV3, TEXT_INPUT_MANAGER_VERSION, *Server, self, bindTextInputManager);
 
         if (setenv("WAYLAND_DISPLAY", "wayland-0", 1) != 0) return error.SetenvFailed;
         logline.print("terminal: wl> listen path={s}/wayland-0\n", .{dir});
@@ -241,6 +247,8 @@ pub const Server = struct {
         if (self.focused == want) return;
         const old_id = self.focused;
         if (self.focused) |old| if (self.find(old)) |t| if (surfaceOf(t)) |sr| {
+            // text_input `leave`는 키보드 `leave` 바로 앞이다(design 결정 42 — 확정은 App이 이 앞에서 `imeSend`로 끝냈다).
+            self.textLeave(sr);
             const serial = self.display.nextSerial();
             var it = self.keyboards.iterator(.forward);
             while (it.next()) |kb| if (kb.getClient() == sr.getClient()) kb.sendLeave(serial, sr);
@@ -258,9 +266,82 @@ pub const Server = struct {
         self.gate.focus(@intFromPtr(sr.getClient()));
         // selection은 키보드 `enter` 바로 앞이다(xml `wl_data_device.selection`, design 결정 34).
         self.offerTo(sr.getClient());
+        // text_input `enter`는 selection 뒤 · 키보드 `enter` 앞이다(design 결정 43).
+        self.textEnter(sr);
         var it = self.keyboards.iterator(.forward);
         while (it.next()) |kb| if (kb.getClient() == sr.getClient()) self.enterKeyboard(kb, sr);
         self.sent_mods = mods;
+    }
+
+    // ── 한글 IME(WY-M5, design 결정 39 · 41 · 43) ──
+
+    /// 키보드 포커스 창에서 IME가 켜져 있는가 — 그 클라이언트의 text_input 하나가 enabled이고 들어간 surface가 포커스 창의
+    /// surface다. App이 키를 읽는 순간 묻는다(단계 B의 `Context.ime`). 포커스가 셸이면 false.
+    pub fn imeActive(self: *Server) bool {
+        const t = self.find(self.focused orelse return false) orelse return false;
+        const sr = surfaceOf(t) orelse return false;
+        for (self.text_inputs.items) |ti| {
+            if (ti.resource.getClient() == sr.getClient() and ti.state.activeOn(@intFromPtr(sr))) return true;
+        }
+        return false;
+    }
+
+    /// 포커스 창의 켜진 text_input에 확정(`text`)과 조합(`composing`)을 보낸다 — `commit_string`(비어 있지 않을 때), `preedit_string`(빈 것도, 커서는
+    /// 끝), `done(commit 셈)`. 한 `done`에 확정과 다음 조합이 함께 간다(xml의 적용 순서가 그렇게 짜여 있다). 서버는 오토마타를
+    /// 모른다 — 텍스트는 App이 준다(결정 39). 켜진 것이 없으면 아무것도 안 한다. `delete_surrounding_text`는 안 보낸다.
+    pub fn imeSend(self: *Server, text: []const u8, composing: []const u8) void {
+        const id = self.focused orelse return;
+        const t = self.find(id) orelse return;
+        const sr = surfaceOf(t) orelse return;
+        var cbuf: [64]u8 = undefined;
+        var pbuf: [64]u8 = undefined;
+        const c = std.fmt.bufPrintSentinel(&cbuf, "{s}", .{text}, 0) catch return;
+        const p = std.fmt.bufPrintSentinel(&pbuf, "{s}", .{composing}, 0) catch return;
+        const len: i32 = @intCast(p.len);
+        var sent = false;
+        for (self.text_inputs.items) |ti| {
+            if (ti.resource.getClient() != sr.getClient() or !ti.state.activeOn(@intFromPtr(sr))) continue;
+            if (c.len > 0) ti.resource.sendCommitString(c.ptr);
+            ti.resource.sendPreeditString(p.ptr, len, len);
+            ti.resource.sendDone(ti.state.commits);
+            sent = true;
+        }
+        if (!sent) return;
+        logline.print("terminal: wl> ime to={d} commit={s} preedit={s}\n", .{
+            id,
+            if (c.len > 0) c else "(none)",
+            if (p.len > 0) p else "(none)",
+        });
+    }
+
+    /// 포커스를 받은 surface의 클라이언트 text_input 모두에 `enter`. 서버 쪽 상태는 무효가 된다 — 클라이언트가 다시 enable한다.
+    fn textEnter(self: *Server, sr: *wl.Surface) void {
+        for (self.text_inputs.items) |ti| if (ti.resource.getClient() == sr.getClient()) self.textEnterOne(ti, sr);
+    }
+
+    fn textEnterOne(self: *Server, ti: *TextInput, sr: *wl.Surface) void {
+        const was = ti.state.enabled;
+        ti.resource.sendEnter(sr);
+        ti.state.enter(@intFromPtr(sr));
+        self.logEnabled(ti, was);
+    }
+
+    /// 포커스를 잃는 surface에 들어가 있던 text_input 모두에 `leave`.
+    fn textLeave(self: *Server, sr: *wl.Surface) void {
+        for (self.text_inputs.items) |ti| {
+            if (ti.resource.getClient() != sr.getClient() or ti.state.entered != @intFromPtr(sr)) continue;
+            const was = ti.state.enabled;
+            ti.resource.sendLeave(sr);
+            ti.state.leave();
+            self.logEnabled(ti, was);
+        }
+    }
+
+    /// current enabled가 바뀌었으면 줄 하나(plan 확정 3) — `wl> ti enable to=ID` · `wl> ti disable to=ID`.
+    fn logEnabled(self: *const Server, ti: *const TextInput, was: bool) void {
+        if (was == ti.state.enabled) return;
+        const verb = if (ti.state.enabled) "enable" else "disable";
+        logline.print("terminal: wl> ti {s} to={d}\n", .{ verb, self.toplevelOf(ti.resource.getClient()) });
     }
 
     /// 키보드 하나에 `enter`와 수정키. 눌린 키 목록은 비운다(R-KEY-7 — 포커스 전에 누른 키는 클라이언트의 것이 아니다).
@@ -1362,6 +1443,12 @@ fn toplevelDestroyed(_: *xdg.Toplevel, t: *Toplevel) void {
         srv.focused = null;
         srv.held.clear();
         srv.sent_mods = null;
+        // text_input도 같다 — leave 없이 상태만 버린다(포커스가 없으니 켜진 것이 없다).
+        for (srv.text_inputs.items) |ti| if (ti.resource.getClient() == t.resource.getClient()) {
+            const was = ti.state.enabled;
+            ti.state.leave();
+            srv.logEnabled(ti, was);
+        };
     }
     // 포인터도 같다 — leave 없이 포커스와 grab을 버린다.
     srv.ptr.drop(t.id);
@@ -1557,4 +1644,73 @@ fn outgoTimeout(out: *Outgo) c_int {
     logline.print("terminal: wl> receive timeout off={d} len={d}\n", .{ out.off, out.buf.len });
     endOutgo(out);
     return 0;
+}
+
+// ── zwp_text_input_manager_v3 · zwp_text_input_v3(WY-M5, design 결정 38 · 43) ──
+
+/// 클라이언트의 text_input 하나. 상태 셈은 `logic.TextInput`이 든다.
+const TextInput = struct {
+    srv: *Server,
+    resource: *zwp.TextInputV3,
+    state: logic.TextInput = .{},
+};
+
+fn bindTextInputManager(client: *wl.Client, srv: *Server, version: u32, id: u32) void {
+    const m = zwp.TextInputManagerV3.create(client, version, id) catch return client.postNoMemory();
+    m.setHandler(*Server, textInputManagerRequest, null, srv);
+}
+
+fn textInputManagerRequest(m: *zwp.TextInputManagerV3, req: zwp.TextInputManagerV3.Request, srv: *Server) void {
+    switch (req) {
+        .destroy => m.destroy(),
+        // seat은 하나다(`seat0`) — 어느 seat을 줘도 같다.
+        .get_text_input => |r| {
+            const client = m.getClient();
+            const res = zwp.TextInputV3.create(client, m.getVersion(), r.id) catch return m.postNoMemory();
+            const ti = srv.allocator.create(TextInput) catch {
+                res.destroy();
+                return m.postNoMemory();
+            };
+            ti.* = .{ .srv = srv, .resource = res };
+            srv.text_inputs.append(srv.allocator, ti) catch {
+                srv.allocator.destroy(ti);
+                res.destroy();
+                return m.postNoMemory();
+            };
+            res.setHandler(*TextInput, textInputRequest, textInputDestroyed, ti);
+            // 포커스 클라이언트가 text_input을 나중에 얻었다 — 그 자리에서 `enter`(늦은 `get_keyboard`와 같은 까닭).
+            if (srv.focused) |id| if (srv.find(id)) |t| if (surfaceOf(t)) |sr| if (sr.getClient() == client)
+                srv.textEnterOne(ti, sr);
+        },
+    }
+}
+
+/// 상태 요청 셋(surrounding · change_cause · cursor_rectangle)은 받기만 한다(design 결정 38 — 오토마타가 앞뒤 글자를 안 보고
+/// 후보 창이 없다). content_type은 줄 하나만 남긴다.
+fn textInputRequest(res: *zwp.TextInputV3, req: zwp.TextInputV3.Request, ti: *TextInput) void {
+    switch (req) {
+        .destroy => res.destroy(),
+        .enable => ti.state.enable(),
+        .disable => ti.state.disable(),
+        .set_surrounding_text, .set_text_change_cause, .set_cursor_rectangle => {},
+        .set_content_type => |r| logline.print("terminal: wl> ti content purpose={d} hint=0x{x}\n", .{
+            @backingInt(r.purpose), @as(u32, @bitCast(r.hint)),
+        }),
+        .commit => {
+            const was = ti.state.enabled;
+            ti.state.commit();
+            ti.srv.logEnabled(ti, was);
+        },
+    }
+}
+
+/// 객체가 사라졌다(`destroy` 또는 클라이언트의 끝). xml: 그 객체로 켠 것은 모두 꺼진다 — 목록에서 빼면 그렇다.
+fn textInputDestroyed(res: *zwp.TextInputV3, ti: *TextInput) void {
+    const srv = ti.srv;
+    if (ti.state.enabled) logline.print("terminal: wl> ti disable to={d}\n", .{srv.toplevelOf(res.getClient())});
+    for (srv.text_inputs.items, 0..) |x, i| if (x == ti) {
+        _ = srv.text_inputs.swapRemove(i);
+        break;
+    };
+    srv.allocator.destroy(ti);
 }

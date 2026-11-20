@@ -116,6 +116,9 @@ pub fn build(b: *std.Build) void {
     // WY-M4(design 결정 32): 클립보드. 판 2 — 판 3의 새 요청은 전부 drag-and-drop 액션이다. 자식(`wl_data_device` ·
     // `wl_data_source` · `wl_data_offer`)이 같은 판으로 함께 생긴다.
     scanner.generate("wl_data_device_manager", 2);
+    // WY-M5(design 결정 38): 한글 IME. 판 1뿐이다. 자식 `zwp_text_input_v3`가 같은 판으로 함께 생긴다.
+    scanner.addCustomProtocol(b.path("vendor/wayland/text-input-unstable-v3.xml"));
+    scanner.generate("zwp_text_input_manager_v3", 1);
     const wayland_mod = b.createModule(.{ .root_source_file = scanner.result });
 
     // libwayland는 컨테이너의 x86_64 sysroot에 있다(Dockerfile 층 22 — dpkg -x로 푼 libwayland-dev:amd64의 무버전

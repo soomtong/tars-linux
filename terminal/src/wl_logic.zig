@@ -10,6 +10,7 @@
 //! 단계 B(결정 30)는 물리 합성의 셈 — 잘라 옮기기(`blitClip`), 교집합(`intersect`), × 배율(`scaleFit` · `scaleArea`).
 //! WY-M4(design 결정 33 · 34 · 36)가 클립보드의 셋을 더했다 — 받을 mime 고르기(`pickMime`), `set_selection`을 받아들이는
 //! 조건(`SelectionGate`), 받는 한도(`SELECTION_MAX_BYTES` · `SELECTION_TIMEOUT_MS`).
+//! WY-M5(design 결정 43)가 `zwp_text_input_v3`의 이중 버퍼 셈(`TextInput`)을 더했다.
 
 const std = @import("std");
 
@@ -454,5 +455,60 @@ pub const SelectionGate = struct {
     /// `client`의 `set_selection`을 받아들이는가. 포커스를 가져 본 적 없는 클라이언트(배경 프로세스)는 안 된다.
     pub fn allows(self: SelectionGate, client: usize) bool {
         return self.last == client;
+    }
+};
+
+// ── text_input 상태(WY-M5, design 결정 38 · 43) ────────────────────────────
+
+/// `zwp_text_input_v3` 객체 하나의 서버 쪽 상태. xml의 이중 버퍼를 셈만으로 든다 — `enable` · `disable`은 pending을 바꾸고
+/// `commit`이 current(`enabled`)로 옮긴다. 상태 요청 셋(surrounding · content_type · cursor_rectangle)은 받기만 하므로 여기 없다.
+///
+/// surface는 수(`usize` — 서버가 `wl_surface` 포인터를 넣는다)로만 안다. 0은 "들어간 surface가 없다"다.
+///
+/// 규칙(xml 1.44):
+/// - `enter`는 current surface를 정하고 모든 상태를 무효로 한다 — 클라이언트가 다시 enable해야 켜진다.
+/// - `leave` 뒤 다음 `enter`까지 요청은 무시한다(`enable` · `disable`은 pending을 안 바꾸고 `commit`은 적용하지 않는다).
+/// - enable · disable은 짝이 안 맞아도, 연속이어도 된다 — 마지막 것이 이긴다.
+/// - `commit`은 들어가 있든 없든 센다. `done`의 serial은 "그 객체에서 온 commit 요청 수"다 — 클라이언트가 세는 수와
+///   같아야 하므로 무시한 commit도 센다.
+pub const TextInput = struct {
+    entered: usize = 0,
+    pending: ?bool = null,
+    enabled: bool = false,
+    commits: u32 = 0,
+
+    /// 키보드 포커스가 그 클라이언트의 surface로 왔다.
+    pub fn enter(self: *TextInput, surface: usize) void {
+        self.entered = surface;
+        self.pending = null;
+        self.enabled = false;
+    }
+
+    /// 키보드 포커스가 떠났다(또는 그 surface가 사라졌다).
+    pub fn leave(self: *TextInput) void {
+        self.entered = 0;
+        self.pending = null;
+        self.enabled = false;
+    }
+
+    pub fn enable(self: *TextInput) void {
+        if (self.entered != 0) self.pending = true;
+    }
+
+    pub fn disable(self: *TextInput) void {
+        if (self.entered != 0) self.pending = false;
+    }
+
+    /// `commit` 요청. 셈을 하나 올리고, 들어가 있으면 pending을 current로 옮긴다.
+    pub fn commit(self: *TextInput) void {
+        self.commits +%= 1;
+        if (self.entered == 0) return;
+        if (self.pending) |p| self.enabled = p;
+        self.pending = null;
+    }
+
+    /// 이 surface에서 켜져 있는가 — 서버의 `imeActive`가 포커스 surface로 묻는다.
+    pub fn activeOn(self: TextInput, surface: usize) bool {
+        return surface != 0 and self.enabled and self.entered == surface;
     }
 };
