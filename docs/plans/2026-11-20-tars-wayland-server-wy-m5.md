@@ -75,3 +75,13 @@ wayland 부팅 1, 판정 25 뒤 · 9 앞:
 1. 컨테이너 xml sha256. 2. zig-wayland 이름(`zwp.TextInputManagerV3` · `zwp.TextInputV3`). 3. 디스크 없는 부팅의 `hangul layout=… toggles=` 줄.
 4. 판정 26에서 `ti enable`이 `shift-spc`보다 먼저인가(경쟁이면 그 줄을 기다린다). 5. 바퀴 순서상 `syncFocus`보다 먼저 키를 읽는 길이 있는가.
 6. 서버 로그에 한글이 그대로 찍히는가. 7. SDL에서 한 done의 commit + preedit — 실측 불가(SDL 텍스트 앱 없음)를 결과에 적는다.
+
+## 결과
+
+구현은 `wy-m5`(Herdr, Opus — 조사도 같은 에이전트), lead는 대조 · 게이트 · commit.
+
+1. 단계 A: text-input xml(1.44, 컨테이너의 Debian 패키지와 sha256 같음) · `zwp.TextInputManagerV3` 1 · 객체 상태(`wl_logic.TextInput`, 단언 13 —
+   leave 뒤 commit도 serial에는 센다) · `setFocus`의 순서(text_input `leave` → 키보드 `leave`, selection → text_input `enter` → 키보드 `enter`) · 늦은
+   `get_text_input`의 enter · `imeActive` · `imeSend`(부르는 자리 없음) · `tars-wl-test --text-input`. 키 경로 불변. 체인 단독 terminal · wayland(413초) ·
+   hangul · pointer PASS, verify mismatch 0. 디스크 없는 부팅은 `hangul layout=shin_pcs … toggles=hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin`.
+   plan과 다른 것: `wl> ti enable/disable` 줄은 commit뿐 아니라 enter · leave · 창 사라짐 · destroy로 current가 바뀔 때도 찍힌다.
