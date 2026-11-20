@@ -1,0 +1,30 @@
+.{
+    .name = .tars_toolkit,
+    .version = "0.0.0",
+    .fingerprint = 0x5695de5986c1e38b,
+    .minimum_zig_version = "0.17.0",
+    .dependencies = .{
+        // TK design 결정 3: 그리기. v0.13.2가 Zig 0.17 대응의 고칠 것 없는 태그다(v0.13.1은 zon의 최소 판 사고, design 확인 1).
+        // MPL-2.0 — 파일 단위 copyleft라 z2d 파일을 고치면 그 파일만 공개 의무다. hash는 `zig fetch <url>`의 출력이다.
+        .z2d = .{
+            .url = "https://github.com/vancluever/z2d/archive/refs/tags/v0.13.2.tar.gz",
+            .hash = "z2d-0.13.2-j5P_HkkVFAAtOSQPRTS7wbZLbYs7oETRn7nUKSUwDjM_",
+        },
+        // Wayland 클라이언트 바인딩과 스캐너 — terminal/build.zig.zon과 같은 url · hash(design 결정 1).
+        .wayland = .{
+            .url = "https://codeberg.org/ifreund/zig-wayland/archive/v0.7.0.tar.gz",
+            .hash = "wayland-0.7.0-lQa1kuP8AQD5dW7_o-VKLVD_QbqXe7Zob78r2su7Pyex",
+        },
+        // stb_truetype 헤더 번역 — terminal과 같은 판.
+        .translate_c = .{
+            .url = "https://deps.files.ghostty.org/translate_c-02ff0c523fb92a38939b04d0145c4a9602a74d56.tar.gz",
+            .hash = "translate_c-2.0.0-Q_BUWltOBwBYABF84EUL208pIFeUIwbBs29FmVBaafN5",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "vendor",
+    },
+}

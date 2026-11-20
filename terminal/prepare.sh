@@ -21,3 +21,8 @@ fi
 ./vendor_wayland_xml.sh
 
 zig build
+
+# TK-M0(TK design 결정 1): 툴킷과 그 시험 앱. terminal의 build와 따로 서지만 stb 헤더와 Wayland xml을 이 디렉터리의 vendor에서
+# 빌려 가므로 위 vendor 스크립트 뒤다. 여기서 부르는 것은 make_initrd.sh가 `tars-tk-demo`를 복사하기 때문이고, 체인들의
+# BUILD_STEPS(루트 check.sh)를 늘리지 않으려는 것이다.
+(cd ../toolkit && zig build)

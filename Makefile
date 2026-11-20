@@ -352,7 +352,7 @@ shell: container
 # 날아가면 다시 만들 수 없는 종류다.
 clean:
 	@mv -f $(CONFIG_DISK) .tars-config.img.keep 2>/dev/null || true
-	@rm -rf kernel/build init/zig-out init/.zig-cache terminal/zig-out terminal/.zig-cache out
+	@rm -rf kernel/build init/zig-out init/.zig-cache terminal/zig-out terminal/.zig-cache toolkit/zig-out toolkit/.zig-cache out
 	@mkdir -p out
 	@mv -f .tars-config.img.keep $(CONFIG_DISK) 2>/dev/null || true
 	@echo "지웠다: kernel/build init/zig-out init/.zig-cache terminal/zig-out terminal/.zig-cache out"

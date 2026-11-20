@@ -50,13 +50,13 @@ else
 fi
 
 # 2. Zig 서식. 디렉터리는 재귀다.
-zig fmt --check init/build.zig terminal/build.zig init/src terminal/src shared devlayer/manifest-gen.zig || failed+=(zig-fmt)
+zig fmt --check init/build.zig terminal/build.zig toolkit/build.zig init/src terminal/src toolkit/src shared devlayer/manifest-gen.zig || failed+=(zig-fmt)
 
 # 3. Zig 문법. 컨테이너 컴파일러가 거부하지 않는 문법이 다시 들어오는 것을 여기서 본다(ZU).
 ast_failed=0
 while IFS= read -r f; do
   zig ast-check "$f" || { echo "ast-check FAIL $f"; ast_failed=1; }
-done < <(find init/src terminal/src shared devlayer/manifest-gen.zig -name '*.zig' | sort)
+done < <(find init/src terminal/src toolkit/src shared devlayer/manifest-gen.zig -name '*.zig' | sort)
 [ "$ast_failed" = 0 ] || failed+=(zig-ast-check)
 
 # 4. shared/의 순수 검사. libc · 시스템 콜이 없어 어느 호스트에서나 돈다(SA-M1).

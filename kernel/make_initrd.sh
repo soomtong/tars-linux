@@ -187,6 +187,10 @@ chmod 0755 "$WORKDIR/usr/bin/tars-gpu-demo"
 # /usr/bin인 이유는 tars-kms-fill과 같다 — 게이트 판정이 셸에서 부른다(initrd 기준 A).
 cp ../terminal/zig-out/bin/tars-wl-test "$WORKDIR/usr/bin/tars-wl-test"
 chmod 0755 "$WORKDIR/usr/bin/tars-wl-test"
+# TK-M0: 툴킷의 시험 앱(TK design 결정 12). toolkit/의 build에서 나온다(terminal/prepare.sh 끝이 부른다). tars-wl-test와 같은
+# 사슬(libwayland-client · libffi)이고 게이트 판정이 셸에서 부른다(initrd 기준 A).
+cp ../toolkit/zig-out/bin/tars-tk-demo "$WORKDIR/usr/bin/tars-tk-demo"
+chmod 0755 "$WORKDIR/usr/bin/tars-tk-demo"
 
 # GL-M3(2026-08-29)에서 terminal이 ReleaseSafe가 됐다. 49,373,565 →
 # 10,577,208바이트이고, 이 파일이 만드는 initrd는 16,199,658 →
@@ -207,7 +211,7 @@ chmod 0755 "$WORKDIR/terminal"
 # 남는다. sysroot의 도구는 이미 strip돼 있다(실측 2).
 #
 # 컨테이너가 arm64라 그냥 strip은 x86_64 ELF를 못 읽는다(실측 4).
-OWN_BINS=(init usr/bin/tars-install usr/bin/tars-service usr/bin/tars-config usr/bin/tars-fullscreen usr/bin/tars-kms-fill usr/bin/tars-gpu-demo usr/bin/tars-wl-test terminal)
+OWN_BINS=(init usr/bin/tars-install usr/bin/tars-service usr/bin/tars-config usr/bin/tars-fullscreen usr/bin/tars-kms-fill usr/bin/tars-gpu-demo usr/bin/tars-wl-test usr/bin/tars-tk-demo terminal)
 if ! command -v x86_64-linux-gnu-strip >/dev/null; then
   echo "make_initrd: x86_64-linux-gnu-strip not found" >&2
   echo "             devcontainer/Dockerfile installs it with the x86-64 binutils" >&2
@@ -219,12 +223,15 @@ done
 
 mkdir -p "$WORKDIR/vendor/fonts"
 cp ../terminal/vendor/fonts/unifont.otf "$WORKDIR/vendor/fonts/unifont.otf"
+# TK-M0: 툴킷의 비례폭 글꼴(TK design 결정 6). 원본 그대로이고 앱이 이 절대 경로로 연다. 출처 · sha256은 toolkit/vendor/fonts/README.
+cp ../toolkit/vendor/fonts/Pretendard-Regular.otf "$WORKDIR/vendor/fonts/Pretendard-Regular.otf"
 
 # init은 libc를 링크하지 않는 정적 바이너리라 copy_lib_deps가 필요 없다
 # (ZM-M1). terminal은 glibc 동적 링크다.
 copy_lib_deps "$WORKDIR/terminal"
 copy_lib_deps "$WORKDIR/usr/bin/tars-gpu-demo"
 copy_lib_deps "$WORKDIR/usr/bin/tars-wl-test"
+copy_lib_deps "$WORKDIR/usr/bin/tars-tk-demo"
 
 # ── 유저랜드 바이너리 ────────────────────────────────────────────────────
 #

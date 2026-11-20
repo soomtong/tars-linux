@@ -46,4 +46,18 @@ pub const POINTER_EDGE: u32 = 0x00040810;
 
 // ── 앱 토큰(R-CA-5) ─────────────────────────────────────────────
 //
-// 툴킷의 색 · 간격 · 반지름 · 글꼴 크기는 이 아래에 더한다(TK-M0 단계 B부터).
+// 툴킷의 색 · 간격 · 반지름 · 글꼴 크기(TK-M0 단계 B부터). 색은 위 셸 색 어느 것과도 다른 값이다 — 게이트가 screendump에서
+// 앱의 픽셀을 셸의 것과 가를 수 있게(셸 색과 같은 이유의 "전용 색"). 크기는 논리 픽셀이고 그릴 때 배율을 곱한다.
+
+/// 창 바탕. 셸의 셀 배경(`CELL_BG`)보다 한 단 밝아 column 경계가 보인다.
+pub const TK_BG: u32 = 0x00202C3C;
+/// 강조 면(TK-M0 데모의 둥근 사각형, 뒤의 선택 강조).
+pub const TK_ACCENT: u32 = 0x003C78D8;
+/// 본문 글자. 셸의 `CURSOR_COLOR`(F0F0F0) · `CELL_FG`(FFFFFF)와 다른 값이다.
+pub const TK_TEXT: u32 = 0x00F4F6F8;
+
+/// 모서리 반지름 · 간격 · 글꼴 크기(em, 13 본문 작은 것 · 14 본문).
+pub const TK_RADIUS: u32 = 12;
+pub const TK_SPACE: u32 = 8;
+pub const TK_FONT_SMALL: u32 = 13;
+pub const TK_FONT: u32 = 14;
