@@ -67,3 +67,15 @@ wayland 부팅 1, 판정 28 뒤 · 9 앞:
 1. 호환 모드의 SDL Ctrl+V — 실측 불가(SDL 붙여넣기 앱 없음), 소스 사실로. 2. `Cmd`만 눌렀다 뗀 호환 창의 줄(`0x4` → `0x0`).
 3. zig-wayland가 만든 `tars_menu_v1` 이름. 4. `damage` · `damage_buffer`를 섞는 commit. 5. 부분 blit 32 × 32의 `us`와 통째의 `us`(배율 1 · 배율 2 bs 2),
    그 프레임의 `px=`. 6. 판정 9 · 루트 게이트의 verify mismatch 0. 7. 여러 commit이 한 프레임에 모일 때 합집합(상자 둘이 다 그려지는가).
+
+## 결과
+
+구현은 `wy-m6`(Herdr, Opus — 조사도 같은 에이전트), lead는 대조 · 게이트 · commit.
+
+1. 단계 A `95562b5`: `compatMask`(단언 넷), 서버의 `maskFor(client)`가 `enterKeyboard` · `key`의 `modifiers` · `sent_mods`에 — App이 준 원래 값과 키 코드는
+   그대로. `terminal/protocol/tars-menu-v1.xml`(저장소 안, global `tars_menu_manager_v1` 1, zig 이름 `tars.MenuManagerV1`), `ClientRec.native`와 그것을
+   `wl_client`로 되찾는 목록 `Server.clients`(zig-wayland에 클라이언트 destroy listener 되찾기가 없다). `tars-wl-test --native`, wayland 판정 29 —
+   호환 창 `depressed 0x4` 3줄 · `0x40` 0, 원래 창 `0x40` 2줄, 표의 `Cmd+1`은 그대로 workspace. 둠(부팅 2)은 `mode=compat`이고 판정 10~15 그대로.
+   체인 단독 terminal · wayland(457초) · hangul · pointer · display PASS, verify mismatch 0. 도움말 한 줄을 고쳤다(SDL · GTK 앱에서도 `Cmd+C` · `Cmd+V`).
+2. 단계 A에서 달라진 것: 셈 줄은 `type_text`가 `=`를 못 쳐 `depressed.0x4` · `grep -cx wl-test..native`로(첫 판 빨강). `wl> keys to=` 줄은 모드가
+   바뀔 때만이라 앞 판정들의 호환 창은 첫 창에서 한 번만 찍힌다.
