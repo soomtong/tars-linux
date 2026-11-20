@@ -25,5 +25,9 @@ How to apply:
 - lead의 몫은 그대로다 — 설명 · plan · 보고된 diff를 실제 파일과 대조 · 게이트 · commit. 서브에이전트는 commit하지 않는다
   ([[feedback_commit_delegation]]). 맡기는 글에 그것을 적는다.
 - 무엇을 맡길지의 기준도 그대로다: design doc의 확인 절처럼 lead가 이해해야 하는 읽기는 직접 한다.
+- 일이 끝났거나 안 쓰는 에이전트는 바로 닫는다 — `herdr pane close <pane_id>`(사용자 2026-11-20 "사용하지 않거나 사용이 끝난
+  에이전트는 종료해줘"). 내가 만든 pane만, 일하는 중인 것은 보고를 받은 뒤에. milestone이 바뀌면 새 에이전트를 띄우고 앞 것을 닫는다.
+- `herdr agent wait`의 `--timeout`은 밀리초다. 서브에이전트가 백그라운드 셸(체인)을 기다리는 동안은 idle로 보여 wait가 일찍 돌아온다 —
+  그때는 보고 파일이 생기기를 기다린다.
 
 관련: [[project_branch_lines]] · [[project_app_layer_vision]]
