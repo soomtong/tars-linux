@@ -195,6 +195,26 @@ WY-M2를 열며(2026-11-20, 조사 `wy-impl` — SDL 3.2.10 · Mesa 25.0.7 소�
 26. Wayland 위의 SDL 앱은 GPU가 아니라 llvmpipe(CPU)로 `wl_shm`에 그린다 — Mesa의 EGL Wayland drm 길은 `zwp_linux_dmabuf_v1`나
     `wl_drm`을 요구하고 없으면 swrast로 떨어진다(실기 i915에서도). GPU가 필요한 프로그램은 DY 길(`tars-fullscreen`)이다. dmabuf는 위험으로 남긴다.
 
+WY-M3을 열며(2026-11-20, 조사 `wy-m3` — HEAD `593cb94`의 코드와 vendored `wayland.xml`, 근거는 plan WY-M3의 확인 절):
+
+27. 배율을 알리는 길: `wl_compositor`를 판 6으로 올리고, 판 6 이상의 surface에만 만든 직후 `preferred_buffer_scale(S)`를 보낸다
+    (S = HS 배율, 배율 1에서도 1). 판 4로 bind한 클라이언트(둠)에는 판 6 이벤트를 보내지 않는다 — libwayland가 막아 주는지에 기대지
+    않는다. `wl_output`은 판 4 그대로, `mode`는 물리 크기(xml: "physical hardware units"), `scale`은 S. 창이 처음 보일 때 그 클라이언트의
+    output마다 `wl_surface.enter`를 보내고 leave는 보내지 않는다(출력이 하나뿐 — xml이 허락한다). configure 크기는 논리 그대로다.
+    배율은 terminal 수명 동안 고정이라(바꾸는 길은 `reload terminal`) preferred를 다시 보낼 일은 없다.
+28. `set_buffer_scale`은 xml 그대로 받는다 — double-buffered(commit에서 확정), 0 이하는 `invalid_scale`, 버퍼가 그 배수가 아니면
+    `invalid_size`로 끊는다. 느슨하게 받을 까닭이 우리 쪽 클라이언트에 없다. surface 판 5+의 `offset`은 받아서 버리고, attach의 0이 아닌
+    x · y는 `invalid_offset`이다(놓는 자리는 서버가 정한다).
+29. 창의 크기는 surface 크기(버퍼 ÷ buffer_scale)다. `fit` · `last_fit` · 포인터의 surface 좌표가 모두 이 단위라 포인터 길은 바뀌지 않는다.
+    로그의 `scale=`은 지금처럼 `fit`의 늘림 배수이고(체인 패턴이 본다) buffer_scale은 1이 아닐 때만 끝에 ` bs=N`으로 붙인다.
+30. 물리 합성(요구사항 결정 5): `drm.present`를 `stage`(그림자 → 물리로 늘리기)와 `flush`(DIRTYFB)로 나누고, buffer_scale > 1인 창은
+    그 사이에서 물리 dumb 버퍼에 직접 옮긴다(`fit` × S — bs == S면 1:1). 순서가 반대면 같은 프레임의 늘리기가 창을 덮는다. 그림자에도
+    논리 복사본(솎은 것)을 계속 둔다 — 화살표의 `saved` · verify · 덤프가 그림자를 읽고, 다시 합성이 빠진 자리가 검게 뚫리지 않는다.
+    clip이 그 창 사각형과 겹치는 모든 present(화살표만 옮기는 바퀴 포함)에서 겹친 부분만 다시 옮기고, 화살표는 그 위에 마스크로 다시
+    찍는다. 배율 1 화면에서는 `stage`가 아무것도 안 하고 물리 합성도 없다 — "배율 1은 지금과 같은 길".
+31. `wp_viewporter`와 fractional scale은 내지 않는다. 이번 클라이언트(`tars-wl-test` · 둠 · `tars-gpu-demo --window`) 중 쓰는 것이 없고,
+    SDL3는 HIGH_PIXEL_DENSITY가 아닌 창에서 늘 논리 크기 버퍼다. 내면 `fit` · 포인터 · 물리 합성 식마다 갈래가 는다.
+
 ## Milestone
 
 로드맵의 WY-M0을 둘로 나눈다. 서버 뼈대 · 키 · workspace · 보호만으로도 milestone 하나의 크기이고, 둠은 별도
@@ -205,7 +225,7 @@ WY-M2를 열며(2026-11-20, 조사 `wy-impl` — SDL 3.2.10 · Mesa 25.0.7 소�
 | WY-M0 | 서버 뼈대(결정 1~6) · app workspace(7) · FU를 workspace마다로(8) · 합성(9) · frame(10) · 키(11) · 보호(12) · `tars-wl-test`(13). 새 체인 `wayland` | `tars-wl-test`의 색이 화면 좌표에, 친 키가 클라이언트 로그에, `Cmd+1` · `Cmd+2` 왕복, 셸에서 표에 없는 Cmd가 안 들어감, 클라이언트를 SIGSTOP해도 셸이 친 글자를 그림, `Cmd+Q` → 2초 → SIGKILL, 루트 게이트 |
 | WY-M1 | `tars-doom`의 `doomgeneric_wayland.c` · devlayer 묶음 `doom`(Freedoom) | 둠 첫 맵의 좌표 색, 녹화 A |
 | WY-M2 | app이 strip의 column(결정 20~23) · `wl_pointer` · 클릭 포커스(24) · decoration server_side(25) · `tars-gpu-demo --window` | SDL3 프로그램이 수정 없이 셸 오른쪽 column에 뜸(gpu 묶음 부팅), `tars-wl-test`의 포인터 · 클릭 포커스 · `Cmd+R` configure |
-| WY-M3 | 배율(결정 5) — `wl_output` 물리 mode + scale, `wl_compositor` 6 · `preferred_buffer_scale`, `set_buffer_scale`, 필요하면 `wp_viewporter` 최소 | `hidpi` 체인에 app pane 검사(`tars-wl-test --buffer-scale`) |
+| WY-M3 | 배율(결정 5 · 27~31) — `wl_output` 물리 mode + scale, `wl_compositor` 6 · `preferred_buffer_scale`, `set_buffer_scale`, present 단계의 물리 합성. viewporter는 안 냄 | `hidpi` 체인에 app pane 검사(`tars-wl-test --buffer-scale` · `--checker`, 물리 1픽셀 바둑판) |
 | WY-M4 | 클립보드 `wl_data_device` | 테스트 클라이언트와 셸 사이 양방향 붙여넣기 |
 | WY-M5 | 한글 `text-input-v3` | 조합 · 확정, 두 번 찍히지 않음. 녹화 B |
 | WY-M6 | `xdg-decoration` · 서버 쪽 장식 · `xdg_popup` · damage 부분 blit · 호환 모드 | popup 위치, 장식의 좌표 색, 호환 모드의 키 판정 |
