@@ -215,6 +215,23 @@ WY-M3을 열며(2026-11-20, 조사 `wy-m3` — HEAD `593cb94`의 코드와 vendo
 31. `wp_viewporter`와 fractional scale은 내지 않는다. 이번 클라이언트(`tars-wl-test` · 둠 · `tars-gpu-demo --window`) 중 쓰는 것이 없고,
     SDL3는 HIGH_PIXEL_DENSITY가 아닌 창에서 늘 논리 크기 버퍼다. 내면 `fit` · 포인터 · 물리 합성 식마다 갈래가 는다.
 
+WY-M4를 열며(2026-11-20, 조사 `wy-m4` — HEAD `34c721d`, SDL 3.2.10 소스, 근거는 plan WY-M4의 확인 절):
+
+32. 클립보드는 `wl_data_device_manager` 판 2다(결정 5 — 판 3의 새 요청은 전부 drag-and-drop 액션). drag-and-drop은 범위 밖이다 —
+    `start_drag`는 받기만 하고 source에 곧바로 `cancelled`. primary selection은 내지 않는다(R-WY-8 "클립보드는 하나", macOS 손 모델).
+33. 앱 → 셸은 즉시 받는다. `set_selection`을 받아들이면 그 자리에서 mime을 고르고 파이프로 `send`를 보내 서버 사본으로 읽고, 다 읽으면
+    `clipboard.zig`에 넣는다(`clip>` 줄 그대로). 셸 쪽 붙여넣기는 동기로 남고, 앱이 끝나도 붙는다. 지연 받기는 셸의 `Cmd+V` · 검색창
+    붙여넣기를 비동기로 만든다. 받는 한도는 1 MiB · 2초(넘으면 버리고 클립보드는 그대로). 파이프 · 기한은 서버의 epoll(`addFd` · `addTimer`)에 싣는다.
+34. 셸 → 앱: 셸의 복사(copy mode `y` · 포인터 뗌)가 서버 사본을 바꾸고, 옛 source에 `cancelled`, 키보드 포커스 클라이언트에 새 offer와
+    `selection`. `selection`은 키보드 `enter` 바로 앞에 보낸다(xml). `receive`는 요청 처리기 안에서 곧바로 쓴다 — SDL은 14 ms만 기다린다.
+    다 못 쓰면 남은 것을 writable에 이어 쓴다(같은 한도). 내는 mime은 `text/plain;charset=utf-8` · `text/plain` · `UTF8_STRING` · `TEXT`,
+    받을 때의 우선순위도 이 순서(`UTF8_STRING`이 둘째). 인코딩은 검사하지 않는다(셸 클립보드처럼 바이트).
+35. terminal은 SIGPIPE를 무시하고 `pty.spawn`의 자식에서 기본으로 되돌린다 — 읽기 끝을 닫은 클라이언트에 쓰다가 terminal(셸 전부)이 죽지 않게.
+36. `set_selection`의 serial 값은 보지 않는다. 받아들이는 조건은 "지금 또는 가장 최근에 키보드 포커스를 가졌던 클라이언트" — SDL은 serial 0을
+    보내는 길이 있고, `Cmd+C` 바로 뒤의 workspace 전환은 `leave`가 먼저 갈 수 있다. 포커스를 가져 본 적 없는 클라이언트는 버린다.
+37. `clipboard=pane`이면 Wayland 쪽을 셸과 잇지 않는다(서버 사본은 클라이언트끼리만). `shared`(기본)에서만 양방향이다. app pane의 `Cmd+V`는
+    Super+V로 가므로 SDL · GTK 앱의 붙여넣기 키는 WY-M6 호환 모드까지 기다린다 — 이번 끝나는 조건은 `tars-wl-test`와 셸이다.
+
 ## Milestone
 
 로드맵의 WY-M0을 둘로 나눈다. 서버 뼈대 · 키 · workspace · 보호만으로도 milestone 하나의 크기이고, 둠은 별도
@@ -226,6 +243,6 @@ WY-M3을 열며(2026-11-20, 조사 `wy-m3` — HEAD `593cb94`의 코드와 vendo
 | WY-M1 | `tars-doom`의 `doomgeneric_wayland.c` · devlayer 묶음 `doom`(Freedoom) | 둠 첫 맵의 좌표 색, 녹화 A |
 | WY-M2 | app이 strip의 column(결정 20~23) · `wl_pointer` · 클릭 포커스(24) · decoration server_side(25) · `tars-gpu-demo --window` | SDL3 프로그램이 수정 없이 셸 오른쪽 column에 뜸(gpu 묶음 부팅), `tars-wl-test`의 포인터 · 클릭 포커스 · `Cmd+R` configure |
 | WY-M3 | 배율(결정 5 · 27~31) — `wl_output` 물리 mode + scale, `wl_compositor` 6 · `preferred_buffer_scale`, `set_buffer_scale`, present 단계의 물리 합성. viewporter는 안 냄 | `hidpi` 체인에 app pane 검사(`tars-wl-test --buffer-scale` · `--checker`, 물리 1픽셀 바둑판) |
-| WY-M4 | 클립보드 `wl_data_device` | 테스트 클라이언트와 셸 사이 양방향 붙여넣기 |
+| WY-M4 | 클립보드 `wl_data_device_manager` 2(결정 32~37) — 즉시 받기, 포커스 앞 selection, SIGPIPE | 테스트 클라이언트와 셸 사이 양방향 붙여넣기(wayland 판정 23 · 24) |
 | WY-M5 | 한글 `text-input-v3` | 조합 · 확정, 두 번 찍히지 않음. 녹화 B |
 | WY-M6 | `xdg-decoration` · 서버 쪽 장식 · `xdg_popup` · damage 부분 blit · 호환 모드 | popup 위치, 장식의 좌표 색, 호환 모드의 키 판정 |
