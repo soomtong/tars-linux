@@ -342,13 +342,13 @@ type_keys ret
 # `tlog`는 terminal의 쪼개진 줄을 잇는 것이라 그 사이에 낀 다른 줄을 옮길 수 있다 — 여기는 원시 시리얼을 본다.
 got_end=0
 for _ in $(seq 1 150); do
-  if tr -d '\r' < "$LOG" | grep -aqE '^tk> anim end prop=opacity frames=[0-9]+ '; then got_end=1; break; fi
+  if tr -d '\r' < "$LOG" | grep -aE '^tk> anim end prop=opacity frames=[0-9]+ ' > /dev/null; then got_end=1; break; fi
   sleep 0.1
 done
 [ "$got_end" = 1 ] || report_failure "(9) no 'tk> anim end prop=opacity frames=N' line came out on the serial"
 TKLINES="$(tr -d '\r' < "$LOG" | grep -a '^tk> ')"
 N="$(printf '%s\n' "$TKLINES" | grep -aoE '^tk> anim end prop=opacity frames=[0-9]+' | tail -n 1 | sed 's/.*frames=//')"
-printf '%s\n' "$TKLINES" | grep -aqE "^tk> anim start prop=opacity dur=${ANIM_MS}\$" ||
+printf '%s\n' "$TKLINES" | grep -aE "^tk> anim start prop=opacity dur=${ANIM_MS}\$" > /dev/null ||
   report_failure "(9) no 'tk> anim start prop=opacity dur=${ANIM_MS}' line"
 # 셈(화면): commit · draw · native · close · 616 폭 줄(configure · 첫 그림) · 1240 폭 줄(configure · Cmd+R 그림 · 애니메이션 N) · anim end ·
 # 데모 로그의 줄 수. 첫 그림 · Cmd+R 그림 둘에 애니메이션의 tick마다 그림 하나(창 층은 그릴 수 있을 때만 tick을 부른다)라 draw = 2 + N이고,
