@@ -22,6 +22,7 @@ const wl = wayland.server.wl;
 const xdg = wayland.server.xdg;
 const zxdg = wayland.server.zxdg;
 const zwp = wayland.server.zwp;
+const tars = wayland.server.tars;
 const logic = @import("../wl_logic.zig");
 const logline = @import("../logline.zig");
 
@@ -38,6 +39,8 @@ const DECORATION_VERSION = 1;
 const DATA_DEVICE_MANAGER_VERSION = 2;
 /// 한글 IME(WY-M5, design 결정 38). 판 1뿐이다.
 const TEXT_INPUT_MANAGER_VERSION = 1;
+/// 원래 모드의 문(WY-M6, design 결정 46). 판 1은 `destroy` 하나 — bind가 곧 "Cmd를 Super로 받는다"다.
+const MENU_MANAGER_VERSION = 1;
 
 /// 파이프의 깃발(값은 asm-generic/fcntl.h — x86_64도 같다). 받기의 읽기 끝만 비블록이다 — epoll이 깨운 만큼만 읽는다.
 /// `pipe2`에 O_NONBLOCK을 주면 클라이언트가 받는 쓰기 끝까지 비블록이 되어, EAGAIN을 다루지 않는 클라이언트가 64 KiB를
@@ -140,6 +143,11 @@ pub const Server = struct {
     intake: ?*Intake = null,
     /// 모든 `zwp_text_input_v3`(WY-M5, design 결정 43). enter · leave는 키보드 포커스를 따라 클라이언트로 골라 보낸다.
     text_inputs: std.ArrayList(*TextInput) = .empty,
+    /// 살아 있는 클라이언트마다의 기록(WY-M6). 호환 모드는 클라이언트의 것이라(design 결정 45 · 46) 키를 보낼 때 포커스
+    /// 클라이언트의 기록을 찾는다. libwayland에서 `wl_client`로 그 destroy listener를 되찾는 길이 zig-wayland에 없어 목록으로 든다.
+    clients: std.ArrayList(*ClientRec) = .empty,
+    /// 마지막으로 `wl> keys to=` 줄에 찍은 모드(참이면 native) — 포커스가 바뀌어 모드가 달라질 때만 찍는다.
+    keys_mode: ?bool = null,
 
     /// 소켓을 연다(design 결정 3, 확정 4). `/run/user/<uid>`(0700, 그 계정의 것)를 만들고 `XDG_RUNTIME_DIR`을 거기로
     /// 둔 뒤 `wayland-0`을 열고, 소켓과 lock의 주인을 계정으로 바꾼다. 성공하면 `WAYLAND_DISPLAY=wayland-0`도 둔다 —
@@ -197,6 +205,7 @@ pub const Server = struct {
         _ = try wl.Global.create(display, zxdg.DecorationManagerV1, DECORATION_VERSION, *Server, self, bindDecorationManager);
         _ = try wl.Global.create(display, wl.DataDeviceManager, DATA_DEVICE_MANAGER_VERSION, *Server, self, bindDataDeviceManager);
         _ = try wl.Global.create(display, zwp.TextInputManagerV3, TEXT_INPUT_MANAGER_VERSION, *Server, self, bindTextInputManager);
+        _ = try wl.Global.create(display, tars.MenuManagerV1, MENU_MANAGER_VERSION, *Server, self, bindMenuManager);
 
         if (setenv("WAYLAND_DISPLAY", "wayland-0", 1) != 0) return error.SetenvFailed;
         logline.print("terminal: wl> listen path={s}/wayland-0\n", .{dir});
@@ -268,9 +277,10 @@ pub const Server = struct {
         self.offerTo(sr.getClient());
         // text_input `enter`는 selection 뒤 · 키보드 `enter` 앞이다(design 결정 43).
         self.textEnter(sr);
+        self.logKeysMode(t.id, sr.getClient());
         var it = self.keyboards.iterator(.forward);
         while (it.next()) |kb| if (kb.getClient() == sr.getClient()) self.enterKeyboard(kb, sr);
-        self.sent_mods = mods;
+        self.sent_mods = self.maskFor(sr.getClient());
     }
 
     // ── 한글 IME(WY-M5, design 결정 39 · 41 · 43) ──
@@ -348,7 +358,33 @@ pub const Server = struct {
     fn enterKeyboard(self: *Server, kb: *wl.Keyboard, sr: *wl.Surface) void {
         var empty: wl.Array = .{ .size = 0, .alloc = 0, .data = null };
         kb.sendEnter(self.display.nextSerial(), sr, &empty);
-        kb.sendModifiers(self.display.nextSerial(), self.mods.depressed, 0, self.mods.locked, 0);
+        const m = self.maskFor(kb.getClient());
+        kb.sendModifiers(self.display.nextSerial(), m.depressed, 0, m.locked, 0);
+    }
+
+    /// 클라이언트 `client`가 볼 수정키(WY-M6, design 결정 45). `tars_menu_v1`을 bind한 클라이언트(원래 모드)는 지금 값
+    /// 그대로, 아니면 호환 모드라 Super가 Ctrl로 보인다. 키 코드는 바꾸지 않는다 — 둠에서 Cmd가 쏘지 않고 `Held`의 짝이 맞는다.
+    fn maskFor(self: *const Server, client: *wl.Client) logic.Mask {
+        return if (self.isNative(client)) self.mods else logic.compatMask(self.mods);
+    }
+
+    /// `client`가 `tars_menu_v1`을 bind했는가(원래 모드). 기록이 없으면(만들 때 메모리가 모자랐다) 호환이다.
+    fn isNative(self: *const Server, client: *wl.Client) bool {
+        return if (self.recordOf(client)) |r| r.native else false;
+    }
+
+    fn recordOf(self: *const Server, client: *wl.Client) ?*ClientRec {
+        for (self.clients.items) |r| if (r.client == client) return r;
+        return null;
+    }
+
+    /// 포커스 창의 모드가 마지막으로 찍은 모드와 다르면 `wl> keys to=ID mode=compat|native`(WY-M6 확정 2). 처음 포커스를
+    /// 받은 창은 늘 찍힌다. 같은 모드의 창 사이를 오가면 안 찍는다 — 줄은 "모드가 바뀌었다"의 기록이다.
+    fn logKeysMode(self: *Server, id: u32, client: *wl.Client) void {
+        const native = self.isNative(client);
+        if (self.keys_mode) |was| if (was == native) return;
+        self.keys_mode = native;
+        logline.print("terminal: wl> keys to={d} mode={s}\n", .{ id, if (native) "native" else "compat" });
     }
 
     /// 포커스 창에 키 하나(확정 10). `code`는 evdev 코드다(클라이언트가 +8 한다, 확인 3). 뗌은 누름을 보낸 키만 간다
@@ -360,7 +396,10 @@ pub const Server = struct {
         const t = self.find(id) orelse return;
         const sr = surfaceOf(t) orelse return;
         const send = if (pressed) self.held.press(code) else self.held.release(code);
-        const mods_changed = if (self.sent_mods) |m| !std.meta.eql(m, mods) else true;
+        // 호환 모드면 Super가 Ctrl로 보인다(WY-M6, design 결정 45). 비교도 보낼 값으로 한다 — 이미 Ctrl을 보낸 뒤 Cmd를
+        // 누르면 보이는 값이 같아 `modifiers`를 다시 보내지 않는다.
+        const shown = self.maskFor(sr.getClient());
+        const mods_changed = if (self.sent_mods) |m| !std.meta.eql(m, shown) else true;
         if (!send and !mods_changed) return;
         var it = self.keyboards.iterator(.forward);
         if (send) {
@@ -373,8 +412,8 @@ pub const Server = struct {
             const serial = self.display.nextSerial();
             it = self.keyboards.iterator(.forward);
             while (it.next()) |kb| if (kb.getClient() == sr.getClient())
-                kb.sendModifiers(serial, mods.depressed, 0, mods.locked, 0);
-            self.sent_mods = mods;
+                kb.sendModifiers(serial, shown.depressed, 0, shown.locked, 0);
+            self.sent_mods = shown;
         }
     }
 
@@ -891,7 +930,10 @@ extern "c" fn pipe2(fds: *[2]c_int, flags: c_int) c_int;
 
 const ClientRec = struct {
     srv: *Server,
+    client: *wl.Client,
     pid: i32,
+    /// `tars_menu_v1`을 bind했다 — 원래 모드(Cmd가 Super로 간다, WY-M6 design 결정 46). 한 번 켜지면 끝날 때까지다.
+    native: bool = false,
     destroy: wl.Listener(*wl.Client) = .init(clientGone),
 };
 
@@ -900,7 +942,12 @@ fn clientCreated(listener: *wl.Listener(*wl.Client), client: *wl.Client) void {
     const pid = client.getCredentials().pid;
     logline.print("terminal: wl> client pid={d}\n", .{pid});
     const rec = srv.allocator.create(ClientRec) catch return;
-    rec.* = .{ .srv = srv, .pid = pid };
+    rec.* = .{ .srv = srv, .client = client, .pid = pid };
+    // 목록에 못 넣으면 기록 없이 간다 — 그 클라이언트는 호환 모드로 남는다(`isNative`).
+    srv.clients.append(srv.allocator, rec) catch {
+        srv.allocator.destroy(rec);
+        return;
+    };
     client.addDestroyListener(&rec.destroy);
 }
 
@@ -909,6 +956,10 @@ fn clientGone(listener: *wl.Listener(*wl.Client), client: *wl.Client) void {
     logline.print("terminal: wl> gone pid={d}\n", .{rec.pid});
     // 포인터는 다음 클라이언트가 다시 쓸 수 있다 — 끝난 클라이언트를 "가장 최근 포커스"로 남기지 않는다(WY-M4).
     rec.srv.gate.forget(@intFromPtr(client));
+    for (rec.srv.clients.items, 0..) |r, i| if (r == rec) {
+        _ = rec.srv.clients.swapRemove(i);
+        break;
+    };
     listener.link.remove();
     rec.srv.allocator.destroy(rec);
 }
@@ -1432,6 +1483,25 @@ fn decorationRequest(d: *zxdg.ToplevelDecorationV1, req: zxdg.ToplevelDecoration
         .destroy => d.destroy(),
         // 클라이언트가 바라는 것과 상관없이 server_side다(design 결정 25, R-WY-12).
         .set_mode, .unset_mode => d.sendConfigure(.server_side),
+    }
+}
+
+// ── tars_menu_manager_v1(WY-M6, design 결정 46) ─────────────────────────
+
+/// 원래 모드의 문. bind한 클라이언트는 끝날 때까지 Cmd를 Super로 받는다 — 객체를 지워도 모드는 그대로다(xml). 포커스
+/// 클라이언트가 지금 bind했으면 다음 키에서 보일 값이 바뀌어 `modifiers`가 다시 간다(`key`의 비교).
+fn bindMenuManager(client: *wl.Client, srv: *Server, version: u32, id: u32) void {
+    const m = tars.MenuManagerV1.create(client, version, id) catch return client.postNoMemory();
+    m.setHandler(?*anyopaque, menuManagerRequest, null, null);
+    const rec = srv.recordOf(client) orelse return;
+    if (rec.native) return;
+    rec.native = true;
+    logline.print("terminal: wl> keys pid={d} native\n", .{rec.pid});
+}
+
+fn menuManagerRequest(m: *tars.MenuManagerV1, req: tars.MenuManagerV1.Request, _: ?*anyopaque) void {
+    switch (req) {
+        .destroy => m.destroy(),
     }
 }
 

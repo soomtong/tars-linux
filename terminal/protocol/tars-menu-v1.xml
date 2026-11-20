@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="tars_menu_v1">
+  <copyright>
+    Copyright 2026 the TARS project.
+
+    This protocol is part of TARS and lives in its repository (terminal/protocol/),
+    not in terminal/vendor/ — nothing fetches it. Only TARS clients bind it.
+  </copyright>
+
+  <description summary="TARS menu model and native Cmd keys">
+    The TARS compositor (the TARS terminal) eats the Cmd chords in its own table
+    and sends every other key to the focused client.
+
+    A client that does not bind tars_menu_manager_v1 is in compat mode: the
+    compositor shows the Super modifier (Cmd) as Control in wl_keyboard.modifiers,
+    so Cmd+V reaches it as Ctrl+V. A client that binds tars_menu_manager_v1 is in
+    native mode: Cmd reaches it as Super, and Cmd+A is not Ctrl+A.
+
+    Version 1 has no menu requests yet. Binding the global is the whole message.
+    The menu model (menu bar drawn by the compositor) is added later.
+  </description>
+
+  <interface name="tars_menu_manager_v1" version="1">
+    <description summary="declares that the client takes Cmd as Super">
+      Binding this global puts the client in native mode for its whole life.
+      Destroying the object does not change the mode.
+    </description>
+
+    <request name="destroy" type="destructor">
+      <description summary="destroy the manager object">
+        Destroy the object. The client stays in native mode.
+      </description>
+    </request>
+  </interface>
+</protocol>

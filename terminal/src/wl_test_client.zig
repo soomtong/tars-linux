@@ -17,6 +17,8 @@
 //! WY-M5(plan 확정 8): `--text-input`이면 창보다 먼저 `zwp_text_input_v3`를 얻고, 그 `enter`에 enable + content_type + commit
 //! (`ti enter`), `leave`에 `ti leave`. preedit · commit은 받아 두었다가 `done`에서 찍는다(이중 버퍼) — `commit text=…`(있을 때) ·
 //! `preedit text=… cursor=a,b` · `done serial=N match=1|0`(serial이 내가 보낸 commit 수와 같은가).
+//! WY-M6(plan 확정 3): `--native`면 창보다 먼저 `tars_menu_manager_v1`을 bind한다 — 원래 모드라 Cmd가 Super(`mods depressed=0x40`)로
+//! 온다. 없으면 호환 모드라 서버가 Super를 Ctrl(`0x4`)로 보인다(design 결정 45 · 46). bind하면 `native` 한 줄.
 //! `wl_surface.enter`의 줄에 `enter`라는 낱말을 안 쓰는 것은 wayland 체인 판정 16이 이 로그의 `enter`(키보드)를 세기 때문이다.
 //!
 //! 바인딩은 terminal의 서버와 같은 스캐너가 만든 것이다(`build.zig`의 `wayland` 모듈 — 서버는 `server`, 이쪽은
@@ -28,6 +30,7 @@ const wayland = @import("wayland");
 const wl = wayland.client.wl;
 const xdg = wayland.client.xdg;
 const zwp = wayland.client.zwp;
+const tars = wayland.client.tars;
 
 const EXIT_USAGE: u8 = 2;
 
@@ -41,6 +44,8 @@ const WM_BASE_VERSION: u32 = 5;
 const DATA_DEVICE_MANAGER_VERSION: u32 = 2;
 /// 한글 IME(WY-M5, design 결정 38).
 const TEXT_INPUT_MANAGER_VERSION: u32 = 1;
+/// 원래 모드의 문(WY-M6, design 결정 46).
+const MENU_MANAGER_VERSION: u32 = 1;
 
 /// `--copy`가 offer하는 mime — SDL3 3.2.10의 텍스트 다섯과 같은 순서다(`SDL_waylandclipboard.c` text_mime_types). 서버가
 /// 그중에서 고르는 것(`wl_logic.pickMime`)을 남의 클라이언트와 같은 목록으로 본다.
@@ -107,6 +112,8 @@ const Args = struct {
     paste_drop: bool = false,
     /// `--text-input`(WY-M5) — text_input을 얻어 enter마다 켜고 preedit · commit을 찍는다.
     text_input: bool = false,
+    /// `--native`(WY-M6) — `tars_menu_manager_v1`을 bind해 원래 모드(Cmd = Super)로 받는다.
+    native: bool = false,
 };
 
 /// 바둑판의 둘째 색. 둘레의 검정과 갈리게 흰색이다.
@@ -155,6 +162,8 @@ fn parseArgs(argv: []const []const u8) ?Args {
             args.paste_drop = true;
         } else if (std.mem.eql(u8, a, "--text-input")) {
             args.text_input = true;
+        } else if (std.mem.eql(u8, a, "--native")) {
+            args.native = true;
         } else if (std.mem.eql(u8, a, "--copy")) {
             i += 1;
             if (i == argv.len) return null;
@@ -174,7 +183,7 @@ fn usage() u8 {
     writeAll(2,
         \\usage: tars-wl-test [--color RRGGBB] [--size WxH] [--ignore-close] [--follow-size] [--fullscreen]
         \\       [--hide-cursor] [--buffer-scale N] [--checker] [--copy TEXT] [--paste] [--paste-drop]
-        \\       [--text-input]
+        \\       [--text-input] [--native]
         \\  open one xdg_toplevel filled with one colour (default 3366CC, 320x200) and
         \\  print what the compositor sends, one line each. Ends on close, unless
         \\  --ignore-close (then close and ping are ignored). The buffer keeps its
@@ -190,6 +199,8 @@ fn usage() u8 {
         \\  through a pipe whose read end is already closed (a SIGPIPE test).
         \\  --text-input enables a zwp_text_input_v3 on every enter and prints the
         \\  commit and preedit text the compositor sends, at each done.
+        \\  --native binds tars_menu_manager_v1 so Cmd comes as Super; without it
+        \\  the compositor shows Cmd as Ctrl (compat mode).
         \\
     );
     return EXIT_USAGE;
@@ -205,6 +216,8 @@ const Globals = struct {
     output: ?*wl.Output = null,
     data_device_manager: ?*wl.DataDeviceManager = null,
     text_input_manager: ?*zwp.TextInputManagerV3 = null,
+    /// `tars_menu_manager_v1`의 global 이름과 판(WY-M6). bind는 `--native`일 때만 `run`이 한다 — 기본은 호환 모드다.
+    menu_global: ?struct { name: u32, version: u32 } = null,
     /// output의 mode · scale을 `done`까지 모은다. listener는 bind하는 자리에서 건다 — output의 이벤트는 첫 roundtrip이 끝난
     /// 뒤의 같은 읽기에 섞여 올 수 있고, listener 없는 proxy의 이벤트는 버려진다.
     out_info: OutputInfo = .{},
@@ -333,6 +346,8 @@ fn registryListener(registry: *wl.Registry, event: wl.Registry.Event, g: *Global
                 g.data_device_manager = registry.bind(global.name, wl.DataDeviceManager, @min(global.version, DATA_DEVICE_MANAGER_VERSION)) catch return;
             } else if (std.mem.eql(u8, name, std.mem.span(zwp.TextInputManagerV3.interface.name))) {
                 g.text_input_manager = registry.bind(global.name, zwp.TextInputManagerV3, @min(global.version, TEXT_INPUT_MANAGER_VERSION)) catch return;
+            } else if (std.mem.eql(u8, name, std.mem.span(tars.MenuManagerV1.interface.name))) {
+                g.menu_global = .{ .name = global.name, .version = global.version };
             }
         },
         .global_remove => {},
@@ -682,6 +697,11 @@ fn run(args: Args) !u8 {
         const ti = try mgr.getTextInput(seat);
         ti.setListener(*State, textInputListener, &state);
         state.text_input = ti;
+    };
+    // 원래 모드(WY-M6) — 창보다 먼저 bind해 첫 포커스의 `modifiers`부터 Super로 받는다. 서버가 그 global을 안 내면 줄이 없다.
+    if (args.native) if (g.menu_global) |mg| {
+        _ = try registry.bind(mg.name, tars.MenuManagerV1, @min(mg.version, MENU_MANAGER_VERSION));
+        say("native", .{});
     };
     // seat의 capabilities를 여기서 받아 `get_keyboard` · `get_pointer`를 첫 commit보다 먼저 보낸다(WY-M3 단계 A). 서버는
     // 요청을 차례로 처리하므로 첫 configure가 나갈 때 키보드가 이미 있다 — 체인이 configure를 보자마자 친 키의 누름이

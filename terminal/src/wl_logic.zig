@@ -334,6 +334,14 @@ pub fn modifierMask(m: Mods) Mask {
     return .{ .depressed = d, .locked = if (m.caps) MOD_LOCK else 0 };
 }
 
+/// 호환 모드(WY-M6, design 결정 45 · 요구사항 결정 3)의 마스크. 눌린 것(depressed)에 Super(0x40)가 있으면 지우고
+/// Ctrl(0x4)을 켠다 — Super를 모르는 클라이언트가 `Cmd+V`를 `Ctrl+V`로 받는다. 표의 chord는 compositor가 이미 먹었으므로
+/// 이것이 "표에 없는 Cmd 조합 전부"다. Cmd와 Ctrl을 함께 쥐면 Ctrl 하나다(구별을 잃는 것이 호환 모드의 뜻). 잠금은 그대로.
+pub fn compatMask(m: Mask) Mask {
+    if (m.depressed & MOD_SUPER == 0) return m;
+    return .{ .depressed = (m.depressed & ~MOD_SUPER) | MOD_CTRL, .locked = m.locked };
+}
+
 // ── 보낸 누름(R-KEY-2 · R-KEY-7) ────────────────────────────────────────
 
 /// 포커스 창에 누름을 보낸 키. 뗌은 누름을 보낸 키만 보낸다 — compositor가 먹은 chord의 뗌(R-KEY-2)과 포커스가

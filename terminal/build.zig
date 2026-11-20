@@ -119,6 +119,10 @@ pub fn build(b: *std.Build) void {
     // WY-M5(design 결정 38): 한글 IME. 판 1뿐이다. 자식 `zwp_text_input_v3`가 같은 판으로 함께 생긴다.
     scanner.addCustomProtocol(b.path("vendor/wayland/text-input-unstable-v3.xml"));
     scanner.generate("zwp_text_input_manager_v3", 1);
+    // WY-M6(design 결정 46): 원래 모드의 문 `tars_menu_v1`. 받는 것이 아니라 저장소의 것이라 vendor 밖(`protocol/`)이다.
+    // bind한 클라이언트는 Cmd를 Super로 받고, 아니면 호환 모드(Super → Ctrl)다. 판 1은 `destroy` 하나 — 메뉴는 TK-M5.
+    scanner.addCustomProtocol(b.path("protocol/tars-menu-v1.xml"));
+    scanner.generate("tars_menu_manager_v1", 1);
     const wayland_mod = b.createModule(.{ .root_source_file = scanner.result });
 
     // libwayland는 컨테이너의 x86_64 sysroot에 있다(Dockerfile 층 22 — dpkg -x로 푼 libwayland-dev:amd64의 무버전

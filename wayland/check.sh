@@ -27,6 +27,8 @@ cd "$(dirname "$0")" || exit 1
 # WY-M5: 판정 26~28(25 뒤 · 9 앞) — text input을 켠 창에서 Shift+Space가 한/영이고 `m f s`가 preedit `한`, `k`가 `한`을 확정하며
 #   먹은 키는 `wl_keyboard`로 안 가고 확정이 그 뒤의 키보다 먼저 간다, 포커스를 잃으면(Cmd+[ · 셸 클릭) 조합을 그 창에 확정한다,
 #   켜지 않은 창은 한글이 켜져 있어도 지금처럼 키를 받는다.
+# WY-M6: 판정 29(28 뒤 · 9 앞) — `tars_menu_v1`을 bind하지 않은 창(호환 모드)은 Cmd+V를 Ctrl(0x4)+V로 받고 Cmd+1은 여전히
+#   compositor의 것이다, `--native`로 bind한 창(원래 모드)은 Cmd를 Super(0x40)로 받는다.
 # WY-M2(단계 B): 창 모드로 띄운 창은 셸 오른쪽 column이 된다(판정 16 · 17 · 22) — `wl> column`, pane 픽셀 크기의 configure
 #   (activated · tiled), 포커스 slot이 창이면 키가 그 창으로, Cmd+[로 셸에 오면 activated를 잃고 keyboard leave, Cmd+R의 새
 #   configure, Cmd+Q에 slot이 닫히고 셸이 전체 폭을 되찾는다. 자기 workspace를 보는 판정 2~8은 `--fullscreen`으로 띄운다.
@@ -720,6 +722,42 @@ type_keys shift-spc
 wait_for_count 'terminal: hangul> on=false' $((OFFS + 1)) || report_failure "(28) Shift+Space in the shell did not turn hangul off"
 echo "(28): with hangul on, the plain window got m and Shift+Space as keys and no ime"
 
+# ── 판정 29: 호환 모드 — Cmd가 Ctrl로 보인다, `tars_menu_v1`을 bind한 창은 Super(WY-M6, design 결정 45 · 46) ─────────
+# 셸만 남은 자리다(판정 28 끝). (가) 기본 창(호환)에 Cmd+V(`alt-v`) — 키는 47 그대로 가고 클라이언트가 받는 수정키는 Ctrl(0x4)이지
+# Super(0x40)가 아니다. (다) 같은 창에서 Cmd+1은 여전히 표의 chord라 키 2가 창에 안 간다. (나) `--native` 창(원래 모드)은 Cmd+V를
+# Super(0x40)로 받고 서버가 `wl> keys pid=N native` · `wl> keys to=ID mode=native`를 찍는다. 클라이언트 줄은 `grep -w`로 센다 —
+# `0x4`가 `0x40`에 걸리지 않는다(셸에서 `$` 없이 쓰려는 것). `=`는 `type_text`가 못 치므로 `.`이다(판정 24 · 27과 같다).
+echo "=== (29) compat mode: Cmd reaches a plain window as Ctrl, a native window as Super ==="
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size > /tmp/wl8.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(29) the compat client did not open as a column"
+COMPAT_ID="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+wait_for_log "terminal: wl> configure id=${COMPAT_ID} w=[0-9]+ h=[0-9]+ act=1" || report_failure "(29) the compat window did not get the keys"
+# Cmd+1을 먼저 친다 — 키는 차례로 처리되므로 뒤의 Cmd+V(47)가 창에 닿은 때에는 Cmd+1의 1(evdev 2)도 갔다면 이미 갔다.
+type_keys alt-1 alt-v
+wait_for_log "terminal: wl> key code=47 state=1 to=${COMPAT_ID}([^0-9]|$)" || report_failure "(29) Cmd+V did not reach the compat window as 47"
+[ "$(count_log "terminal: wl> key code=2 state=1 to=${COMPAT_ID}([^0-9]|$)")" -eq 0 ] || report_failure "(29) Cmd+1 reached the compat window — the table chord must stay with the compositor"
+[ "$(count_log 'terminal: wl> keys pid=[0-9]+ native')" -eq 0 ] || report_failure "(29) a client without tars_menu_v1 was taken as native"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${COMPAT_ID} ws=1 slot=1" || report_failure "(29) Cmd+Q did not close the compat window"
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size --native > /tmp/wl9.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(29) the native client did not open as a column"
+NATIVE_ID="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+wait_for_log 'terminal: wl> keys pid=[0-9]+ native' || report_failure "(29) no 'wl> keys pid=N native' for the client that bound tars_menu_v1"
+wait_for_log "terminal: wl> keys to=${NATIVE_ID} mode=native" || report_failure "(29) no 'wl> keys to=${NATIVE_ID} mode=native' when it got the keys"
+type_keys alt-v
+wait_for_log "terminal: wl> key code=47 state=1 to=${NATIVE_ID}([^0-9]|$)" || report_failure "(29) Cmd+V did not reach the native window as 47"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${NATIVE_ID} ws=1 slot=1" || report_failure "(29) Cmd+Q did not close the native window"
+# 클라이언트가 본 것: 호환 창은 Ctrl 1번 이상 · Super 0, 원래 창은 Super 1번 이상 · Ctrl 0, 그리고 `native` 한 줄.
+type_text 'echo c29-(grep -cw depressed.0x4 /tmp/wl8.log)-(grep -cw depressed.0x40 /tmp/wl8.log)-(grep -cw depressed.0x40 /tmp/wl9.log)-(grep -cw depressed.0x4 /tmp/wl9.log)-(grep -cx wl-test..native /tmp/wl9.log)'
+type_keys ret
+wait_for_screen '\| c29-[1-9]-0-[1-9]-0-1' || report_failure "(29) the clients' logs do not show Ctrl in the compat window and Super in the native one"
+echo "(29): Cmd+V reached the compat window as Ctrl+V and the native window as Super+V, Cmd+1 stayed with the compositor"
+
 # ── 판정 9: render verify ───────────────────────────────────────────────
 #
 # 루트 게이트는 모든 체인의 로그에서 `verify>` 줄을 본다(check.sh의 check_verify_lines). 단독 실행(`make check`)에도
@@ -871,4 +909,4 @@ fi
 echo "(15): wl> key lines $(count_log 'terminal: wl> key '), verify lines $(count_log 'terminal: verify> '), no mismatch"
 stop_boot
 
-echo "PASS: WY-M0 · WY-M1 · WY-M2 · WY-M4 · WY-M5 — in a window with text input Hangul composes as preedit and commits before the next key, the eaten keys are not sent, losing the focus commits the composition, a window without text input still gets keys; a copy in the shell is pasted in a window and a copy in a window is pasted in the shell even after it closes, an EPIPE on the clipboard pipe does not kill terminal and the shell's children still die of SIGPIPE; a window without fullscreen opens as a column right of the shell and follows its size (Cmd+R), a click gives it the keys and the pointer, a hidden cursor is not drawn; the shell has WAYLAND_DISPLAY, tars-wl-test becomes workspace 2 drawn 4x in the middle, its keys go to it as evdev codes, Cmd+1 · Cmd+2 go back and forth, Cmd+C · Cmd+Q type nothing in the shell, a stopped client does not stop the shell, Cmd+Q closes and a client that ignores close is killed after 2 s; with the doom bundle tars-doom fills the screen at 4x, fires on Ctrl, waits behind the shell and leaves by itself on Cmd+Q"
+echo "PASS: WY-M0 · WY-M1 · WY-M2 · WY-M4 · WY-M5 · WY-M6 — a window without tars_menu_v1 gets Cmd as Ctrl and one that binds it gets Cmd as Super; in a window with text input Hangul composes as preedit and commits before the next key, the eaten keys are not sent, losing the focus commits the composition, a window without text input still gets keys; a copy in the shell is pasted in a window and a copy in a window is pasted in the shell even after it closes, an EPIPE on the clipboard pipe does not kill terminal and the shell's children still die of SIGPIPE; a window without fullscreen opens as a column right of the shell and follows its size (Cmd+R), a click gives it the keys and the pointer, a hidden cursor is not drawn; the shell has WAYLAND_DISPLAY, tars-wl-test becomes workspace 2 drawn 4x in the middle, its keys go to it as evdev codes, Cmd+1 · Cmd+2 go back and forth, Cmd+C · Cmd+Q type nothing in the shell, a stopped client does not stop the shell, Cmd+Q closes and a client that ignores close is killed after 2 s; with the doom bundle tars-doom fills the screen at 4x, fires on Ctrl, waits behind the shell and leaves by itself on Cmd+Q"

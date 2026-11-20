@@ -200,6 +200,28 @@ pub fn main() !void {
     }
     std.debug.print("wl_logic_test: modifiers 4 cases\n", .{});
 
+    // 호환 모드(WY-M6, design 결정 45) — Super가 Ctrl로 보인다. 잠금은 그대로.
+    {
+        const cases = [_]struct { in: logic.Mask, out: logic.Mask }{
+            // Super만 → Ctrl.
+            .{ .in = .{ .depressed = 0x40, .locked = 0 }, .out = .{ .depressed = 0x4, .locked = 0 } },
+            // Super + Shift → Ctrl + Shift, 잠금 유지.
+            .{ .in = .{ .depressed = 0x41, .locked = 0x2 }, .out = .{ .depressed = 0x5, .locked = 0x2 } },
+            // Super + Ctrl → Ctrl 하나.
+            .{ .in = .{ .depressed = 0x44, .locked = 0 }, .out = .{ .depressed = 0x4, .locked = 0 } },
+            // Super 없음 → 그대로(Ctrl + Alt).
+            .{ .in = .{ .depressed = 0xC, .locked = 0x2 }, .out = .{ .depressed = 0xC, .locked = 0x2 } },
+        };
+        for (cases) |cs| {
+            const got = logic.compatMask(cs.in);
+            if (!std.meta.eql(got, cs.out)) {
+                std.debug.print("FAIL: compatMask({any}) = {any}, want {any}\n", .{ cs.in, got, cs.out });
+                return error.WrongMask;
+            }
+        }
+    }
+    std.debug.print("wl_logic_test: compat mask 4 cases\n", .{});
+
     // 보낸 누름 — 누름을 보낸 키만 뗌이 간다(R-KEY-2 · R-KEY-7).
     {
         var h: logic.Held = .{};
