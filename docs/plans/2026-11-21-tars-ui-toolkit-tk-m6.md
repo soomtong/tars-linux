@@ -112,4 +112,22 @@ toolkit 체인에서 `tars-files`가 바에 `File · Edit · View · Go`를 보�
 
 ## 결과
 
-(단계마다 채운다.)
+구현은 `tk-m6`(Herdr, Opus — 조사도 같은 에이전트), lead는 대조 · 게이트 · commit.
+
+1. 단계 A `5339440`: 순수 모듈 `menu.zig`(`tk_menu` — 모델 · `check` · `match` · `maskOf` · `emit` · 표준 action 다섯 · `standard_edit` · 기본 표) · kit의
+   `VTable.perform` · `validate` · `Root`의 키 순서와 다시 셈 · `TextField`의 Super 갈래 `A C X V Z`를 action으로 · 창 층 판 2(`Options{menu, disabled}` · `startMenu` ·
+   `sendMenu` · `menuListener`) · `files/menus.zig`(단축키 정의가 이 표 하나) · `tars-files`의 `rootValidate` · `rootPerform` · `Space` 토글 · `docs/help/desk.md` ·
+   판정 26~29. 서버는 고치지 않았다. 체인 toolkit 두 번 · terminal · wayland PASS.
+   판정의 실제 값: 26 `wl> menu id=7 menus=4 items=13` · `menu> bar id=7 name=tars-files titles=File,Edit,View,Go` · 이름 잉크 161 · 제목 잉크 72 + 79 + 79 + 45 = 275.
+   27 `tk> action name=goto via=key` → 메뉴 `→ → →` Enter → `menu> activate id=7 item=20` · `tk> menu activated id=20` · `tk> action name=goto via=menu` · 바 열림 둘.
+   28 `tk> copy path=/tmp/tkp/d` 두 줄(키 하나 · 메뉴 하나). 29 붙여넣기 행의 `687484`(흐림) 301 · 그 칸을 눌러도 `menu> activate` 0 · 키 `Cmd+V`에 `tk> paste` 0.
+   `menu> close why=model` 0. 판정 1~25는 그대로(넷째 앱의 `Cmd+C` · `L` · `A` · `V` · `F` · `K`가 이제 메뉴 표 → action 길을 지나 같은 줄을 낸다 — 회귀 검사).
+   호스트 검사 덩어리 18(46개): 모델 → 요청 열, 상한의 경계, `match`, mask 왕복, `tars-files` 모델의 키가 서버 이름 집합 안 · chord와는 `Cmd+Q`만, chain 순서, 다시 셈.
+   plan과 달라진 것: (가) 모델 없는 Root의 기본 표는 chain의 누군가가 그 action을 알 때만 단축키(필드 없는 데모의 `Cmd+A`는 지금처럼 `unhandled`). (나) 다시 셈의 계기에서
+   ime를 뺐다 — 서버가 메뉴를 열며 앱 조합을 확정해 보내는 `ime` 하나로 비트가 바뀌면 막 연 메뉴가 `why=model`로 닫힌다. (다) `Item.name`(로그 이름). (라) 모델을
+   `files/menus.zig`로(호스트 검사가 같은 파일을 부른다). (마) `Space` 토글을 단계 A에(항목이 있는데 동작이 없으면 안 된다). (바) 판정 29의 비활성 칸은 클릭으로
+   (서버의 `↓`가 비활성을 건너뛰어 키로는 못 간다).
+   첫 체인 판은 FAIL이었다 — 판정 29의 줄 셈 패턴이 앞 판정의 열기까지 센 판정 쪽 잘못(코드는 그대로).
+   lead의 화면 판정: 4배 덤프 — 바 `tars-files  File  Edit  View  Go`, Edit 메뉴의 흐린 넷 · 밝은 복사 · 찾기.
+   실측: 체인 한 판의 `tk> menu sent` 5줄(열 때 1 + 경로 바 여닫기 둘 × 2). `menu activated` 뒤의 `copyText`가 셸 클립보드에 닿는다. 체인 toolkit 단독 326 · 329초.
+   루트 게이트 36/36 첫 판(`out/gate-logs/20261121-132443`, toolkit lane 182초), verify mismatch 0.
