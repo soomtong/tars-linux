@@ -126,7 +126,8 @@ help:
 	@echo "      FULL_ISO=$(FULL_ISO). GitHub release의 2GiB를 넘을 수 있어 로컬에서 dd로 쓰는 판이다(OD design \"배포\")"
 	@echo
 	@echo "  make dev-layers"
-	@echo "      개발 도구 층의 묶음(DEV_LAYERS, 기본 base container docs editor lang-beam lang-jvm lang-native lang-script media server util fakesteak gpu doom)을 devlayer/build/<묶음>.sqfs로 굽는다."
+	@echo "      개발 도구 층의 묶음(DEV_LAYERS, 기본 base container docs editor lang-beam lang-jvm lang-native lang-script media server util fakesteak gpu doom browser)을 devlayer/build/<묶음>.sqfs로 굽는다."
+	@echo "      debian 줄은 snapshot.debian.org의 한 시각(devlayer/snapshot, DEV_SNAPSHOT=…으로 바꿈)에서 거둔다 — 시각을 바꾸면 모두 다시 거둔다."
 	@echo "      devlayer/manifest.toml이 출처다(검사해 devlayer/build/manifest.tsv로). 받은 것은 devlayer/cache/ — 게이트의 clean이 안 지운다."
 	@echo "      DEV_MEASURE=1이면 압축 넷을 잰다. make gate와 make check CHAIN=devtools · display · wayland가 먼저 부른다(캐시면 수십 초)"
 	@echo
@@ -273,15 +274,19 @@ iso-full: initrd
 # 거두기 전에 vendor-repo의 키를 개발 컨테이너의 gpg로 본다(devlayer/keys.sh — 지문 · 만료, TP-M10 plan 덧붙임).
 # 그보다 먼저 devlayer/manifest.toml을 검사해 devlayer/build/manifest.tsv를 쓴다(MF design 결정 6) — 거두기 컨테이너는
 # TOML을 못 읽고 그 TSV만 읽는다. 컴파일 캐시를 devlayer/build/zig-cache에 두어 두 번째부터는 빠르다.
-DEV_LAYERS        ?= base container docs editor lang-beam lang-jvm lang-native lang-script media server util fakesteak gpu doom
+# browser(CR-M1)는 게이트가 굽는 목록에 들지만 기본 판 ISO에는 안 실린다 — `make iso`는 ISO_LAYERS만 보고 릴리스의 판들은 묶음을
+# 이름으로 적는다(project_release 절차 3). 이 목록 전부를 싣는 것은 로컬 판 iso-full뿐이다.
+# DEV_SNAPSHOT(CR-M1 plan 확정 1): 거두기의 snapshot.debian.org 시각. 비면 devlayer/snapshot의 값이다 — 판올림을 시험할 때만 준다.
+DEV_LAYERS        ?= base container docs editor lang-beam lang-jvm lang-native lang-script media server util fakesteak gpu doom browser
 DEV_HARVEST_IMAGE ?= debian:trixie-slim
+DEV_SNAPSHOT      ?=
 DEV_MEASURE       ?=
 DEV_COMP          ?=
 dev-layers: container
 	@$(IN_CONTAINER) 'mkdir -p devlayer/build && zig run --cache-dir devlayer/build/zig-cache --global-cache-dir devlayer/build/zig-cache devlayer/manifest-gen.zig -- devlayer/manifest.toml devlayer/build/manifest.tsv'
 	@$(IN_CONTAINER) devlayer/keys.sh
 	@for b in $(DEV_LAYERS); do \
-	  $(DOCKER) run --rm --platform=linux/amd64 -v "$(CURDIR)":/workspace -w /workspace $(DEV_HARVEST_IMAGE) devlayer/harvest.sh $$b || exit 1; \
+	  $(DOCKER) run --rm --platform=linux/amd64 $(if $(DEV_SNAPSHOT),-e DEV_SNAPSHOT=$(DEV_SNAPSHOT)) -v "$(CURDIR)":/workspace -w /workspace $(DEV_HARVEST_IMAGE) devlayer/harvest.sh $$b || exit 1; \
 	  $(IN_CONTAINER) "DEV_MEASURE=$(DEV_MEASURE) $(if $(DEV_COMP),DEV_COMP=$(DEV_COMP)) devlayer/build.sh $$b" || exit 1; \
 	done
 

@@ -1130,6 +1130,41 @@ kind = "vendor-repo"
 repo = "pgdg"
 package = "postgresql-18"
 
+# 의존 넷을 같은 판에 못 박는다(CR-M1). pgdg는 같은 18.7을 다시 지어(+2 → +5) postgresql-client-18의 후보를 올리고 옛 판도 남겨 두는데,
+# postgresql-18 +2는 client (= +2)를 요구해 apt가 "held broken packages"로 멈췄다(2026-11-22, 모든 묶음을 다시 거둔 판). 넷을 적으면 옛 묶음과
+# 같은 판으로 풀린다 — libpq5는 적지 않으면 19.0, common은 297이 된다. 판을 올리는 것은 TARS 버전을 낼 때 이 넷과 함께다.
+[[tool]]
+name = "postgresql-client"
+bundle = "server"
+version = "18.7-1.pgdg13+2"
+kind = "vendor-repo"
+repo = "pgdg"
+package = "postgresql-client-18"
+
+[[tool]]
+name = "libpq5"
+bundle = "server"
+version = "18.7-1.pgdg13+2"
+kind = "vendor-repo"
+repo = "pgdg"
+package = "libpq5"
+
+[[tool]]
+name = "postgresql-common"
+bundle = "server"
+version = "295.pgdg13+1"
+kind = "vendor-repo"
+repo = "pgdg"
+package = "postgresql-common"
+
+[[tool]]
+name = "postgresql-client-common"
+bundle = "server"
+version = "295.pgdg13+1"
+kind = "vendor-repo"
+repo = "pgdg"
+package = "postgresql-client-common"
+
 # postgresql-common 294부터(pgdg) `systemd | systemd-standalone-sysusers`, `systemd | systemd-standalone-tmpfiles`를 요구한다. 그대로 두면
 # apt가 첫째인 systemd 전체를 고르고 verify가 libsystemd-core의 짝을 못 찾는다(TU-M0 plan 결과). TARS에는 systemd가 없다 — 둘째 선택지를
 # 이름으로 주면 apt가 그쪽으로 푼다(실행 파일 하나씩, 안 부른다).
@@ -1318,3 +1353,20 @@ url = "https://github.com/freedoom/freedoom/releases/download/v0.13.0/freedoom-0
 sha256 = "3f9b264f3e3ce503b4fb7f6bdcb1f419d93c7b546f4df3e874dd878db9688f59"
 into = "tars-doom"
 hook = "freedoom"
+
+# ── browser(CR-M1) — Debian trixie의 Chromium과 한글 · 한자 · 가나 글꼴(CR design 결정 1 · 2 · 3) ─────────────
+# 둘만 적고 폐포(171 패키지 — GTK · NSS · Mesa 등)는 apt가 푼다. 판은 devlayer/snapshot의 시각에 있는 것이다(CR-M1 plan 확정 1 · 2) — chromium은
+# trixie-security에 주 1회쯤 새 판이 오고 live 미러는 옛 판을 내린다. 일반 묶음이라 base와 같은 것만 지운다 — gpu · media와 같은 파일
+# (libLLVM · Mesa · fontconfig 등)은 이 묶음에도 실린다(plan 확정 4, zstd15 약 294MiB). 띄우는 문은 files/browser의 tars-browser다.
+[[tool]]
+name = "chromium"
+bundle = "browser"
+version = "156.0.8078.79-1~deb13u1"
+kind = "debian"
+
+# Noto Sans · Serif CJK(Regular · Bold). Debian에 한국어만 담은 noto 패키지는 없다 — 웹 페이지는 한자 · 가나가 섞인다(design 결정 3).
+[[tool]]
+name = "fonts-noto-cjk"
+bundle = "browser"
+version = "1:20240730+repack1-1"
+kind = "debian"

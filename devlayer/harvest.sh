@@ -42,8 +42,14 @@ for r in $repos; do
   repo_state+="$row"$'\n'"$(sha256sum <"devlayer/keys/$r.asc")"$'\n'
 done
 
+# Debian 저장소의 시각(CR-M1 plan 확정 1 · 2). live 미러는 보안 판 · point release가 오면 옛 판을 내려 `=판` 고정이 깨진다 — 그래서
+# snapshot.debian.org의 한 시각에서 거둔다. 값은 devlayer/snapshot 한 줄이고 DEV_SNAPSHOT(make dev-layers DEV_SNAPSHOT=…)이 앞선다.
+# 시각은 캐시 해시에 든다 — 바꾸면 모든 debian 묶음을 다시 거둔다. vendor-repo(repos.tsv)는 이 시각과 무관하게 각 저장소 그대로다.
+snap_at="${DEV_SNAPSHOT:-$(tr -d ' \t\r\n' <devlayer/snapshot)}"
+[[ "${snap_at}" =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || { echo "harvest> snapshot '${snap_at}' is not YYYYMMDDThhmmssZ (devlayer/snapshot or DEV_SNAPSHOT)" >&2; exit 1; }
+
 # 끝 줄은 해시 하나여야 한다 — build.sh가 `head -n -1`로 매니페스트 줄만 떼어 대조한다.
-want="$(printf '%s\n' "$lines"; { cat devlayer/harvest.sh devlayer/harvest-skip.tsv; printf '%s' "$repo_state"; } | sha256sum | cut -c1-64)"
+want="$(printf '%s\n' "$lines"; { cat devlayer/harvest.sh devlayer/harvest-skip.tsv; printf 'snapshot %s\n' "${snap_at}"; printf '%s' "$repo_state"; } | sha256sum | cut -c1-64)"
 if [ -f "$build/$bundle.harvest.tar" ] && [ "$(cat "$build/$bundle.harvest.lines" 2>/dev/null)" = "$want" ]; then
   echo "harvest> $bundle: cached"
   exit 0
@@ -77,6 +83,15 @@ fi
 # 그 옛 파일을 싣는다 — slim 스냅숏의 zlib1g -1+b1이 initrd(개발 컨테이너가 trixie-security에서 받은 +deb13u1)의 libz와 같은
 # 경로 · 다른 내용이 되어 verify의 결정 4로 멈췄다. upgrade는 새 패키지를 들이지 않으므로 "설치 전" 기준을 흐리지 않는다.
 export DEBIAN_FRONTEND=noninteractive
+# 저장소를 위의 시각으로 바꾼다(CR-M1 plan 확정 1). slim의 live 목록(debian.sources)은 지운다 — 남으면 두 시각이 섞인다. 서명은 slim의
+# debian-archive-keyring이 그대로 검증한다. security · updates의 Release는 약 1주로 만료되므로 check-valid-until=no(만료만 안 본다).
+# ca-certificates가 없으므로 http다(내용은 서명이 지킨다 — vendor-repo와 같다).
+rm -f /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list
+{
+  echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${snap_at}/ trixie main"
+  echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${snap_at}/ trixie-updates main"
+  echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/${snap_at}/ trixie-security main"
+} >/etc/apt/sources.list.d/tars-snapshot.list
 apt-get update -qq
 apt-get upgrade -y -qq >/dev/null
 
@@ -142,7 +157,9 @@ mv "${work}/new.kept" "${work}/new.all"
 # 설정(/etc/postgresql/) — 그 클러스터의 데이터는 거두지 않으므로 TARS에 없는 클러스터의 설정이 된다(plan 결정 D). postgresql-common/은 싣는다.
 # 같은 postinst 무리의 ssl-cert가 이 컨테이너에서 만든 자체 서명 인증서와 그 비밀 키(snakeoil)와 해시 링크 — 실으면 모든 TARS가 같은
 # 비밀 키를 갖는다(TP-M10 plan 확인한 것). CA 인증서는 initrd의 것이다. openssl의 usr/lib/ssl/private는 그 빠진 디렉터리로의 링크라 함께 뺀다.
-grep -Ev '^/usr/lib/ssl/private$|^/etc/(alternatives/|ld\.so\.cache$|apt/|dpkg/|systemd/|cron\.[a-z]+/|(passwd|group|shadow|gshadow)-?$|init\.d/|rc[0-6S]\.d/|apparmor\.d/|logcheck/|postgresql/|ssl/private/|ssl/certs/ssl-cert-snakeoil\.pem$|ssl/certs/[0-9a-f]{8}\.[0-9]+$)' "$work/new.all" | sed 's|^/||' >"$work/list"
+# CR-M1(plan 확정 3): systemd의 /usr 자리(unit · environment.d — /dev/null · /etc/environment로 가는 링크가 verify에서 끊긴다)와 /etc/xdg/systemd,
+# systemd postinst가 만든 /etc/machine-id(실으면 모든 TARS가 같은 값을 갖는다), /etc/mtab(../proc/self/mounts 링크). 모든 묶음에 맞는 규칙이다.
+grep -Ev '^/usr/lib/ssl/private$|^/usr/lib/(systemd|environment\.d)/|^/etc/(machine-id$|mtab$|xdg/systemd|alternatives/|ld\.so\.cache$|apt/|dpkg/|systemd/|cron\.[a-z]+/|(passwd|group|shadow|gshadow)-?$|init\.d/|rc[0-6S]\.d/|apparmor\.d/|logcheck/|postgresql/|ssl/private/|ssl/certs/ssl-cert-snakeoil\.pem$|ssl/certs/[0-9a-f]{8}\.[0-9]+$)' "$work/new.all" | sed 's|^/||' >"$work/list"
 grep '^etc/' "$work/list" >"$work/etc" || true
 
 # perl의 /usr/bin/perldoc은 "perl-doc을 깔라"고 찍는 자리표다(perl-doc이 divert해 진짜로 바꾼다). perl-doc 없이 perl을 끌고 온 묶음

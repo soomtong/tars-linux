@@ -15,3 +15,7 @@ python3.13-minimal	rlwrap의 필터 스크립트 몫. /usr/bin/python3를 만들
 vim	vifm의 의존(vim | … | neovim)으로 딸려 온다. initrd가 vim(vim.basic)을 갖는다 — 판이 달라 결정 4에 걸렸다(TP-M8).
 vim-common	vim의 짝. initrd의 vim이 쓰는 것은 initrd가 갖는다(TP-M8).
 vim-runtime	vim의 짝. vim 런타임 싣기는 2026-10-27에 취소했다(user_editor_use) — 의존을 타고 들어오지 않게 한다(TP-M8).
+systemd	TARS에는 systemd가 없다. chromium → dbus-user-session → libpam-systemd가 끌고 온다 — unit 링크가 verify에서 끊기고 libsystemd-core가 RUNPATH 없이 NEEDED한다(CR-M1).
+systemd-sysv	systemd의 짝(CR-M1).
+libpam-systemd	systemd의 짝. TARS의 PAM(initrd의 /etc/pam.d/sudo)은 pam_systemd를 부르지 않는다(CR-M1).
+libsystemd-shared	systemd의 짝 — 실행 파일 systemd가 없으면 쓰는 것이 없다(CR-M1).
