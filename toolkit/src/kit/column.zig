@@ -6,8 +6,10 @@
 //!
 //! 열 모델(명시 모델 — `→`가 연다):
 //! - 처음엔 열 하나(`init`의 소스). 포커스 열은 하나이고 그 리스트만 `acceptsFocus`다(확정 6 — Tab에서 column view는 한 자리).
-//! - `→` · Enter(수정키 없음): 포커스 열의 선택 행을 `ColumnSource.open`에 묻는다. 열리면(소스를 돌려주면) 포커스 열의 오른쪽 열들을
-//!   버리고 새 열을 붙여 포커스를 거기로(선택 0). 안 열리면(파일) 아무 일 없이 받았다고 답한다. 깊이 `MAX_COLUMNS`(32)이면 거절한다.
+//! - `→` · Enter(수정키 없음): 포커스 열의 오른쪽에 열이 이미 있으면 포커스만 그리로 옮긴다(그 열은 늘 지금 선택의 열이다 — 선택이
+//!   바뀌면 오른쪽을 버리므로 — 선택 · 스크롤 · 로딩이 그대로 남는다). 없으면 포커스 열의 선택 행을 `ColumnSource.open`에 묻는다.
+//!   열리면(소스를 돌려주면) 새 열을 붙여 포커스를 거기로(선택 0). 안 열리면(파일) 아무 일 없이 받았다고 답한다. 깊이
+//!   `MAX_COLUMNS`(32)이면 거절한다.
 //! - `←`(수정키 없음): 포커스를 왼쪽 열로. 오른쪽 열은 남긴다(선택이 그대로라 내용이 맞다). 첫 열에서는 아무 일 없음.
 //! - 열의 선택이 키 · 클릭으로 바뀌면 그 열의 오른쪽 열을 버린다. 포커스가 아닌 열을 클릭하면 그 열이 포커스가 된다.
 //! - 가로 스크롤(확정 5): 포커스 열이 보이게 최소만, 열 경계에 맞춘다 — 포커스 열의 오른쪽이 뷰 밖이면 그 열이 다 보이는 가장 작은
@@ -255,12 +257,17 @@ pub const ColumnView = struct {
     pub fn openSelection(self: *ColumnView) void {
         const l = &self.cols[self.focus].list;
         if (l.count() == 0) return;
-        if (self.focus + 1 >= MAX_COLUMNS) return;
-        const src = self.source.open(self.source.ctx, self.focus, l.selected) orelse return;
-        self.truncate(self.focus + 1);
-        self.activate(self.focus + 1, src) catch return;
-        self.n = self.focus + 2;
-        self.setFocus(self.focus + 1);
+        // 오른쪽 열이 이미 있으면 그것은 늘 지금 선택의 열이다(선택이 바뀌면 오른쪽을 버리므로) — 새로 열지 않고 포커스만 옮긴다.
+        // 그 열의 선택 · 스크롤 · 로딩이 그대로 남는다.
+        if (self.focus + 1 < self.n) {
+            self.setFocus(self.focus + 1);
+        } else {
+            if (self.focus + 1 >= MAX_COLUMNS) return;
+            const src = self.source.open(self.source.ctx, self.focus, l.selected) orelse return;
+            self.activate(self.focus + 1, src) catch return;
+            self.n = self.focus + 2;
+            self.setFocus(self.focus + 1);
+        }
         _ = self.updateScroll();
         self.placeContent();
         self.emitColumns();

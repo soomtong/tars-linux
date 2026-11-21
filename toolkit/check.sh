@@ -6,7 +6,7 @@ cd "$(dirname "$0")" || exit 1
 # TK 체인 — TARS 툴킷(`toolkit/`, TK design)과 그 시험 앱 `tars-tk-demo`. 서른여섯번째 체인.
 #
 # 이 게이트가 증명하는 사슬(TK-M0 plan 확정 6의 판정 1~6, TK-M1 plan 확정 10의 판정 7~9 — 7~9는 5와 6 사이에 돈다, TK-M2 plan 확정 15의
-# 판정 10~14 — 9 뒤 같은 부팅에서 둘째 데모 `--list 100000`):
+# 판정 10~14 — 9 뒤 같은 부팅에서 둘째 데모 `--list 100000`, TK-M3 plan 확정 15의 판정 15~18 — 14 뒤 같은 부팅에서 `tars-files`):
 #   셸에서 띄운 tars-tk-demo가 tars_menu_manager_v1을 bind하고(원래 모드) 셸 오른쪽 column이 되어 pane 크기(616 × 752)의
 #   configure를 받는다
 #   → 그 크기로 버퍼를 만들어 바탕 · 둥근 사각형(z2d) · 글자(stb_truetype, Pretendard 13 · 14 px)를 그린다 — screendump의
@@ -25,6 +25,12 @@ cd "$(dirname "$0")" || exit 1
 #     `Shift+Tab`이 돌아온다(13)
 #   → `sendkey down 1000`(1초 누름)에 클라이언트 반복이 3번 이상 나고 선택이 그만큼 내려간다(14)
 #   → 둘째 데모 로그: `tk> list` · `hit` · `scroll` · `focus` 줄이 위 판정과 맞고, 그린 수 = commit 수
+#   → 셋째 앱 `tars-files /tmp/tkf`(TK-M3 plan 확정 15): 첫 열이 a/ z/ m.txt(디렉터리 먼저, 숨김 .h 없음), 디렉터리에 `›`, 열 · 분할
+#     구분선과 미리보기 판(15)
+#   → `→ → ←`: 열 셋, 포커스는 둘째 열(TK_SELECTION), 셋째 열의 선택은 흐린 색, 가로 스크롤 한 열(16 — design의 끝나는 조건)
+#   → 셸에서 `mkdir /tmp/tkf/a/0` 뒤 돌아오면 다시 읽고 선택 b가 행 1로 따라간다, 셋째 열은 남는다(17)
+#   → `touch (seq 1 N)`의 큰 디렉터리가 조각 여럿으로 들어오고 끝나기 전에 항목이 그려진다(18)
+#   → tars-files 로그: `files` · `load` · `column` · `columns` · `focus` · `refresh` 줄이 위와 맞고, 그린 수 = commit 수
 #
 # 부팅 하나, NIC 없음, 디스크 없음 — 셸은 root(fish), 소켓은 `/run/user/0`. 키보드는 QEMU의 PS/2라 pc로 읽혀 Cmd가 Alt
 # 자리다(wayland 체인과 같다). USB 마우스 하나(TK-M2 — 판정 12의 클릭 · 휠). HMP `mouse_move` · `mouse_button`이 그 장치로 가고 포인터는
@@ -90,6 +96,11 @@ TK_TEXT=f4f6f8
 # 둘째 데모의 색 — 흐린 선택(TK_SELECTION_INACTIVE) · 막대(TK_TEXT_DIM).
 TK_INACTIVE=465a78
 TK_DIM=98a4b4
+# 셋째 앱(tars-files)의 색 — 구분선(TK_SEPARATOR) · 미리보기 판(TK_SURFACE).
+TK_SEP=34425a
+TK_SURF=2a3850
+# 판정 18의 큰 디렉터리 항목 수(TK-M3 — 게스트에서 `touch (seq 1 N)`이 체인 시간을 크게 늘리지 않는 수).
+FILES_N=10000
 # 면 애니메이션의 길이(ms) — 도중의 screendump가 TCG의 지연에도 끝 색에 닿지 않을 만큼 길게, linear로(TK-M1 plan 확정 9).
 ANIM_MS=3000
 
@@ -604,8 +615,176 @@ echo "reference: draws while down was held $(printf '%s\n' "$TK2" | awk '/repeat
 # 서버는 창마다 blit 줄을 처음 16줄만 찍는다 — 여기 보이는 것은 첫 통째와 `↓`의 강조 이동이다(스크롤 프레임의 blit은 measurements 109).
 echo "reference: list demo blits $(printf '%s\n' "$BLITS2" | sed 's/.*blit id=[0-9]* //' | tr '\n' ' ')"
 
+# ══ 셋째 앱 — tars-files(TK-M3) ═══════════════════════════════════════
+#
+# 판정 14 뒤 셸(전체 폭, 포커스)에서 트리를 만들고 띄운다. 새 column은 판정 1과 같은 616 × 752 자리(x 644..1259 · y 20..771)다.
+# 분할 뷰: column view x 644..1058(415) · 구분선 1059 · 미리보기 1060..1259. 열 i는 화면 x 644 + i × 201 − 가로 스크롤부터 폭 200,
+# 오른쪽 1 px 구분선. 행 i는 y 20 + 24 × i부터 24줄, 이름은 열 왼쪽 16부터, 디렉터리의 `›`는 열 오른쪽 끝 10 px 앞(열 x 185..190 언저리).
+# 판정 상자는 이름(열 x 16..40) · `›` · 판정 12가 남긴 화살표((700, 128)에서 오른쪽 아래)를 피해 열 x 56..156 · 행 y +2..+21이다.
+echo "=== (15) tars-files /tmp/tkf: the first column, directories first, hidden names out ==="
+type_text 'mkdir -p /tmp/tkf/a/b/c /tmp/tkf/z'
+type_keys ret
+type_text 'touch /tmp/tkf/m.txt /tmp/tkf/.h /tmp/tkf/a/b/x.txt'
+type_keys ret
+type_text 'tars-files /tmp/tkf > /tmp/tk3.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' 3 || report_failure "(15) tars-files did not open a third column"
+ID3="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+' | tail -n 1 | sed 's/.*id=//')"
+wait_for_log "terminal: wl> configure id=${ID3} w=616 h=752 act=1" || report_failure "(15) no 'wl> configure id=${ID3} w=616 h=752 act=1'"
+wait_for_log "terminal: wl> commit id=${ID3} buf=616x752 " || report_failure "(15) tars-files never committed a 616x752 buffer"
+sleep 1.5
+SHOT15="${SCREENS_DIR}/files-first.ppm"
+screendump "$SHOT15" || report_failure "(15) screendump did not write ${SHOT15}"
+want_box "(15) col0 row 0 (a) is the focused selection" "$SHOT15" 700 22 100 20 "$TK_ACCENT"
+want_box "(15) col0 row 1 (z)" "$SHOT15" 700 46 100 20 "$TK_BG"
+want_box "(15) col0 row 2 (m.txt)" "$SHOT15" 700 70 100 20 "$TK_BG"
+want_box "(15) col0 row 3 is empty (.h is hidden)" "$SHOT15" 650 94 180 20 "$TK_BG"
+for r in 0 1 2; do
+  y=$((22 + 24 * r))
+  got="$(ppm_ink "$SHOT15" 658 "$y" 34 20)"
+  case "$got" in
+    *" ink=0") report_failure "(15) col0 row ${r}'s name box (658,${y} 34x20) has no ink (${got})" ;;
+  esac
+done
+got="$(ppm_ink "$SHOT15" 822 46 16 20)"
+case "$got" in
+  "bg=${TK_BG} ink=0") report_failure "(15) no › on the directory z (822,46 16x20)" ;;
+  "bg=${TK_BG} ink="*) ;;
+  *) report_failure "(15) the › box of z is not on ${TK_BG} (${got})" ;;
+esac
+want_box "(15) no › on the file m.txt" "$SHOT15" 822 70 16 20 "$TK_BG"
+want_box "(15) the column separator (x 844)" "$SHOT15" 844 100 1 600 "$TK_SEP"
+want_box "(15) the split separator (x 1059)" "$SHOT15" 1059 100 1 600 "$TK_SEP"
+want_box "(15) the preview pane" "$SHOT15" 1100 400 140 300 "$TK_SURF"
+echo "(15): col0 shows a/ z/ m.txt (a selected, .h hidden), a › on the directories, the separators and the preview pane"
+
+echo "=== (16) -> -> <-: three columns, the focus on the second ==="
+RIGHTS="terminal: wl> key code=106 state=1 to=${ID3}"
+type_keys right
+wait_for_count "$RIGHTS" 1 || report_failure "(16) the first right did not reach tars-files"
+sleep 1
+type_keys right
+wait_for_count "$RIGHTS" 2 || report_failure "(16) the second right did not reach tars-files"
+sleep 1
+type_keys left
+wait_for_count "terminal: wl> key code=105 state=1 to=${ID3}" 1 || report_failure "(16) the left did not reach tars-files"
+sleep 1.5
+SHOT16="${SCREENS_DIR}/files-columns.ppm"
+screendump "$SHOT16" || report_failure "(16) screendump did not write ${SHOT16}"
+# scroll 201: 둘째 열(a) x 644..843 · 구분선 844 · 셋째 열(b) x 845..1044 · 구분선 1045 · 바탕 1046..1058.
+want_box "(16) col1 row 0 (b) is the focused selection" "$SHOT16" 700 22 100 20 "$TK_ACCENT"
+want_box "(16) col2 row 0 (c) is the unfocused selection" "$SHOT16" 901 22 100 20 "$TK_INACTIVE"
+want_box "(16) col2 row 1 (x.txt)" "$SHOT16" 901 46 100 20 "$TK_BG"
+want_box "(16) the separator between col1 and col2 (x 844)" "$SHOT16" 844 100 1 600 "$TK_SEP"
+want_box "(16) the separator after col2 (x 1045)" "$SHOT16" 1045 100 1 600 "$TK_SEP"
+want_box "(16) the background right of col2" "$SHOT16" 1047 100 10 600 "$TK_BG"
+echo "(16): col1 (a) holds the focus (${TK_ACCENT}), col2 (b) keeps its selection dimmed (${TK_INACTIVE}), scrolled one column"
+
+echo "=== (17) a new entry above the selection while away: the selection follows the name ==="
+type_keys alt-bracket_left
+wait_for_log "terminal: wl> configure id=${ID3} w=616 h=752 act=0" || report_failure "(17) Cmd+[ did not take the focus away from tars-files"
+type_text 'mkdir /tmp/tkf/a/0'
+type_keys ret
+sleep 1
+type_keys alt-bracket_right
+wait_for_count "terminal: wl> configure id=${ID3} w=616 h=752 act=1" 2 || report_failure "(17) Cmd+] did not give the focus back to tars-files"
+sleep 2
+SHOT17="${SCREENS_DIR}/files-refresh.ppm"
+screendump "$SHOT17" || report_failure "(17) screendump did not write ${SHOT17}"
+want_box "(17) col1 row 1 (b, moved down) is the focused selection" "$SHOT17" 700 46 100 20 "$TK_ACCENT"
+want_box "(17) col1 row 0 (the new 0)" "$SHOT17" 700 22 100 20 "$TK_BG"
+got="$(ppm_ink "$SHOT17" 658 22 34 20)"
+case "$got" in *" ink=0") report_failure "(17) col1 row 0's name box has no ink — the new entry is not drawn (${got})" ;; esac
+want_box "(17) col2 (b) stays with its selection" "$SHOT17" 901 22 100 20 "$TK_INACTIVE"
+echo "(17): after mkdir a/0 the column re-read on focus, b moved to row 1 and stayed selected, col2 stayed"
+
+type_keys alt-q
+wait_for_log "terminal: wl> close id=${ID3}" || report_failure "Cmd+Q sent no 'wl> close id=${ID3}' to tars-files"
+wait_for_log "terminal: wl> unmap id=${ID3} ws=1 slot=1" || report_failure "tars-files' slot was not removed"
+sleep 1
+
+echo "=== (18) a ${FILES_N}-entry directory streams in ==="
+type_text 'mkdir /tmp/tkb'
+type_keys ret
+type_text 'cd /tmp/tkb'
+type_keys ret
+type_text "touch (seq 1 ${FILES_N})"
+type_keys ret
+type_text 'cd'
+type_keys ret
+type_text 'echo tkb-(count (ls /tmp/tkb))'
+type_keys ret
+wait_for_screen "tkb-${FILES_N}" || report_failure "(18) the shell did not make ${FILES_N} files in /tmp/tkb"
+type_text 'tars-files /tmp/tkb > /tmp/tk4.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' 4 || report_failure "(18) tars-files did not open a fourth column"
+ID4="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+' | tail -n 1 | sed 's/.*id=//')"
+wait_for_log "terminal: wl> commit id=${ID4} buf=616x752 " || report_failure "(18) tars-files never committed a 616x752 buffer"
+sleep 3
+SHOT18="${SCREENS_DIR}/files-big.ppm"
+screendump "$SHOT18" || report_failure "(18) screendump did not write ${SHOT18}"
+want_box "(18) row 0 (1) is the selection" "$SHOT18" 700 22 100 20 "$TK_ACCENT"
+got="$(ppm_ink "$SHOT18" 658 22 34 20)"
+case "$got" in *" ink=0") report_failure "(18) row 0's name box has no ink (${got})" ;; esac
+type_keys alt-q
+wait_for_log "terminal: wl> close id=${ID4}" || report_failure "Cmd+Q sent no 'wl> close id=${ID4}' to tars-files"
+wait_for_log "terminal: wl> unmap id=${ID4} ws=1 slot=1" || report_failure "tars-files' second slot was not removed"
+sleep 2
+
+# ── tars-files의 로그를 꺼낸다 ───────────────────────────────────────────
+type_text 'echo tk3begin > /dev/console'
+type_keys ret
+type_text 'cat /tmp/tk3.log /tmp/tk4.log > /dev/console'
+type_keys ret
+got_rss=0
+for _ in $(seq 1 150); do
+  if [ "$(tr -d '\r' < "$LOG" | sed -n '/^tk3begin$/,$p' | grep -acE '^tk> rss vmrss_kb=[0-9]+ ')" -ge 2 ]; then got_rss=1; break; fi
+  sleep 0.1
+done
+[ "$got_rss" = 1 ] || report_failure "tars-files' logs did not come out on the serial (fewer than two 'tk> rss' after 'tk3begin')"
+TK3="$(tr -d '\r' < "$LOG" | sed -n '/^tk3begin$/,$p' | grep -a '^tk> ')"
+TK3A="$(printf '%s\n' "$TK3" | awk '/^tk> files path=\/tmp\/tkb$/ {exit} {print}')"
+TK3B="$(printf '%s\n' "$TK3" | sed -n '/^tk> files path=\/tmp\/tkb$/,$p')"
+has3() {
+  printf '%s\n' "$TK3A" | grep -aE -- "$1" > /dev/null || report_failure "$2: no '$1' in tars-files' log"
+}
+has3 '^tk> files path=/tmp/tkf$' "(15)"
+has3 '^tk> load path=/tmp/tkf n=3 chunks=1 .* state=done$' "(15)"
+has3 '^tk> column i=0 path=/tmp/tkf count=3 sel=0 name=a$' "(15)"
+has3 '^tk> focus view=col0$' "(15)"
+has3 '^tk> columns n=2 focus=1 scroll=0$' "(16)"
+has3 '^tk> load path=/tmp/tkf/a n=1 chunks=1 .* state=done$' "(16)"
+has3 '^tk> columns n=3 focus=2 scroll=201$' "(16)"
+has3 '^tk> load path=/tmp/tkf/a/b n=2 chunks=1 .* state=done$' "(16)"
+has3 '^tk> columns n=3 focus=1 scroll=201$' "(16)"
+has3 '^tk> focus view=col1$' "(16)"
+has3 '^tk> refresh path=/tmp/tkf/a name=b before=0 after=1$' "(17)"
+has3 '^tk> refresh path=/tmp/tkf name=a before=0 after=0$' "(17)"
+has3 '^tk> refresh path=/tmp/tkf/a/b name=c before=0 after=0$' "(17)"
+D3="$(printf '%s\n' "$TK3A" | grep -acE '^tk> draw ')"
+C3="$(printf '%s\n' "$TK3A" | grep -acE '^tk> commit$')"
+[ "$D3" -eq "$C3" ] || report_failure "tars-files drew ${D3} times but committed ${C3}"
+LOAD18="$(printf '%s\n' "$TK3B" | grep -aE "^tk> load path=/tmp/tkb n=${FILES_N} chunks=[0-9]+ .* state=done\$" | tail -n 1)"
+[ -n "$LOAD18" ] || report_failure "(18) no 'tk> load path=/tmp/tkb n=${FILES_N} … state=done'"
+CHUNKS18="$(sed -E 's/.* chunks=([0-9]+) .*/\1/' <<<"$LOAD18")"
+FIRST18="$(sed -E 's/.* first_us=([0-9]+) .*/\1/' <<<"$LOAD18")"
+PAINT18="$(sed -E 's/.* paint_us=([0-9]+) .*/\1/' <<<"$LOAD18")"
+ALL18="$(sed -E 's/.* all_us=([0-9]+) .*/\1/' <<<"$LOAD18")"
+[ "$CHUNKS18" -gt 1 ] || report_failure "(18) ${FILES_N} entries came in ${CHUNKS18} chunk(s) — not streamed"
+[ "$PAINT18" -gt 0 ] && [ "$PAINT18" -lt "$ALL18" ] ||
+  report_failure "(18) no frame showed entries before the load ended (paint_us=${PAINT18} all_us=${ALL18})"
+printf '%s\n' "$TK3B" | grep -aE "^tk> column i=0 path=/tmp/tkb count=${FILES_N} sel=0 name=1\$" > /dev/null ||
+  report_failure "(18) the first column did not end at count=${FILES_N} with row 0 = 1"
+echo "(15-17 log): files · load · column · columns · focus · refresh lines match; ${D3} draws = ${C3} commits"
+echo "(18): ${FILES_N} entries in ${CHUNKS18} chunks, first chunk at ${FIRST18} us, first painted at ${PAINT18} us, all at ${ALL18} us"
+# 측정(참고 — 판정 아님, measurements 110).
+echo "--- reference: tars-files ---"
+printf '%s\n' "$TK3" | grep -aE '^tk> (load |rss |columns )'
+echo "reference: tars-files draws $(printf '%s\n' "$TK3A" | grep -aE '^tk> draw ' | us_summary)"
+printf '%s\n' "$TK3A" | grep -aE '^tk> (draw|columns|refresh) '
+
 # ── render verify ─────────────────────────────────────────────────────
 MISMATCH="$(count_log 'terminal: verify> mismatch')"
 [ "$MISMATCH" -eq 0 ] || report_failure "render verify mismatch lines: ${MISMATCH}"
 
-echo "PASS: TK-M2 — tars-tk-demo binds tars_menu_v1 (native), opens as a 616x752 column, draws a rounded rectangle (z2d) with antialiased corners and antialiased Pretendard text, redraws centred at 1240x752 on Cmd+R, animates a face's opacity (mid colour between, end colour after) with only the face's rectangle blitted, commits only when it draws (2 + ${N} draws and commits, none while idle), and ends by itself on Cmd+Q; tars-tk-demo --list 100000 moves list1's highlight to row 10 after ten downs, End shows the last row and the bar at the bottom, a click selects row 4 and the wheel scrolls three rows, Tab and Shift+Tab move the focus between the lists, and holding down repeats ${REPEATS} time(s) on the client"
+echo "PASS: TK-M3 — tars-tk-demo binds tars_menu_v1 (native), opens as a 616x752 column, draws a rounded rectangle (z2d) with antialiased corners and antialiased Pretendard text, redraws centred at 1240x752 on Cmd+R, animates a face's opacity (mid colour between, end colour after) with only the face's rectangle blitted, commits only when it draws (2 + ${N} draws and commits, none while idle), and ends by itself on Cmd+Q; tars-tk-demo --list 100000 moves list1's highlight to row 10 after ten downs, End shows the last row and the bar at the bottom, a click selects row 4 and the wheel scrolls three rows, Tab and Shift+Tab move the focus between the lists, and holding down repeats ${REPEATS} time(s) on the client; tars-files lists /tmp/tkf with directories first and hidden names out, -> -> <- leaves three columns with the focus on the second (scroll 201), re-reads on focus and keeps b selected after a/0 appears, and streams ${FILES_N} entries in ${CHUNKS18} chunks (painted at ${PAINT18} us of ${ALL18} us)"

@@ -48,3 +48,4 @@ initrd가 이긴다(TP design 결정 4). 같은 이름이 다른 경로에 있�
 |---|---|---|
 | 2026-11-05 | 사용자의 터미널 유틸리티 목록(TP design "터미널 유틸리티" 표) | initrd에 lsoff · doge(B). 이미 있던 열(bat · duf · eza · fd · fzf · hyperfine · jq · ripgrep · sd · tree)은 C. 나머지는 개발 도구 층. hexyl(B 후보)은 사용자가 개발 도구 층으로 |
 | 2026-11-20 | TK-M0: 툴킷의 시험 앱 `tars-tk-demo`(+ libwayland-client · libffi 사슬, `tars-wl-test`와 같다)와 글꼴 Pretendard Regular .otf(1.57 MB) | A — 게이트 판정이 셸에서 부르고(`toolkit` 체인), 글꼴은 TARS 번들 앱이 `/vendor/fonts/`에서 연다(TK design 결정 6). 새 공용 라이브러리 사슬 없음 |
+| 2026-11-21 | TK-M3: 첫 앱 `tars-files`(파일 관리자, `toolkit/src/files/`, 사본 1.18 MB · gzip 약 0.5 MB) | A — TARS 번들 앱이고 사용자가 셸에서 부른다(`docs/help/desk.md`), 게이트 판정도 부른다(`toolkit` 체인 15~18). 사슬은 `tars-tk-demo`와 같다(libwayland-client · libffi) — 새 공용 라이브러리 없음 |

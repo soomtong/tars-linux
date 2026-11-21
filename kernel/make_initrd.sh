@@ -191,6 +191,9 @@ chmod 0755 "$WORKDIR/usr/bin/tars-wl-test"
 # 사슬(libwayland-client · libffi)이고 게이트 판정이 셸에서 부른다(initrd 기준 A).
 cp ../toolkit/zig-out/bin/tars-tk-demo "$WORKDIR/usr/bin/tars-tk-demo"
 chmod 0755 "$WORKDIR/usr/bin/tars-tk-demo"
+# TK-M3: 첫 앱 `tars-files`(TK design 결정 14). 같은 build · 같은 사슬이고 셸에서 부르는 사용자 명령이다(initrd 기준 A — 게이트 판정도 부른다).
+cp ../toolkit/zig-out/bin/tars-files "$WORKDIR/usr/bin/tars-files"
+chmod 0755 "$WORKDIR/usr/bin/tars-files"
 
 # GL-M3(2026-08-29)에서 terminal이 ReleaseSafe가 됐다. 49,373,565 →
 # 10,577,208바이트이고, 이 파일이 만드는 initrd는 16,199,658 →
@@ -211,7 +214,7 @@ chmod 0755 "$WORKDIR/terminal"
 # 남는다. sysroot의 도구는 이미 strip돼 있다(실측 2).
 #
 # 컨테이너가 arm64라 그냥 strip은 x86_64 ELF를 못 읽는다(실측 4).
-OWN_BINS=(init usr/bin/tars-install usr/bin/tars-service usr/bin/tars-config usr/bin/tars-fullscreen usr/bin/tars-kms-fill usr/bin/tars-gpu-demo usr/bin/tars-wl-test usr/bin/tars-tk-demo terminal)
+OWN_BINS=(init usr/bin/tars-install usr/bin/tars-service usr/bin/tars-config usr/bin/tars-fullscreen usr/bin/tars-kms-fill usr/bin/tars-gpu-demo usr/bin/tars-wl-test usr/bin/tars-tk-demo usr/bin/tars-files terminal)
 if ! command -v x86_64-linux-gnu-strip >/dev/null; then
   echo "make_initrd: x86_64-linux-gnu-strip not found" >&2
   echo "             devcontainer/Dockerfile installs it with the x86-64 binutils" >&2
@@ -232,6 +235,7 @@ copy_lib_deps "$WORKDIR/terminal"
 copy_lib_deps "$WORKDIR/usr/bin/tars-gpu-demo"
 copy_lib_deps "$WORKDIR/usr/bin/tars-wl-test"
 copy_lib_deps "$WORKDIR/usr/bin/tars-tk-demo"
+copy_lib_deps "$WORKDIR/usr/bin/tars-files"
 
 # ── 유저랜드 바이너리 ────────────────────────────────────────────────────
 #

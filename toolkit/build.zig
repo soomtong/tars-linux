@@ -9,6 +9,7 @@
 //!                      그 파일이 두 모듈에 들어 컴파일이 막는다("file exists in modules 'tk_ca' and 'tk_cg'" — 실측) — 층 경계를
 //!                      컴파일이 지킨다.
 //!   `tars-tk-demo`     TK-M0의 시험 앱(plan 확정 5). initrd의 /usr/bin에 실린다.
+//!   `tars-files`       첫 앱(TK-M3, src/files/). initrd의 /usr/bin에 실린다.
 //!   `zig build test`   호스트 검사(tk_test — 메모리 판으로 둥근 사각형 · 글자 표).
 //!
 //! terminal에서 빌려 오는 것(경로로): stb 헤더와 구현 C 파일, Wayland xml 다섯(`terminal/vendor/wayland` · `terminal/protocol`).
@@ -125,6 +126,17 @@ pub fn build(b: *std.Build) void {
     demo_mod.addImport("tk", tk);
     b.installArtifact(b.addExecutable(.{ .name = "tars-tk-demo", .root_module = demo_mod }));
 
+    // ── tars-files(TK-M3, design 결정 14) ─────────────────────────────
+    // 첫 앱. `tk` 모듈만 import한다(경계는 import가 지킨다). 순수 모델 `src/files/model.zig`는 호스트 검사도 부른다.
+    const files_mod = b.createModule(.{
+        .root_source_file = b.path("src/files/main.zig"),
+        .target = target,
+        .optimize = guest_optimize,
+        .link_libc = true,
+    });
+    files_mod.addImport("tk", tk);
+    b.installArtifact(b.addExecutable(.{ .name = "tars-files", .root_module = files_mod }));
+
     // ── 호스트 검사 ─────────────────────────────────────────────────────
     // 창 층의 Wayland 부분은 빼고 CG · CA · kit과 창 층의 순수 부분(버퍼 나이 `window/age.zig` · 키 반복 `window/repeat.zig`) — 판은
     // 메모리 배열이다(R-ARCH-4).
@@ -142,6 +154,7 @@ pub fn build(b: *std.Build) void {
     test_mod.addImport("tk_input", host_layers.input);
     test_mod.addImport("tk_kit", host_layers.kit);
     test_mod.addImport("tk_tokens", host_layers.tokens);
+    test_mod.addImport("files_model", b.createModule(.{ .root_source_file = b.path("src/files/model.zig"), .target = host_target, .optimize = optimize }));
     test_mod.addIncludePath(terminal_vendor);
     test_mod.addCSourceFile(.{ .file = stb_impl, .flags = &.{} });
     test_mod.linkSystemLibrary("m", .{});

@@ -18,8 +18,10 @@
 //!    선택 이동은 0번, 부분은 clip과 겹치는 행만), 부분 = 통째 바이트 비교(무작위 조작, 리스트 둘), 끝 경계, 강조 애니메이션 · 색 · 휠 · 클릭.
 //! 12 List의 데이터 바뀜 · column view(TK-M3 단계 A) — `reload` · `restore` · `reset`, 가짜 디렉터리 트리로 `→ → ←`의 열 수 · 포커스 · 스크롤 ·
 //!    화면 색, 파일에서 `→`, 첫 열의 `←`, 선택 바뀜이 오른쪽 열을 버림, 클릭 포커스, Tab이 column view를 한 자리로, 버린 first responder,
-//!    풀(300바퀴에 레이어 수 그대로), 깊이 32의 거절, 부분 = 통째(가로 스크롤 포함).
+//!    풀(300바퀴에 레이어 수 그대로), 깊이 32의 거절, 부분 = 통째(가로 스크롤 포함), 이미 열린 오른쪽 열로의 `→`(단계 B).
 //! 13 분할 뷰 — 폭 616 · 1240 · 201 · 100의 배치 표와 알림.
+//! 14 `tars-files` 모델(TK-M3 단계 B) — 자연 순서 · 디렉터리 먼저, 조각 크기 1 · 7 · 전부의 같은 결과 · 숨김 빠짐, 취소 뒤 새로 읽기, 10만 항목
+//!    조각 병합 = 한 번 정렬, 안정 선택 표 · 스크롤, 첫 로딩의 선택(확정 10).
 
 const std = @import("std");
 const theme = @import("theme");
@@ -212,6 +214,7 @@ pub fn main(init: std.process.Init) !u8 {
     try kitTests(alloc);
     try listTests(io, alloc, &f13, &lut1);
     try columnTests(io, alloc, &f13, &lut1);
+    try modelTests(alloc);
 
     if (failures != 0) {
         std.debug.print("tk_test: {d} failure(s)\n", .{failures});
@@ -1359,6 +1362,27 @@ fn columnTests(io: std.Io, alloc: std.mem.Allocator, face: *text.Face, lut: *con
         check(env.kit_log.unhandled == 1, "Super+-> is not the column view's (unhandled)", .{});
     }
 
+    // ── 이미 열린 오른쪽 열로의 → 는 포커스만 옮긴다(단계 B — lead의 대조) ──
+    {
+        var env: ColEnv = undefined;
+        try env.init(alloc, face, false);
+        defer env.deinit();
+        const cv = &env.cv;
+        env.key(input.KEY_RIGHT);
+        env.key(input.KEY_RIGHT);
+        env.key(input.KEY_DOWN);
+        const opens = env.src.opens;
+        const truncs = env.src.truncs;
+        env.key(input.KEY_LEFT);
+        env.key(input.KEY_RIGHT);
+        check(cv.n == 3 and cv.focus == 2 and cv.list(2).selected == 1 and env.src.opens == opens and env.src.truncs == truncs and std.mem.eql(u8, env.firstName(), "col2"), "-> <- -> back into the open col2 keeps its selection (x.txt), opens nothing, truncates nothing", .{});
+        env.key(input.KEY_LEFT);
+        env.key(input.KEY_LEFT);
+        env.key(input.KEY_ENTER);
+        env.key(input.KEY_RIGHT);
+        check(cv.n == 3 and cv.focus == 2 and cv.list(2).selected == 1 and env.src.opens == opens, "Enter and -> from col0 walk back to col2 the same way (opens {d})", .{env.src.opens});
+    }
+
     // ── 선택 바뀜이 오른쪽 열을 버린다 · 클릭 · Tab ──
     {
         var env: ColEnv = undefined;
@@ -1537,4 +1561,253 @@ fn columnTests(io: std.Io, alloc: std.mem.Allocator, face: *text.Face, lut: *con
 
 fn crender(io: std.Io, alloc: std.mem.Allocator, t: *ca.Tree, pixels: []u32, scratch: []u32, clip: Rect, lut: *const [256]u8) !void {
     try lrender(io, alloc, t, pixels, scratch, clip, lut);
+}
+
+// ── 14 tars-files 모델(TK-M3 단계 B) ──────────────────────────────────
+
+const fm = @import("files_model");
+
+/// 메모리 표 DirSource — 항목을 `chunk`개씩 준다. 열고 닫은 수를 센다.
+const MemDir = struct {
+    items: []const fm.Raw,
+    chunk: usize,
+    opened: u32 = 0,
+    closed: u32 = 0,
+    fail_open: bool = false,
+
+    const MH = struct { pos: usize };
+    var handles: [8]MH = undefined;
+    var used: usize = 0;
+
+    fn open(ctx: *anyopaque, path: []const u8) anyerror!*anyopaque {
+        _ = path;
+        const self: *MemDir = @ptrCast(@alignCast(ctx));
+        if (self.fail_open) return error.AccessDenied;
+        self.opened += 1;
+        const h = &handles[used % handles.len];
+        used += 1;
+        h.* = .{ .pos = 0 };
+        return h;
+    }
+    fn next(ctx: *anyopaque, handle: *anyopaque) anyerror!?[]const fm.Raw {
+        const self: *MemDir = @ptrCast(@alignCast(ctx));
+        const h: *MH = @ptrCast(@alignCast(handle));
+        if (h.pos >= self.items.len) return null;
+        const end = @min(h.pos + self.chunk, self.items.len);
+        defer h.pos = end;
+        return self.items[h.pos..end];
+    }
+    fn close(ctx: *anyopaque, handle: *anyopaque) void {
+        _ = handle;
+        const self: *MemDir = @ptrCast(@alignCast(ctx));
+        self.closed += 1;
+    }
+    fn source(self: *MemDir) fm.DirSource {
+        return .{ .ctx = self, .open = open, .next = next, .close = close };
+    }
+};
+
+fn names(l: *const fm.Listing, buf: []u8) []const u8 {
+    var w: usize = 0;
+    for (l.items(), 0..) |e, i| {
+        const s = std.fmt.bufPrint(buf[w..], "{s}{s}{s}", .{ if (i == 0) "" else " ", e.name, if (e.kind == .dir) "/" else "" }) catch return buf[0..w];
+        w += s.len;
+    }
+    return buf[0..w];
+}
+
+fn ent(name: []const u8, kind: fm.Kind) fm.Entry {
+    return .{ .name = name, .kind = kind };
+}
+
+fn modelTests(alloc: std.mem.Allocator) !void {
+    // ── 순서 ──
+    const O = std.math.Order;
+    const pairs = [_]struct { a: []const u8, b: []const u8, want: O }{
+        .{ .a = "a2", .b = "a10", .want = .lt },
+        .{ .a = "a10", .b = "a9", .want = .gt },
+        .{ .a = "a02", .b = "a2", .want = .lt }, // 값은 같고 바이트로 가른다
+        .{ .a = "a", .b = "B", .want = .lt },
+        .{ .a = "File", .b = "file", .want = .lt }, // 대소문자만 다르면 바이트 순(F 0x46 < f 0x66)
+        .{ .a = "가", .b = "나", .want = .lt },
+        .{ .a = "z", .b = "가", .want = .lt }, // ASCII가 한글(UTF-8 0xEA..)보다 앞
+        .{ .a = "문서 9", .b = "문서 10", .want = .lt },
+        .{ .a = "x", .b = "x1", .want = .lt },
+        .{ .a = "1", .b = "a", .want = .lt },
+    };
+    var ord_ok = true;
+    for (pairs) |p| ord_ok = ord_ok and fm.naturalOrder(p.a, p.b) == p.want and fm.naturalOrder(p.b, p.a) == p.want.invert();
+    check(ord_ok, "natural order: a2 < a10, a02 < a2, a < B, File < file, 가 < 나, z < 가, 문서 9 < 문서 10, x < x1, 1 < a ({d} pairs both ways)", .{pairs.len});
+    check(fm.order(ent("zzz", .dir), ent("aaa", .file)) == .lt, "directories come before files", .{});
+
+    // ── 조각 크기 1 · 7 · 전부, 숨김 ──
+    const raw = [_]fm.Raw{
+        ent("m.txt", .file), ent(".", .dir),   ent("..", .dir),     ent("z", .dir),     ent(".h", .file), ent("a10", .file),
+        ent("a", .dir),      ent("a2", .file), ent("B.txt", .file),
+        ent("문서", .dir),
+        ent("가나.txt", .file),
+        ent(".git", .dir),   ent("b", .dir),   ent("file", .file),  ent("File", .file),
+    };
+    const want = "a/ b/ z/ 문서/ a2 a10 B.txt File file m.txt 가나.txt";
+    var bufs: [3][256]u8 = undefined;
+    var got: [3][]const u8 = undefined;
+    for ([_]usize{ 1, 7, raw.len }, 0..) |k, i| {
+        var md: MemDir = .{ .items = &raw, .chunk = k };
+        var l = try fm.readAll(alloc, md.source(), "/x");
+        defer l.deinit();
+        got[i] = names(&l, &bufs[i]);
+        check(md.opened == 1 and md.closed == 1 and l.state == .done and l.chunks == (raw.len + k - 1) / k, "chunk size {d}: opened and closed once, {d} chunks", .{ k, l.chunks });
+    }
+    check(std.mem.eql(u8, got[0], want) and std.mem.eql(u8, got[1], want) and std.mem.eql(u8, got[2], want), "chunk sizes 1 / 7 / all give the same sorted list without hidden names: {s}", .{got[0]});
+
+    // ── 취소: 한 조각 뒤 닫은 손잡이는 다시 안 읽고, 새로 연 목록은 처음부터 ──
+    {
+        var md: MemDir = .{ .items = &raw, .chunk = 4 };
+        const src = md.source();
+        var l1 = fm.Listing.init(alloc);
+        const h1 = try src.open(src.ctx, "/x");
+        _ = try l1.addChunk((try src.next(src.ctx, h1)).?);
+        src.close(src.ctx, h1);
+        const partial = l1.items().len;
+        l1.deinit();
+        var l2 = try fm.readAll(alloc, src, "/x");
+        defer l2.deinit();
+        var b2: [256]u8 = undefined;
+        check(partial == 2 and md.opened == 2 and md.closed == 2 and std.mem.eql(u8, names(&l2, &b2), want), "cancel after one chunk (2 kept of 4 — . and .. filtered), the next load starts over and matches", .{});
+        md.fail_open = true;
+        check(if (fm.readAll(alloc, src, "/x")) |_| false else |_| true, "a failed open is an error (the app shows the column as unopenable)", .{});
+    }
+
+    // ── 10만 항목: 조각 병합 = 한 번 정렬 ──
+    {
+        const N = 100_000;
+        const pool = try alloc.alloc(u8, N * 16);
+        defer alloc.free(pool);
+        const raws = try alloc.alloc(fm.Raw, N);
+        defer alloc.free(raws);
+        var prng = std.Random.DefaultPrng.init(0xF11E5);
+        const r = prng.random();
+        // 이름: 순서를 섞은 "f<번호>.txt"와 디렉터리 "d<번호>"(1/10) — 이름은 모두 다르다.
+        const perm = try alloc.alloc(u32, N);
+        defer alloc.free(perm);
+        for (perm, 0..) |*p, i| p.* = @intCast(i);
+        r.shuffle(u32, perm);
+        for (raws, perm, 0..) |*x, v, i| {
+            const dirk = v % 10 == 0;
+            const s = try std.fmt.bufPrint(pool[i * 16 .. i * 16 + 16], "{s}{d}{s}", .{ if (dirk) "d" else "f", v, if (dirk) "" else ".txt" });
+            x.* = .{ .name = s, .kind = if (dirk) .dir else .file };
+        }
+        var md: MemDir = .{ .items = raws, .chunk = 818 };
+        const t0 = nowMs();
+        var l = try fm.readAll(alloc, md.source(), "/big");
+        defer l.deinit();
+        const t1 = nowMs();
+        const sorted = try alloc.dupe(fm.Entry, raws);
+        defer alloc.free(sorted);
+        std.sort.pdq(fm.Entry, sorted, {}, fm.lessThan);
+        const t2 = nowMs();
+        var same = l.items().len == N;
+        if (same) for (l.items(), sorted) |a, b| {
+            same = same and a.kind == b.kind and std.mem.eql(u8, a.name, b.name);
+        };
+        check(same and l.chunks == 123 and std.mem.eql(u8, l.items()[0].name, "d0") and std.mem.eql(u8, l.items()[N - 1].name, "f99999.txt"), "100,000 entries in 123 chunks of 818: merged list = one sort (merge {d} ms, one sort {d} ms, host)", .{ t1 - t0, t2 - t1 });
+    }
+
+    // ── 안정 선택(확정 12) — 행 24, 뷰 240(10행) ──
+    const RH = 24;
+    const VH = 240;
+    const Case = struct {
+        what: []const u8,
+        new: []const fm.Entry,
+        sel: ?fm.Entry,
+        index: usize,
+        offset: u64,
+        want_index: ?usize,
+        want_offset: u64,
+        want_gone: bool,
+    };
+    const add_above = [_]fm.Entry{ ent("a", .dir), ent("b", .dir), ent("d", .dir), ent("f", .file), ent("h", .file), ent("j", .file) };
+    const del_above = [_]fm.Entry{ ent("d", .dir), ent("f", .file), ent("h", .file), ent("j", .file) };
+    const del_sel = [_]fm.Entry{ ent("b", .dir), ent("d", .dir), ent("h", .file), ent("j", .file) };
+    const del_last = [_]fm.Entry{ ent("b", .dir), ent("d", .dir), ent("f", .file), ent("h", .file) };
+    const case_pair = [_]fm.Entry{ ent("Readme", .file), ent("readme", .file) };
+    const cases = [_]Case{
+        .{ .what = "one added above", .new = &add_above, .sel = ent("f", .file), .index = 2, .offset = 0, .want_index = 3, .want_offset = 0, .want_gone = false },
+        .{ .what = "one removed above", .new = &del_above, .sel = ent("f", .file), .index = 2, .offset = 0, .want_index = 1, .want_offset = 0, .want_gone = false },
+        .{ .what = "the selection removed -> the next one", .new = &del_sel, .sel = ent("f", .file), .index = 2, .offset = 0, .want_index = 2, .want_offset = 0, .want_gone = true },
+        .{ .what = "the last one removed -> the new last", .new = &del_last, .sel = ent("j", .file), .index = 4, .offset = 0, .want_index = 3, .want_offset = 0, .want_gone = true },
+        .{ .what = "everything removed -> no selection", .new = &.{}, .sel = ent("f", .file), .index = 2, .offset = 0, .want_index = null, .want_offset = 0, .want_gone = true },
+        .{ .what = "case-only twins: the exact name", .new = &case_pair, .sel = ent("readme", .file), .index = 0, .offset = 0, .want_index = 1, .want_offset = 0, .want_gone = false },
+        .{ .what = "a file that became a directory", .new = &[_]fm.Entry{ ent("f", .dir), ent("b", .file) }, .sel = ent("f", .file), .index = 2, .offset = 0, .want_index = 0, .want_offset = 0, .want_gone = false },
+    };
+    var st_ok = true;
+    for (cases) |c| {
+        const a = fm.follow(.{ .sel = c.sel, .index = c.index, .offset = c.offset, .touched = true }, c.new, VH, RH);
+        const ok = std.meta.eql(a.index, c.want_index) and a.offset == c.want_offset and a.gone == c.want_gone;
+        if (!ok) std.debug.print("tk_test:   stable selection '{s}': got index {?d} offset {d} gone {}\n", .{ c.what, a.index, a.offset, a.gone });
+        st_ok = st_ok and ok;
+    }
+    check(st_ok, "stable selection table: {d} cases (added / removed above, selection removed, last removed, all removed, case twins, kind changed)", .{cases.len});
+
+    // 스크롤: 화면 위치를 지킨다 · 화면 밖이면 오프셋 그대로(자름만).
+    {
+        const big = try alloc.alloc(fm.Entry, 20_000);
+        defer alloc.free(big);
+        const nb = try alloc.alloc(u8, 20_000 * 8);
+        defer alloc.free(nb);
+        for (big, 0..) |*e, i| e.* = ent(try std.fmt.bufPrint(nb[i * 8 .. i * 8 + 8], "n{d:0>6}", .{i}), .file);
+        // 선택 n000500이 화면 셋째 행(오프셋 = 498 × 24): 위에 1만 개를 더하면(같은 이름 꼴로 앞에) 색인 10500, 같은 화면 자리.
+        const sel = big[500];
+        const a1 = fm.follow(.{ .sel = sel, .index = 500, .offset = 498 * 24, .touched = true }, big, VH, RH);
+        check(a1.index.? == 500 and a1.offset == 498 * 24, "the same list: index and offset unchanged", .{});
+        const a2 = fm.follow(.{ .sel = sel, .index = 100, .offset = 98 * 24, .touched = true }, big, VH, RH);
+        check(a2.index.? == 500 and a2.offset == 498 * 24, "the row moved from 100 to 500 keeps its screen place (offset 98*24 -> 498*24)", .{});
+        const a3 = fm.follow(.{ .sel = sel, .index = 100, .offset = 5000 * 24, .touched = true }, big, VH, RH);
+        check(a3.index.? == 500 and a3.offset == 5000 * 24, "a selection off screen: the offset stays (5000*24)", .{});
+        const a4 = fm.follow(.{ .sel = sel, .index = 100, .offset = 5000 * 24, .touched = true }, big[0..600], VH, RH);
+        check(a4.index.? == 500 and a4.offset == 600 * 24 - VH, "a shorter list clamps the offset ({d})", .{a4.offset});
+        const a5 = fm.follow(.{ .sel = big[19_999], .index = 19_999, .offset = 19_990 * 24, .touched = true }, big[0..10], VH, RH);
+        check(a5.index.? == 9 and a5.offset == 0 and a5.gone, "the selection beyond the new end: the last row, offset 0", .{});
+    }
+
+    // ── 첫 로딩의 선택(확정 10): 안 건드렸으면 0행, 건드렸으면 이름 ──
+    {
+        // 셋째 조각까지: 조각마다 앞쪽 이름이 끼어든다.
+        const chunks = [_][]const fm.Raw{
+            &.{ ent("m", .file), ent("p", .file) },
+            &.{ ent("c", .file), ent("x", .file) },
+            &.{ ent("a", .file), ent("n", .file) },
+        };
+        var untouched = fm.Listing.init(alloc);
+        defer untouched.deinit();
+        var touched = fm.Listing.init(alloc);
+        defer touched.deinit();
+        var u_index: usize = 0;
+        var t_index: usize = 0;
+        var t_ok = true;
+        var u_ok = true;
+        for (chunks, 0..) |ch, k| {
+            const ub: fm.Before = .{ .sel = if (untouched.items().len != 0) untouched.items()[u_index] else null, .index = u_index, .offset = 0, .touched = false };
+            _ = try untouched.addChunk(ch);
+            u_index = fm.follow(ub, untouched.items(), VH, RH).index.?;
+            u_ok = u_ok and u_index == 0;
+            const tb: fm.Before = .{ .sel = if (touched.items().len != 0) touched.items()[t_index] else null, .index = t_index, .offset = 0, .touched = k >= 1 };
+            _ = try touched.addChunk(ch);
+            t_index = fm.follow(tb, touched.items(), VH, RH).index.?;
+            // 첫 조각 뒤 사용자가 `↓`로 p(1행)를 골랐다고 친다.
+            if (k == 0) t_index = 1;
+            t_ok = t_ok and std.mem.eql(u8, touched.items()[t_index].name, "p");
+        }
+        check(u_ok and std.mem.eql(u8, untouched.items()[0].name, "a"), "first load untouched: always row 0 (now 'a' after three chunks)", .{});
+        check(t_ok and t_index == 4, "first load touched: the selection follows 'p' as names land above it (row {d})", .{t_index});
+    }
+
+    var jb: [64]u8 = undefined;
+    check(std.mem.eql(u8, try fm.join(&jb, "/", "tmp"), "/tmp") and std.mem.eql(u8, try fm.join(&jb, "/tmp/tkf", "a"), "/tmp/tkf/a"), "join: / + tmp = /tmp, /tmp/tkf + a = /tmp/tkf/a", .{});
+}
+
+fn nowMs() u64 {
+    var ts: std.os.linux.timespec = undefined;
+    _ = std.os.linux.clock_gettime(.MONOTONIC, &ts);
+    return @as(u64, @intCast(ts.sec)) * 1000 + @as(u64, @intCast(ts.nsec)) / 1_000_000;
 }
