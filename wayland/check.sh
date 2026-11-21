@@ -32,7 +32,9 @@ cd "$(dirname "$0")" || exit 1
 #   32 × 32 상자만 바뀐 commit은 서버가 그 화면 사각형만 옮기고(`wl> blit … w=32 h=32`) 상자 넷과 둘레가 화면에 맞다.
 # TK-M5: 판정 31(30 뒤 · 9 앞) — `tars_menu_v1` 판 2로 bind한 창(`--menu`)의 메뉴 모델이 서버에 닿고(`wl> menu … menus=2 items=5`)
 #   창의 title · app_id를 서버가 담는다(`wl> title`). 단계 B: 그 창이 포커스면 위 여백의 바에 이름과 제목(`menu> bar` 줄과 좌표의
-#   잉크), 셸로 옮기면 바가 빈다. 판정 35(31 뒤 · 9 앞) — 모델이 없는 창(호환)은 이름만.
+#   잉크), 셸로 옮기면 바가 빈다. 판정 35(31 뒤 · 9 앞) — 모델이 없는 창(호환)은 이름만, 여는 키는 아무 일 없음.
+#   단계 C: 판정 32~34(31 뒤 · 35 앞) — Cmd+Shift+/로 열고 방향키 · Enter로 고르면 `activated`, Esc로 닫으면 밑이 되살아나고, 제목 ·
+#   항목 클릭과 바깥 클릭(닫기만, 창에 안 감). 판정 36(35 뒤) — 조합 중에 열면 먼저 확정.
 # WY-M2(단계 B): 창 모드로 띄운 창은 셸 오른쪽 column이 된다(판정 16 · 17 · 22) — `wl> column`, pane 픽셀 크기의 configure
 #   (activated · tiled), 포커스 slot이 창이면 키가 그 창으로, Cmd+[로 셸에 오면 activated를 잃고 keyboard leave, Cmd+R의 새
 #   configure, Cmd+Q에 slot이 닫히고 셸이 전체 폭을 되찾는다. 자기 workspace를 보는 판정 2~8은 `--fullscreen`으로 띄운다.
@@ -815,8 +817,7 @@ echo "(30): box A was copied alone eight times, all four boxes and the window ar
 # 셸만 남은 자리다(판정 30 끝). 단계 A는 그리기가 없다 — 이 판정은 줄만 본다(바의 화면은 단계 B가 같은 번호에 더한다). `--menu` 창은 판 2로
 # bind하고(원래 모드 — `native`) 첫 commit 전에 고정 모델(File 셋 · Edit 둘, 구분선 포함 다섯 칸)을 commit한다 — 서버가
 # `wl> menu id=ID menus=2 items=5`, 그리고 set_title · set_app_id를 담아 `wl> title id=ID app_id=tars-wl-test title=tars-wl-test`.
-# 실측 8: 그 창에 Cmd+Shift+/(`alt-shift-slash`)를 친다 — 단계 A에는 여는 키가 없으므로 표 밖 Cmd 조합이라 창에 Super+Shift로
-# 간다(evdev 53, 클라이언트의 수정키 0x41). 줄 수만 찍고 판정하지 않는다(단계 C에서 서버가 먹는 키가 된다).
+# 단계 A의 실측 8(Cmd+Shift+/가 창에 evdev 53으로 가는가)은 단계 C에서 판정 32로 옮겼다 — 그 키가 메뉴를 여는 서버의 키가 됐다.
 echo "=== (31) menu model: a version 2 client's model and the window's name reach the server ==="
 COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
 NATIVES="$(count_log 'terminal: wl> keys pid=[0-9]+ native')"
@@ -859,20 +860,142 @@ screendump "$SHOT31E" || report_failure "(31) screendump did not write ${SHOT31E
 got="$(ppm_ink "$SHOT31E" 0 0 1280 20)"
 [ "$got" = "bg=102030 ink=0" ] || report_failure "(31) with the shell focused the top band is not one colour 102030 (${got})"
 [ "$(bar_ink name)-$(bar_ink fg)" = "0-0" ] || report_failure "(31) the empty bar's dump is not name=0 fg=0"
-echo "(31) shell focused: menu> bar empty, top band ${got}"
+# 셸 pane에서 여는 키는 아무 일도 없다(단계 C — 삼킴 그대로).
+OPENS="$(count_log 'terminal: menu> open ')"
+type_keys alt-shift-slash
+sleep 0.5
+[ "$(count_log 'terminal: menu> open ')" -eq "$OPENS" ] || report_failure "(31) Cmd+Shift+/ in the shell opened a menu"
+echo "(31) shell focused: menu> bar empty, top band ${got}, Cmd+Shift+/ did nothing"
 type_keys alt-bracket_right
 wait_for_log "terminal: wl> configure id=${MENU_ID} w=[0-9]+ h=[0-9]+ act=1" || report_failure "(31) Cmd+] did not give the keys back to the menu window"
 wait_for_count "terminal: menu> bar id=${MENU_ID} name=tars-wl-test titles=File,Edit" 2 || report_failure "(31) Cmd+] did not bring the bar back"
-type_keys alt-shift-slash
-wait_for_log "terminal: wl> key code=53 state=1 to=${MENU_ID}([^0-9]|$)" > /dev/null || true
-echo "(31) measurement 8: Cmd+Shift+/ reached the window as code 53 $(count_log "terminal: wl> key code=53 state=1 to=${MENU_ID}([^0-9]|$)") time(s)"
 type_keys alt-q
 wait_for_log "terminal: wl> unmap id=${MENU_ID} ws=1 slot=1" || report_failure "(31) Cmd+Q did not close the menu window"
-# 클라이언트가 본 것: `native` 하나, 모델을 보낸 줄 하나, 그리고 실측 8의 Super+Shift(0x41) 수.
+# 클라이언트가 본 것: `native` 하나, 모델을 보낸 줄 하나, 그리고 Super+Shift(0x41) 수(단계 C부터 이 판정에서는 안 친다 — 0).
 type_text 'echo c31-(grep -cx wl-test..native /tmp/wl11.log)-(grep -c menu.sent.menus.2.items.5 /tmp/wl11.log)-(grep -cw depressed.0x41 /tmp/wl11.log)'
 type_keys ret
 wait_for_screen '\| c31-1-1-[0-9]+' || report_failure "(31) the client's log does not have one native line and one sent model"
 echo "(31): the version 2 client's model (2 menus, 5 entries) and its name reached the server; client log $(tlog | grep -aoE 'c31-[0-9]+-[0-9]+-[0-9]+' | tail -n 1)"
+
+# ── 판정 32 · 33 · 34: 펼친 메뉴 — 키 · 닫기 · 포인터(TK-M5 단계 C, plan 확정 8 · 9 · 11 · 12 · 15) ───────────────────────
+# 셸만 남은 자리다(판정 31 끝). `--menu` 창 하나로 셋을 본다. 좌표는 menubar_test의 셈 그대로 — File의 드롭다운은 제목 칸 x 124에서
+# y 20부터 104 × 40(Open 행 y 20..36 · 구분선 행 36..44의 가운데 y 40 · Quit 행 44..60), 레이블은 x 132, 단축키 `Cmd+O`는 오른쪽 한 칸 안쪽
+# x 180..220. Edit의 것은 x 172, 104 × 32(Copy 20..36 · 한글 36..52, 레이블 x 180). 색: 바탕 MENU_BG 283448 · 강조 MENU_HL_BG 305c9c ·
+# 글 MENU_FG d0d8e0 · 비활성 MENU_DIM 687484 · 구분선 MENU_SEP 485468. 포인터는 판정 27의 (200, 200)에 있다 — 드롭다운 밖이다.
+#
+# 32(키): Cmd+Shift+/ → `menu> open id=ID menu=0`(첫 고를 칸 Open 강조), 화면의 칸 · 색. `↓`는 구분선과 비활성 Quit을 건너뛰어 Open으로
+# 돌아온다(`menu> move menu=0 item=0`). `→` → Edit(item=0), 화면, `↓` → 한글(item=1), Enter → `menu> activate id=ID item=4` ·
+# `menu> close … why=pick`, 클라이언트 `menu activated id=4`. 그동안 창에 수정키가 아닌 키(53 · 방향키 넷 · Enter 28)가 안 갔다.
+echo "=== (32) the menu opens on Cmd+Shift+/ and the arrows, Enter and the shortcut column work ==="
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size --menu > /tmp/wl13.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(32) the menu client did not open as a column"
+DROP_ID="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+wait_for_log "terminal: menu> bar id=${DROP_ID} name=tars-wl-test titles=File,Edit" || report_failure "(32) no bar for the menu window"
+sleep 0.5
+SHOT33A="${SCREENS_DIR}/menu-closed.ppm"
+screendump "$SHOT33A" || report_failure "(33) screendump did not write ${SHOT33A}"
+type_keys alt-shift-slash
+wait_for_log "terminal: menu> open id=${DROP_ID} menu=0" || report_failure "(32) Cmd+Shift+/ did not open the first menu"
+wait_for_log "terminal: menu> drop id=${DROP_ID} menu=0 hl=0 rect=124,20 104x40 " || report_failure "(32) no 'menu> drop … menu=0 hl=0 rect=124,20 104x40'"
+sleep 0.5
+SHOT32F="${SCREENS_DIR}/menu-file.ppm"
+screendump "$SHOT32F" || report_failure "(32) screendump did not write ${SHOT32F}"
+want_box_bg() {
+  local what="$1" got
+  got="$(ppm_ink "$SHOT32F" "$2" "$3" "$4" "$5")"
+  case "$got" in "bg=$6 "*) ;; *) report_failure "(32) ${what} (${2},${3} ${4}x${5}) is not mostly $6 (${got})" ;; esac
+}
+want_box_bg "the open title's box" 124 0 48 20 305c9c
+want_box_bg "the Open row" 124 20 104 16 305c9c
+want_box_bg "the Quit row" 124 44 104 16 283448
+F_SEP="$(ppm_count "$SHOT32F" 132 40 88 1 485468)"
+F_DIM="$(ppm_count "$SHOT32F" 124 44 104 16 687484)"
+F_LABEL="$(ppm_count "$SHOT32F" 132 20 32 16 d0d8e0)"
+F_GAP="$(ppm_count "$SHOT32F" 164 20 16 16 d0d8e0)"
+F_KEY="$(ppm_count "$SHOT32F" 180 20 40 16 d0d8e0)"
+F_EDGE="$(ppm_count "$SHOT32F" 220 20 8 16 d0d8e0)"
+F_ALL="$(ppm_count "$SHOT32F" 124 20 104 40 d0d8e0)"
+D_FG="$(tlog | tr -d '\r' | grep -a "terminal: menu> drop id=${DROP_ID} menu=0 hl=0 " | tail -n 1 | sed -E 's/.* fg=([0-9]+).*/\1/')"
+echo "(32) File: separator ${F_SEP}/88, Quit dim ${F_DIM}, Open ${F_LABEL}, gap ${F_GAP}, Cmd+O ${F_KEY}, right edge ${F_EDGE}, all fg ${F_ALL} (dump ${D_FG})"
+[ "$F_SEP" = "88" ] || report_failure "(32) the separator line at y 40 is not 88 px of 485468 (${F_SEP})"
+[ "${F_DIM:-0}" -gt 0 ] || report_failure "(32) the disabled Quit has no 687484 ink"
+[ "${F_LABEL:-0}" -gt 0 ] && [ "${F_KEY:-0}" -gt 0 ] && [ "$F_GAP" = "0" ] && [ "$F_EDGE" = "0" ] ||
+  report_failure "(32) Open and Cmd+O are not at x 132 and right-aligned at 180..220 (label ${F_LABEL}, gap ${F_GAP}, key ${F_KEY}, edge ${F_EDGE})"
+[ "$F_ALL" = "$((F_LABEL + F_KEY))" ] && [ "$F_ALL" = "$D_FG" ] || report_failure "(32) the dropdown's d0d8e0 ink ${F_ALL} is not Open + Cmd+O (${F_LABEL} + ${F_KEY}) and the dump (${D_FG})"
+type_keys down
+wait_for_log 'terminal: menu> move menu=0 item=0' || report_failure "(32) down did not come back to Open past the separator and the disabled Quit"
+type_keys right
+wait_for_log 'terminal: menu> move menu=1 item=0' || report_failure "(32) right did not move to Edit"
+wait_for_log "terminal: menu> drop id=${DROP_ID} menu=1 hl=0 rect=172,20 104x32 " || report_failure "(32) no 'menu> drop … menu=1 hl=0 rect=172,20 104x32'"
+sleep 0.5
+SHOT32E="${SCREENS_DIR}/menu-edit.ppm"
+screendump "$SHOT32E" || report_failure "(32) screendump did not write ${SHOT32E}"
+got="$(ppm_ink "$SHOT32E" 172 0 48 20)"
+case "$got" in "bg=305c9c "*) ;; *) report_failure "(32) the Edit title's box is not mostly 305c9c (${got})" ;; esac
+E_HANGUL="$(ppm_count "$SHOT32E" 180 36 32 16 d0d8e0)"
+E_FILE_GONE="$(ppm_count "$SHOT32E" 124 40 48 20 283448)"
+echo "(32) Edit: 한글 row ink ${E_HANGUL}, File's dropdown left behind ${E_FILE_GONE}"
+[ "${E_HANGUL:-0}" -gt 0 ] || report_failure "(32) the 한글 item has no ink at x 180, y 36"
+[ "$E_FILE_GONE" = "0" ] || report_failure "(32) File's dropdown was left on the screen after moving to Edit (${E_FILE_GONE} px)"
+type_keys down
+wait_for_log 'terminal: menu> move menu=1 item=1' || report_failure "(32) down did not move to 한글"
+type_keys ret
+wait_for_log "terminal: menu> activate id=${DROP_ID} item=4" || report_failure "(32) Enter did not activate item 4"
+wait_for_log "terminal: menu> close id=${DROP_ID} why=pick" || report_failure "(32) the menu did not close after the pick"
+[ "$(count_log "terminal: wl> key code=(53|103|105|106|108|28) state=1 to=${DROP_ID}([^0-9]|$)")" -eq 0 ] ||
+  report_failure "(32) a key the menu ate (Cmd+Shift+/, an arrow or Enter) also reached the window"
+echo "(32): the menu opened on Cmd+Shift+/, skipped the separator and Quit, moved to Edit, picked 한글 as item 4"
+
+# 33(닫기): 다시 열고 Esc → `menu> close … why=esc`, 드롭다운과 열린 제목 칸 자리가 연 적 없던 화면과 같다(통째 프레임으로 되살림).
+echo "=== (33) Esc closes the menu and the screen under it comes back ==="
+OPENS="$(count_log "terminal: menu> open id=${DROP_ID} ")"
+type_keys alt-shift-slash
+wait_for_count "terminal: menu> open id=${DROP_ID} " $((OPENS + 1)) || report_failure "(33) Cmd+Shift+/ did not open the menu again"
+type_keys esc
+wait_for_log "terminal: menu> close id=${DROP_ID} why=esc" || report_failure "(33) Esc did not close the menu"
+sleep 0.5
+SHOT33B="${SCREENS_DIR}/menu-closed-again.ppm"
+screendump "$SHOT33B" || report_failure "(33) screendump did not write ${SHOT33B}"
+before="$(ppm_ink "$SHOT33A" 0 0 260 60)"
+after="$(ppm_ink "$SHOT33B" 0 0 260 60)"
+left="$(( $(ppm_count "$SHOT33B" 0 0 1280 60 283448) + $(ppm_count "$SHOT33B" 0 0 1280 60 305c9c) ))"
+echo "(33) the box under the menu: before ${before}, after ${after}, menu colours left ${left}"
+[ "$before" = "$after" ] && [ "$left" = "0" ] || report_failure "(33) after Esc the screen under the menu is not what it was (${before} -> ${after}, ${left} menu px)"
+echo "(33): Esc closed the menu and the screen under it came back"
+
+# 34(포인터): 바의 File 제목을 누르면 열린다(강조 없음), Open 행 위로 옮기면 강조, 누르면 activate(item=1). 다시 열고 창 위를 누르면
+# 닫기만 한다(`why=click`) — 그 누름은 창에 안 간다(`wl> button id=ID` 0, 이 창은 처음부터 끝까지 누름을 하나도 안 받는다).
+echo "=== (34) the pointer opens a menu on its title, picks an item, and a click outside only closes ==="
+move_to 140 10 || report_failure "(34) the pointer did not reach 140,10 (last at: $(last_at))"
+OPENS="$(count_log "terminal: menu> open id=${DROP_ID} ")"
+hmp "mouse_button 1"
+hmp "mouse_button 0"
+wait_for_count "terminal: menu> open id=${DROP_ID} menu=0" $((OPENS + 1)) || report_failure "(34) a click on File did not open it"
+HOVERS="$(count_log "terminal: menu> drop id=${DROP_ID} menu=0 hl=0 ")"
+move_to 140 28 || report_failure "(34) the pointer did not reach 140,28"
+wait_for_count "terminal: menu> drop id=${DROP_ID} menu=0 hl=0 " $((HOVERS + 1)) || report_failure "(34) hovering Open did not highlight it"
+hmp "mouse_button 1"
+hmp "mouse_button 0"
+wait_for_log "terminal: menu> activate id=${DROP_ID} item=1" || report_failure "(34) a click on Open did not activate item 1"
+move_to 140 10 || report_failure "(34) the pointer did not come back to 140,10"
+OPENS="$(count_log "terminal: menu> open id=${DROP_ID} ")"
+hmp "mouse_button 1"
+hmp "mouse_button 0"
+wait_for_count "terminal: menu> open id=${DROP_ID} " $((OPENS + 1)) || report_failure "(34) a second click on File did not open it"
+move_to 900 300 || report_failure "(34) the pointer did not reach 900,300"
+hmp "mouse_button 1"
+hmp "mouse_button 0"
+wait_for_log "terminal: menu> close id=${DROP_ID} why=click" || report_failure "(34) a click outside did not close the menu"
+sleep 0.5
+[ "$(count_log "terminal: wl> button id=${DROP_ID} ")" -eq 0 ] || report_failure "(34) a click the menu ate reached the window"
+echo "(34): a click on File opened it, Open was highlighted under the pointer and picked, a click on the window only closed the menu"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${DROP_ID} ws=1 slot=1" || report_failure "(34) Cmd+Q did not close the menu window"
+type_text 'echo c32-(grep -c menu.activated.id.4 /tmp/wl13.log)-(grep -c menu.activated.id.1 /tmp/wl13.log)-(grep -c menu.activated /tmp/wl13.log)'
+type_keys ret
+wait_for_screen '\| c32-1-1-2' || report_failure "(32 · 34) the client did not get exactly 'activated 4' (key) and 'activated 1' (pointer)"
 
 # ── 판정 35: 이름만 — 메뉴 모델이 없는 창(TK-M5 단계 B, plan 확정 2 · 15) ──────────────────────────────────────────
 # 셸만 남은 자리다(판정 31 끝). 기본 창(호환 모드 — tars_menu_v1을 bind하지 않는다)은 모델이 없어 바에 이름만: `menu> bar id=ID name=tars-wl-test
@@ -893,9 +1016,43 @@ A_FG="$(ppm_count "$SHOT35" 0 0 1280 20 d0d8e0)"
 echo "(35) dump name=$(bar_ink name) fg=$(bar_ink fg); screen name box ${S_NAME}, band name ${A_NAME} fg ${A_FG}"
 [ "${S_NAME:-0}" -gt 0 ] && [ "$S_NAME" = "$(bar_ink name)" ] && [ "$A_NAME" = "$S_NAME" ] && [ "$A_FG" = "0" ] && [ "$(bar_ink fg)" = "0" ] ||
   report_failure "(35) the name-only bar is not the name's ink alone (box ${S_NAME}, band ${A_NAME}, fg ${A_FG})"
+# 단계 C — 모델이 없는 창에서 여는 키는 아무 일도 없다(열리지 않고, 표의 chord라 창에도 안 간다).
+OPENS="$(count_log 'terminal: menu> open ')"
+type_keys alt-shift-slash
+sleep 0.5
+[ "$(count_log 'terminal: menu> open ')" -eq "$OPENS" ] || report_failure "(35) Cmd+Shift+/ opened a menu in a window without a model"
+[ "$(count_log "terminal: wl> key code=53 state=1 to=${NAME_ID}([^0-9]|$)")" -eq 0 ] || report_failure "(35) Cmd+Shift+/ reached the compat window"
 type_keys alt-q
 wait_for_log "terminal: wl> unmap id=${NAME_ID} ws=1 slot=1" || report_failure "(35) Cmd+Q did not close the compat window"
-echo "(35): the compat window's bar is its name alone"
+echo "(35): the compat window's bar is its name alone and Cmd+Shift+/ does nothing there"
+
+# ── 판정 36: 조합 중에 열면 먼저 확정한다(TK-M5 단계 C, plan 확정 10 · 15) ──────────────────────────────────────────
+# 셸만 남은 자리다(판정 35 끝). `--text-input --menu` 창에서 한글로 `m f s`(조합 `한`) 뒤 Cmd+Shift+/ → `wl> ime to=ID commit=한 preedit=(none)`가
+# `menu> open id=ID`보다 앞이다(확정이 연 것보다 먼저 창에 간다). Esc로 닫고 끝낸다.
+echo "=== (36) opening the menu while composing commits the composition first ==="
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size --text-input --menu > /tmp/wl14.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(36) the client did not open as a column"
+IM_ID="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+wait_for_log "terminal: wl> ti enable to=${IM_ID}([^0-9]|$)" || report_failure "(36) the window did not enable its text input"
+if tlog | tr -d '\r' | grep -aoE 'terminal: hangul> on=(true|false)' | tail -n 1 | grep -a 'on=false' > /dev/null; then
+  ONS="$(count_log 'terminal: hangul> on=true')"
+  type_keys shift-spc
+  wait_for_count 'terminal: hangul> on=true' $((ONS + 1)) || report_failure "(36) Shift+Space did not turn hangul on"
+fi
+type_keys m f s
+wait_for_log "terminal: wl> ime to=${IM_ID} commit=\(none\) preedit=한" || report_failure "(36) m f s did not compose 한"
+type_keys alt-shift-slash
+wait_for_log "terminal: menu> open id=${IM_ID} menu=0" || report_failure "(36) Cmd+Shift+/ did not open the menu"
+ORDER="$(tlog | tr -d '\r' | grep -aE "terminal: (wl> ime to=${IM_ID} commit=한 preedit=\(none\)|menu> open id=${IM_ID} )" | sed -E 's/.*(ime|open).*/\1/' | tr '\n' ' ')"
+echo "(36) order: ${ORDER}"
+[ "$ORDER" = "ime open " ] || report_failure "(36) the commit of 한 did not come before the menu opened (${ORDER})"
+type_keys esc
+wait_for_log "terminal: menu> close id=${IM_ID} why=esc" || report_failure "(36) Esc did not close the menu"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${IM_ID} ws=1 slot=1" || report_failure "(36) Cmd+Q did not close the window"
+echo "(36): 한 was committed to the window before the menu opened"
 
 # ── 판정 9: render verify ───────────────────────────────────────────────
 #

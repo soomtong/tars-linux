@@ -264,6 +264,11 @@ pub const Context = struct {
     /// 돌고(`imeKey`), 거짓이면 키 길이 WY-M4와 같다(`appKey`). `main.zig`가 읽는 순간의 서버 값(`imeActive`)을 싣는다.
     ime: bool = false,
 
+    /// 키보드 포커스 창의 메뉴가 열려 있는가(TK-M5 단계 C, plan 확정 9). `readKeysApp`만 본다 — 참이면 수정키가 아닌 누름을
+    /// 메뉴가 먹고(`menuKey`) 한글 층을 안 지난다. 수정키는 지금처럼 창으로 간다(Cmd를 쥔 채 열고 메뉴 안에서 떼도 창이 Cmd를
+    /// 놓친 채 남지 않게).
+    menu: bool = false,
+
     /// 이 배치가 어느 키보드 칸에서 왔는가(DM design 결정 5). `readKeys` 한 번은 fd
     /// 하나를 읽으므로 배치의 모든 이벤트가 같은 칸이다. `main.zig`의 키보드 칸
     /// 번호(`readKeyboards`의 `ki`)를 그대로 싣는다. 기본값 0이라 칸을 모르는 단위
@@ -420,6 +425,23 @@ pub const Pane = enum {
     /// `Cmd+Q` — 앞의 app 워크스페이스 창에 `xdg_toplevel.close`(WY design 결정 12, 요구사항 결정 3). 셸 워크스페이스에서는
     /// 아무것도 안 한다 — 삼킨다. 맨 끝인 이유는 `fullscreen_toggle`과 같다.
     close_app,
+    /// `Cmd+Shift+/`(= `Cmd+?`) — 포커스 창의 메뉴 바를 연다(TK-M5, TK design 결정 16 · plan 확정 9). 모델이 없거나 셸 pane이면
+    /// 아무 일도 없다 — 삼킨다. 맨 끝인 이유는 `fullscreen_toggle`과 같다.
+    menu_open,
+};
+
+/// 메뉴가 열린 동안의 키 하나(TK-M5 단계 C, plan 확정 9). `main.zig`가 순서대로 처리한다.
+pub const MenuKey = enum {
+    /// `←` `→` — 옆 메뉴(끝에서 돌아간다).
+    left,
+    right,
+    /// `↑` `↓` — 고를 수 있는 항목(구분선 · 비활성 건너뜀, 끝에서 돌아간다).
+    up,
+    down,
+    /// Enter — 강조한 항목을 고른다(`activated`). 비활성이거나 강조가 없으면 아무것도.
+    pick,
+    /// Esc — 닫는다.
+    close,
 };
 
 /// app 워크스페이스에서 키 하나가 만드는 것(WY-M0, design 결정 11). 셸의 `Action`과 따로인 것은 목적지가 다르기
@@ -430,6 +452,8 @@ pub const AppAction = union(enum) {
     /// R-KEY-1 표의 chord — compositor가 먹는다.
     pane: Pane,
     brightness: Brightness,
+    /// 메뉴가 열린 동안의 키(TK-M5) — compositor가 먹는다.
+    menu: MenuKey,
     /// 아무것도 안 나간다(자동 반복 · 밝기 키의 뗌).
     none,
 };
@@ -476,6 +500,8 @@ pub const AppKeys = struct {
     /// 클라이언트로 갈 것(키와 IME, WY-M5)을 순서대로.
     keys: []const AppOut,
     panes: []const Pane,
+    /// 메뉴가 연 동안의 키(TK-M5). `ctx.menu`가 거짓이면 늘 비었다.
+    menu: []const MenuKey = &.{},
     brightness: i32 = 0,
     /// 한/영이나 조합이 바뀌었다(WY-M5) — 상태 줄과 `hangul>` 줄. 텍스트 입력을 켠 창에서만 켜진다.
     redraw: bool = false,
@@ -813,6 +839,9 @@ pub const State = struct {
     ///
     /// WY-M5: 키와 IME가 한 줄이다(`AppOut`). 키 하나가 IME 하나와 키 하나를 낼 수 있어(확정 + Enter) 128이다.
     app_keys: [128]AppOut = undefined,
+
+    /// 한 번의 read에서 나온 메뉴 키의 저장소(TK-M5). 한 read가 이벤트 64개까지라 넘칠 일이 없다.
+    menu_keys: [64]MenuKey = undefined,
 
     /// 한글을 치는 중인가(HI design 결정 5). `Mode`에 넣지 않는다 —
     /// `Mode`는 normal·copy·find인데 한/영은 그것과 독립이고, copy mode에
@@ -1374,6 +1403,8 @@ pub const State = struct {
         // 되는 식으로 Shift가 조용히 무시된다.
         if (self.shifted()) return switch (code) {
             c.KEY_D => .split_below,
+            // 메뉴 바 열기(TK-M5, plan 확정 9). `/`의 Shift는 `?` — macOS에서 Help 메뉴의 검색이 메뉴 바를 여는 키다.
+            c.KEY_SLASH => .menu_open,
             else => null,
         };
         // Cmd+Option(WP-M3, design 위험 6이 예고한 자리). Shift와 같은
@@ -1930,6 +1961,49 @@ pub const State = struct {
         return .{ .key = .{ .code = code, .pressed = down, .mods = self.appMods() } };
     }
 
+    /// 메뉴가 열린 창의 EV_KEY 하나(TK-M5 단계 C, plan 확정 9). `appKey`의 짝이다.
+    ///
+    /// 1. 수정키 비트 · 맞바꿈 · 밝기는 `appKey`와 같고, 수정키의 누름 · 뗌은 지금처럼 창으로 간다.
+    /// 2. 수정키가 아닌 누름은 메뉴가 먹는다 — 방향키 넷 · Enter · Esc는 메뉴 키, 그 밖은 버린다. 한글 층을 안 지나고 tap도 안 본다.
+    ///    표의 chord(`Cmd+1` · `Cmd+[` 등)는 그대로 `.pane`이다 — `main.zig`가 메뉴를 닫고 평소대로 한다.
+    /// 3. 뗌과 자동 반복은 아무것도 아니다. 서버는 누름을 보낸 키의 뗌만 보내므로(`Held`) 메뉴가 먹은 누름의 뗌은 창에 안 간다.
+    pub fn menuKey(self: *State, raw_code: u16, value: i32, ctx: Context) AppAction {
+        const code = if (ctx.swap_alt_meta) swapAltMeta(raw_code) else raw_code;
+        const dev: usize = ctx.device;
+        std.debug.assert(dev < MAX_KEYBOARDS);
+        const mods = &self.mods[dev];
+        if (brightnessKey(code, ctx)) |dir| return if (value != 0) .{ .brightness = dir } else .none;
+        const down = value != 0;
+        var modifier = true;
+        switch (code) {
+            c.KEY_LEFTSHIFT => mods.shift_left = down,
+            c.KEY_RIGHTSHIFT => mods.shift_right = down,
+            c.KEY_LEFTCTRL => mods.ctrl_left = down,
+            c.KEY_RIGHTCTRL => mods.ctrl_right = down,
+            c.KEY_LEFTALT => mods.alt_left = down,
+            c.KEY_RIGHTALT => mods.alt_right = down,
+            c.KEY_LEFTMETA => mods.meta_left = down,
+            c.KEY_RIGHTMETA => mods.meta_right = down,
+            c.KEY_CAPSLOCK => if (value == 1) {
+                self.caps_lock = !self.caps_lock;
+            },
+            else => modifier = false,
+        }
+        if (value == 2) return .none;
+        if (modifier) return .{ .key = .{ .code = code, .pressed = down, .mods = self.appMods() } };
+        if (value == 0) return .none;
+        if (self.metaed()) if (self.tableChord(code)) |p| return .{ .pane = p };
+        return switch (code) {
+            c.KEY_LEFT => .{ .menu = .left },
+            c.KEY_RIGHT => .{ .menu = .right },
+            c.KEY_UP => .{ .menu = .up },
+            c.KEY_DOWN => .{ .menu = .down },
+            c.KEY_ENTER, c.KEY_KPENTER => .{ .menu = .pick },
+            c.KEY_ESC => .{ .menu = .close },
+            else => .none,
+        };
+    }
+
     /// 지금 클라이언트가 볼 수정키(`AppMods`). 칸들의 OR다(`anyMods`).
     pub fn appMods(self: State) AppMods {
         return .{
@@ -2272,7 +2346,7 @@ pub fn readKeysApp(self: *State, fd: c_int, ctx: Context) AppKeys {
     // 텍스트 입력을 켠 창이면(WY-M5, design 결정 40) tap을 배치 사이에 들고 간다 — 셸과 같은 한/영이다. 리셋은 키보드
     // 포커스가 셸 ↔ 앱으로 바뀔 때(`resetTaps`, 결정 42). 켜지 않은 창은 WY-M4 그대로 배치마다 버린다. 그 창에 남은 앱
     // 조합은 받을 곳이 없어 버린다(창이 텍스트 입력을 껐다).
-    if (ctx.ime) {
+    if (ctx.ime and !ctx.menu) {
         self.hangul_owner = .app;
     } else {
         self.taps = @splat(.{});
@@ -2282,13 +2356,14 @@ pub fn readKeysApp(self: *State, fd: c_int, ctx: Context) AppKeys {
     const count = @as(usize, @intCast(n)) / ev_size;
     var keyed: usize = 0;
     var paned: usize = 0;
+    var menued: usize = 0;
     var bright: i32 = 0;
     var redraw = false;
     var i: usize = 0;
     while (i < count) : (i += 1) {
         const ev: *align(1) const c.struct_input_event = @ptrCast(&raw[i * ev_size]);
         if (ev.type != c.EV_KEY or ev.code >= c.BTN_MISC) continue;
-        const step: State.ImeStep = if (ctx.ime) blk: {
+        const step: State.ImeStep = if (ctx.menu) .{ .then = self.menuKey(ev.code, ev.value, ctx) } else if (ctx.ime) blk: {
             const was_on = self.hangul_on;
             const st = self.imeKey(ev.code, ev.value, eventMicros(ev), ctx);
             if (self.hangul_on != was_on or st.ime != null) redraw = true;
@@ -2308,12 +2383,17 @@ pub fn readKeysApp(self: *State, fd: c_int, ctx: Context) AppKeys {
                 paned += 1;
             },
             .brightness => |dir| bright += if (dir == .up) 1 else -1,
+            .menu => |m| if (menued < self.menu_keys.len) {
+                self.menu_keys[menued] = m;
+                menued += 1;
+            },
             .none => {},
         }
     }
     return .{
         .keys = self.app_keys[0..keyed],
         .panes = self.panes[0..paned],
+        .menu = self.menu_keys[0..menued],
         .brightness = bright,
         .redraw = redraw,
     };

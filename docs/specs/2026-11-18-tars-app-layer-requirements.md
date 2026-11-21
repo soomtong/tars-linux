@@ -237,6 +237,7 @@ app pane에서 `Cmd+Shift+C`(copy mode)는 아무 일도 하지 않는다.
 | `Cmd+R` | column 폭 preset 순환 | 새 키 |
 | `Cmd+Ctrl+F` | 풀스크린 | FU의 키. 결정 1 |
 | `Ctrl+Cmd+Backspace` | DY 탈출 | 그대로 |
+| `Cmd+Shift+/` | 포커스 창의 메뉴 바 열기 | 새 키(TK design 결정 16). 모델이 없는 창 · 셸 pane에서는 삼킨다 |
 
   copy mode · 클립보드 · 한/영의 키는 지금 design의 것 그대로이고 이 표에 다시
   적지 않는다.

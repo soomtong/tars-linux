@@ -405,7 +405,7 @@ echo "boot A: the partial frame is on the physical screen, 4 x ${LOGICAL} ink, 0
 # 크기)과 끝의 `bs=2`. 그 사각형(`pane>` 줄)이 물리 1픽셀 바둑판이면 그림자를 거치지 않았다(거치면 솎인 한 색이다 —
 # 단계 A의 화면). 2 × 2 블록 검사는 0이 아니어야 한다(늘린 그림이 아니다).
 echo "=== boot A (6): a buffer-scale-2 window is drawn 1:1 on the physical screen ==="
-type_text "tars-wl-test --buffer-scale 2 --checker --follow-size --color ${WL_COLOR^^} > /tmp/hs6.log &"
+type_text "tars-wl-test --buffer-scale 2 --checker --follow-size --menu --color ${WL_COLOR^^} > /tmp/hs6.log &"
 type_keys ret
 wait_for_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1' || report_failure "(6) the window did not open as a column (no 'wl> column … slot=1 ws=1')"
 ID6="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+' | tail -n 1 | sed 's/.*id=//')"
@@ -461,6 +461,40 @@ screendump "$SHOT7B" || report_failure "(7b) screendump did not write ${SHOT7B}"
 BAD="$(ppm_checker "$SHOT7B" 1 "$WL_COLOR" "$X0" "$Y0" "$X1" "$Y1")"
 [ "$BAD" = "0" ] || report_failure "(7b) the widened window (${X0},${Y0})-(${X1},${Y1}) is not 1:1 (${BAD} pixels off)"
 echo "(7b): Cmd+R gave 1400x848, the new 2800x1696 buffer fills (${X0},${Y0})-(${X1},${Y1}) 1:1"
+
+# (b2) 펼친 메뉴(TK-M5 단계 C, plan 확정 8). 창은 `--menu`라 바에 File · Edit이 있다. Cmd+Shift+/로 연 드롭다운은 그 넓힌 창 위에
+#     오는데, 물리 합성(buffer_scale 2)이 창을 옮긴 뒤 `presentComposed`가 드롭다운 자리를 그림자에서 다시 늘린다 — 그 사각형이 2 × 2
+#     블록이고 MENU_BG(283448)가 있으며, 드롭다운 오른쪽의 창은 1:1 그대로다. Esc로 닫으면(통째 프레임) 창 전체가 다시 1:1이다.
+echo "=== boot A (7b2): a menu over the buffer-scale-2 window is 2x2 blocks, and the window comes back 1:1 ==="
+type_keys alt-shift-slash
+wait_for_log "terminal: menu> open id=${ID6} menu=0" || report_failure "(7b2) Cmd+Shift+/ did not open the menu over the window"
+wait_for_log "terminal: menu> drop id=${ID6} menu=0 hl=0 rect=" || report_failure "(7b2) no 'menu> drop id=${ID6}' line"
+read -r MX MY MW MH < <(tlog | tr -d '\r' | grep -aoE "terminal: menu> drop id=${ID6} menu=0 hl=0 rect=[0-9]+,[0-9]+ [0-9]+x[0-9]+" | tail -n 1 |
+  sed -E 's/.*rect=([0-9]+),([0-9]+) ([0-9]+)x([0-9]+)$/\1 \2 \3 \4/')
+sleep 1
+SHOT7M="${SCREENS_DIR}/bs2-menu.ppm"
+screendump "$SHOT7M" || report_failure "(7b2) screendump did not write ${SHOT7M}"
+PX0=$(( 2 * MX )); PY0=$(( 2 * MY )); PX1=$(( 2 * (MX + MW) )); PY1=$(( 2 * (MY + MH) ))
+BLK="$(ppm_blocks "$SHOT7M" 2 "$PX0" "$PY0" "$PX1" "$PY1")"
+BG="$(perl -e '
+  my ($f, $x0, $y0, $x1, $y1) = @ARGV;
+  open(my $fh, "<:raw", $f) or die; local $/; my $d = <$fh>;
+  $d =~ s/\AP6\s+(\d+)\s+\d+\s+\d+\s//s or die; my $row = $1 * 3; my $n = 0;
+  for my $y ($y0 .. $y1 - 1) { for my $x ($x0 .. $x1 - 1) { $n++ if unpack("H6", substr($d, $y * $row + $x * 3, 3)) eq "283448"; } }
+  print "$n\n";' "$SHOT7M" "$PX0" "$PY0" "$PX1" "$PY1")"
+BAD="$(ppm_checker "$SHOT7M" 1 "$WL_COLOR" "$PX1" "$Y0" "$X1" "$Y1")"
+echo "(7b2): menu rect ${MX},${MY} ${MW}x${MH} -> physical (${PX0},${PY0})-(${PX1},${PY1}): ${BLK} 2x2 mismatches, ${BG} px of 283448; window right of it ${BAD} off"
+[ "$BLK" = "0" ] || report_failure "(7b2) the menu over the window is not 2x2 blocks (${BLK} mismatches) — the physical window covered it"
+[ "${BG:-0}" -gt 0 ] || report_failure "(7b2) the menu's background 283448 is not on the physical screen"
+[ "$BAD" = "0" ] || report_failure "(7b2) the window right of the menu is not 1:1 (${BAD} pixels off)"
+type_keys esc
+wait_for_log "terminal: menu> close id=${ID6} why=esc" || report_failure "(7b2) Esc did not close the menu"
+sleep 1
+SHOT7N="${SCREENS_DIR}/bs2-menu-closed.ppm"
+screendump "$SHOT7N" || report_failure "(7b2) screendump did not write ${SHOT7N}"
+BAD="$(ppm_checker "$SHOT7N" 1 "$WL_COLOR" "$X0" "$Y0" "$X1" "$Y1")"
+[ "$BAD" = "0" ] || report_failure "(7b2) after Esc the window is not 1:1 again (${BAD} pixels off)"
+echo "(7b2): Esc closed the menu and the whole window is 1:1 again"
 
 # (c) 포인터를 창 위로 옮긴다. 화살표(커서를 숨기지 않은 창)는 terminal이 그리고, 화살표만 옮기는 바퀴는 그 상자만 늘린다 —
 #     물리 합성이 그 상자를 창에서 다시 옮기고 화살표의 불투명 픽셀만 다시 찍는다. 그래서 화살표 상자(논리 12 × 19 → 물리

@@ -742,6 +742,8 @@ const BarLine = struct {
     id: ?u32 = null,
     name: []const u8 = "",
     menu: ?wls.MenuView = null,
+    /// 열린 메뉴의 번호(TK-M5 단계 C) — 그 제목의 칸(`titleBox`)을 `MENU_HL_BG`로 칠한다.
+    open: ?u8 = null,
 };
 
 /// 마지막으로 본 바(`StatusMemo`와 같은 꼴). 바뀌었으면 띠를 다시 그리고 `menu> bar` 줄을 찍는다. 이름은 값으로 든다 — 서버의
@@ -753,11 +755,12 @@ const BarMemo = struct {
     name: [menubar.MAX_TEXT]u8 = undefined,
     name_len: usize = 0,
     generation: ?u32 = null,
+    open: ?u8 = null,
 
     fn changed(self: *const BarMemo, b: BarLine) bool {
         if (!self.seen) return true;
         const gen: ?u32 = if (b.menu) |m| m.generation else null;
-        return self.hidden != b.hidden or self.id != b.id or self.generation != gen or
+        return self.hidden != b.hidden or self.id != b.id or self.generation != gen or self.open != b.open or
             !std.mem.eql(u8, self.name[0..self.name_len], b.name);
     }
 
@@ -765,12 +768,25 @@ const BarMemo = struct {
         self.seen = true;
         self.hidden = b.hidden;
         self.id = b.id;
+        self.open = b.open;
         self.generation = if (b.menu) |m| m.generation else null;
         const n = @min(b.name.len, self.name.len);
         @memcpy(self.name[0..n], b.name[0..n]);
         self.name_len = n;
     }
 };
+
+/// 펼친 메뉴의 상태(TK-M5 단계 C). `id`는 그 창, `m`은 메뉴 번호, `hl`은 강조한 칸(메뉴 안 번호), `generation`은 연 때의 모델 세대
+/// (앱이 모델을 다시 commit하면 닫는다 — plan 확정 12).
+const MenuOpen = struct {
+    id: u32,
+    m: u8,
+    hl: ?u8,
+    generation: u32,
+};
+
+/// `menu> draw` 줄의 상한(갈래마다) — 실측 4 · 5의 몇 번만.
+const MENU_DRAW_LINES: u8 = 8;
 
 /// 글자 하나의 칸 수 — `runWidth`와 같은 셈(`cell_width / CELL_W`, 적어도 1)이라 배치와 그리기가 맞는다. 굽다 실패하면 1칸.
 fn barCells(ctx: *const anyopaque, cp: u21) u8 {
@@ -800,6 +816,11 @@ fn renderBarBand(fb: drm.Framebuffer, cache: *font.Cache, b: BarLine) !void {
     _ = try drawRun(fb, cache, bar.name, menubar.TEXT_Y, theme.MENU_NAME, (bar.name_span.x - grid_origin.x) / CELL_W, fb.width);
     const model = (b.menu orelse return).model;
     for (bar.titles[0..bar.count], 0..) |t, i| {
+        // 열린 제목의 칸(TK-M5 단계 C) — 띠 높이 전체라 아래의 드롭다운과 이어진다.
+        if (b.open == @as(u8, @intCast(i))) {
+            const box = bar.titleBox(@intCast(i));
+            fb.fillRect(box.x, 0, box.w, menubar.BAR_H, theme.MENU_HL_BG);
+        }
         _ = try drawRun(fb, cache, model.menus[i].title.get(), menubar.TEXT_Y, theme.MENU_FG, (t.x - grid_origin.x) / CELL_W, fb.width);
     }
 }
@@ -860,6 +881,95 @@ fn dumpBar(fb: drm.Framebuffer, cache: *font.Cache, b: BarLine, changed: bool) v
     logline.print("terminal: menu> bar ink name={d} fg={d} other={d}\n", .{ name_px, fg_px, other_px });
 }
 
+// ── 펼친 메뉴(TK-M5 단계 C, plan 확정 8) ────────────────────────────────
+//
+// 드롭다운은 "프레임의 마지막 그리기"다 — 열려 있는 동안 매 프레임 pane · 창 · 프롬프트 · 띠 · 바 뒤에 다시 그리고 그 사각형을 clip에
+// 넣는다. 아래의 부분 갱신(pane의 dirty 행 · 창의 `.part` blit)이 덮어도 그 프레임 안에서 다시 덮인다. 열기 · 닫기 · 메뉴 옮기기는
+// 통째 프레임이라 밑의 픽셀을 저장하지 않는다. 그림자는 app slot 사각형을 실제 fb에서 옮긴 뒤에 같은 함수로 그린다.
+
+/// 이 프레임의 펼친 메뉴 — 바(모델 · 열린 번호)와 강조 칸.
+const DropLine = struct {
+    bar: BarLine,
+    m: u8,
+    hl: ?u8,
+};
+
+const DropGeom = struct { bar: menubar.Bar, rect: menubar.Rect };
+
+fn dropGeom(fb: drm.Framebuffer, cache: *font.Cache, d: DropLine) DropGeom {
+    const bar = barLayout(fb, cache, d.bar);
+    const model = d.bar.menu.?.model;
+    return .{ .bar = bar, .rect = menubar.dropRect(barWidths(cache), model, &bar, d.m, fb.width, fb.height) };
+}
+
+/// 글을 픽셀 x에서 그린다(`drawRun`의 픽셀판). 드롭다운은 화면 오른쪽에서 밀리면 격자의 col에 안 맞는다. `max_x`를 넘는 글자는
+/// 안 그린다. 다음 x를 돌려준다.
+fn drawTextAt(fb: drm.Framebuffer, cache: *font.Cache, text: []const u8, x: u32, y: u32, fg: u32, max_x: u32) !u32 {
+    var view = std.unicode.Utf8View.init(text) catch return x;
+    var it = view.iterator();
+    var at = x;
+    while (it.nextCodepoint()) |cp| {
+        const glyph = try cache.find(cp);
+        if (at + glyph.cell_width > max_x) break;
+        drawGlyph(fb, glyph, at, y, fg);
+        at += @max(1, glyph.cell_width / CELL_W) * CELL_W;
+    }
+    return at;
+}
+
+/// 드롭다운 하나를 그린다 — 실제 경로와 그림자가 함께 지나는 한 곳. 바탕 `MENU_BG`, 강조 행 `MENU_HL_BG`, 레이블은 왼쪽 한 칸 안쪽,
+/// 단축키는 오른쪽 한 칸 안쪽에 맞춘다. 비활성 항목의 글은 `MENU_DIM`, 구분선은 가운데 1 px `MENU_SEP`(좌우 한 칸 안쪽).
+/// 사각형이 화면 아래에서 잘렸으면 그 아래 칸은 안 그린다.
+fn renderDrop(fb: drm.Framebuffer, cache: *font.Cache, d: DropLine) !menubar.Rect {
+    const g = dropGeom(fb, cache, d);
+    const r = g.rect;
+    const model = d.bar.menu.?.model;
+    fb.fillRect(r.x, r.y, r.w, r.h, theme.MENU_BG);
+    const bottom = r.y + r.h;
+    var buf: [menubar.SHORTCUT_MAX]u8 = undefined;
+    for (model.entriesOf(d.m), 0..) |*e, i| {
+        const y = r.y + menubar.entryTop(model, d.m, @intCast(i));
+        const h = menubar.entryHeight(e);
+        if (y + h > bottom) break;
+        if (e.kind == .separator) {
+            fb.fillRect(r.x + CELL_W, y + menubar.SEP_H / 2, r.w - 2 * CELL_W, 1, theme.MENU_SEP);
+            continue;
+        }
+        if (d.hl == @as(u8, @intCast(i))) fb.fillRect(r.x, y, r.w, h, theme.MENU_HL_BG);
+        const fg = if (e.disabled) theme.MENU_DIM else theme.MENU_FG;
+        const right = r.x + r.w - CELL_W;
+        _ = try drawTextAt(fb, cache, e.label.get(), r.x + CELL_W, y, fg, right);
+        const sc = menubar.shortcutText(e.mods, e.key, &buf);
+        if (sc.len > 0) _ = try drawTextAt(fb, cache, sc, right - @as(u32, @intCast(sc.len)) * CELL_W, y, fg, right);
+    }
+    return r;
+}
+
+/// `menu> drop` 줄(plan 확정 14) — 펼친 메뉴가 바뀐 프레임(열기 · 옮기기 · 강조)만.
+///
+///   terminal: menu> drop id=ID menu=M hl=I rect=X,Y WxH ink bg=N hl=N fg=N dim=N sep=N
+///
+/// 잉크는 그 사각형 안의 메뉴 색 다섯의 픽셀 수다(화살표가 위에 있으면 그만큼 빠진다).
+fn dumpDrop(fb: drm.Framebuffer, d: DropLine, r: menubar.Rect) void {
+    var n: [5]usize = @splat(0);
+    const colours = [_]u32{ theme.MENU_BG, theme.MENU_HL_BG, theme.MENU_FG, theme.MENU_DIM, theme.MENU_SEP };
+    var y = r.y;
+    while (y < r.y + r.h) : (y += 1) {
+        var x = r.x;
+        while (x < r.x + r.w) : (x += 1) {
+            const px = fb.getPixel(x, y) & 0x00FFFFFF;
+            for (colours, 0..) |colour, i| if (px == colour) {
+                n[i] += 1;
+            };
+        }
+    }
+    var hl: [8]u8 = undefined;
+    const hl_text = if (d.hl) |h| std.fmt.bufPrint(&hl, "{d}", .{h}) catch "-" else "-";
+    logline.print("terminal: menu> drop id={d} menu={d} hl={s} rect={d},{d} {d}x{d} ink bg={d} hl={d} fg={d} dim={d} sep={d}\n", .{
+        d.bar.id.?, d.m, hl_text, r.x, r.y, r.w, r.h, n[0], n[1], n[2], n[3], n[4],
+    });
+}
+
 /// 물리로 합성하는 창 하나(WY-M3 확정 7, design 결정 30) — 창 번호와 그 창이 놓인 논리 사각형(셸 프레임은 slot의
 /// `appArea`, app 프레임은 화면 전체). 화면 배율 > 1이고 buffer_scale > 1인 보이는 창만 든다.
 const PhysApp = struct { id: u32, area: wl_logic.Area };
@@ -885,7 +995,7 @@ const PhysList = struct {
 /// (2) 물리 합성: 목록의 창마다 clip과 겹친 자리만 버퍼에서 물리로 바로 옮긴다(1의 늘리기가 덮은 자리를 다시 쓴다 —
 /// 반대 순서면 늘리기가 창을 덮는다), (3) 화살표가 그 창과 겹치면 화살표의 불투명 픽셀만 물리에 다시 찍는다(2가 덮었다),
 /// (4) `flush`. 배율 1이거나 목록이 비면 1 · 2 · 3이 없고 HS 전과 같은 `present`다. 물리로 옮긴 픽셀 수를 돌려준다(실측 줄).
-fn presentComposed(fb: drm.Framebuffer, sprite: *const pointer.Sprite, srv: ?*wls.Server, phys: *const PhysList, clips: *const drm.ClipList) !u64 {
+fn presentComposed(fb: drm.Framebuffer, sprite: *const pointer.Sprite, srv: ?*wls.Server, phys: *const PhysList, clips: *const drm.ClipList, drop: ?wl_logic.Area) !u64 {
     const cs = clips.slice();
     // 바뀐 것이 하나도 없는 프레임(WY-M6 단계 B) — damage가 없는 commit(frame 콜백만 기다린 것)만 온 바퀴다. 내보낼 것이 없다.
     // `stage` · `flush`에 빈 목록은 "화면 전체"라(DIRTYFB의 관례) 그대로 넘기면 그림자 전체가 물리로 늘려져 물리로 합성한 창
@@ -906,6 +1016,18 @@ fn presentComposed(fb: drm.Framebuffer, sprite: *const pointer.Sprite, srv: ?*wl
                 px += @as(u64, hit.w) * hit.h * s2;
             }
         }
+        // 펼친 메뉴(TK-M5 단계 C, plan 확정 8)가 물리로 합성한 창 위에 있으면 2가 덮었다 — 그 겹침을 그림자에서 다시 늘린다.
+        // clip 안만이다(밖은 이번에 안 옮겼다). 화살표는 그 뒤라 메뉴 위에 남는다.
+        if (drop) |d| for (phys.slice()) |a| {
+            const over = wl_logic.intersect(a.area, d) orelse continue;
+            if (clips.whole) {
+                scale.upscale(fb.pixels, fb.pitch, fb.out, fb.out_pitch, .{ .x1 = over.x, .y1 = over.y, .x2 = over.x + over.w, .y2 = over.y + over.h }, fb.scale);
+            } else for (cs) |cl| {
+                const ca: wl_logic.Area = .{ .x = cl.x1, .y = cl.y1, .w = @as(u32, cl.x2) - cl.x1, .h = @as(u32, cl.y2) - cl.y1 };
+                const hit = wl_logic.intersect(over, ca) orelse continue;
+                scale.upscale(fb.pixels, fb.pitch, fb.out, fb.out_pitch, .{ .x1 = hit.x, .y1 = hit.y, .x2 = hit.x + hit.w, .y2 = hit.y + hit.h }, fb.scale);
+            }
+        };
         if (sprite.at) |at| {
             const box: wl_logic.Area = .{
                 .x = at.x,
@@ -939,6 +1061,8 @@ fn presentFrame(
     // 물리 합성(WY-M3). 서버가 없으면 null.
     srv: ?*wls.Server,
     phys: *const PhysList,
+    // 펼친 메뉴의 사각형(TK-M5 단계 C) — 물리 합성 창 위면 다시 늘린다.
+    drop: ?wl_logic.Area,
 ) !u64 {
     // 무엇보다 위에 그린다 — 프롬프트와 상태 줄 뒤, `present` 앞이다. 그래서
     // 아래 덤프들이 화살표 픽셀을 읽는다(design 결정 4가 받아들였다). 화살표가
@@ -947,7 +1071,7 @@ fn presentFrame(
         sprite.show(fb, s);
         clips.push(s.x, s.y, pointer.ARROW_W, pointer.ARROW_H);
     }
-    return presentComposed(fb, sprite, srv, phys, clips);
+    return presentComposed(fb, sprite, srv, phys, clips, drop);
 }
 
 /// 한 층의 이미지를 z 순으로 그린다. 산수는 전부 `image.zig`에 있다.
@@ -4509,6 +4633,18 @@ const App = struct {
     status_memo: StatusMemo = .{},
     /// 마지막으로 본 메뉴 바(TK-M5 단계 B).
     bar_memo: BarMemo = .{},
+    /// 펼친 메뉴(TK-M5 단계 C, plan 확정 8 · 9). 하나뿐이다 — 포커스 창의 것.
+    menu: ?MenuOpen = null,
+    /// 다음 프레임은 통째다 — 메뉴를 열었거나 닫았거나 옆 메뉴로 옮겼다(밑의 픽셀을 저장하지 않는다).
+    menu_full: bool = false,
+    /// 메뉴가 먹은 버튼 누름(비트 = `pointer.Button`) — 그 뗌도 먹는다.
+    menu_grab: u8 = 0,
+    /// 지난 프레임의 펼친 메뉴 사각형(화살표만 옮기는 바퀴의 `presentComposed`가 쓴다). 닫혀 있으면 null.
+    drop_area: ?wl_logic.Area = null,
+    /// 지난 `menu> drop` 줄의 내용(바뀐 프레임만 찍는다).
+    last_drop: ?struct { id: u32, m: u8, hl: ?u8 } = null,
+    /// `menu> draw` 줄(실측 4 · 5)의 갈래마다 찍은 수.
+    menu_draw_lines: [3]u8 = @splat(0),
     /// TR-M2의 구조 변경. 그전에는 렌더가 PTY 출력 분기 안에만 있었다 —
     /// 스크롤은 키로 일어나므로 그대로 두면 뷰포트만 움직이고 화면은 안 바뀐다.
     needs_redraw: bool = false,
@@ -5147,6 +5283,8 @@ const App = struct {
             .swap_alt_meta = self.keyboard_devs[slot].?.swap_alt_meta,
             .device = @intCast(slot),
             .ime = ime,
+            // 이 창의 메뉴가 열려 있으면 수정키가 아닌 누름은 메뉴의 것이다(TK-M5, plan 확정 9).
+            .menu = if (self.menu) |o| o.id == id else false,
         };
         const keys = input.readKeysApp(&self.key_state, fd, ctx);
         if (keys.gone) return .gone;
@@ -5169,6 +5307,7 @@ const App = struct {
             dumpHangul(&self.key_state);
             self.needs_redraw = true;
         }
+        for (keys.menu) |k| self.menuKey(k);
         try self.runPanes(keys.panes);
         if (keys.brightness != 0) stepBacklight(self.io, &self.backlight_state, keys.brightness);
         return .open;
@@ -5197,6 +5336,8 @@ const App = struct {
             const t_ms: u32 = @truncate(@as(u64, @intCast(self.nowMs())));
             srv.pointerMove(null, self.pointer_state.x, self.pointer_state.y, t_ms);
         };
+        // 펼친 메뉴가 아직 맞는가(TK-M5, plan 확정 12) — 포커스 · workspace · 전체 화면 · 모델이 바뀌는 자리가 모두 이 앞이다.
+        self.checkMenu();
     }
 
     /// 키보드 포커스를 `want`로 옮기는 단 하나의 길(WY-M5, design 결정 42). `syncFocus`와 `readKeyboardApp`의 머리가 부른다.
@@ -5556,6 +5697,15 @@ const App = struct {
     /// 워크스페이스를 바꿨을 수 있다.
     fn runPanes(self: *App, cmds: []const input.Pane) !void {
         for (cmds) |cmd| {
+            // 메뉴 바 열기(TK-M5, plan 확정 9). 열려 있으면 닫는다. 셸 pane · 모델 없는 창 · 전체 화면이면 아무 일도 없다(삼킴).
+            if (cmd == .menu_open) {
+                if (self.menu != null) {
+                    self.closeMenu("key");
+                } else if (self.menuBar()) |b| self.openMenu(b, 0, true);
+                continue;
+            }
+            // 표의 다른 chord는 메뉴를 닫고 평소대로 한다.
+            if (self.menu != null) self.closeMenu("chord");
             if (try self.runWorkspaceCmd(cmd)) |ran| {
                 if (ran) self.needs_redraw = true;
                 continue;
@@ -5629,7 +5779,7 @@ const App = struct {
                     // 이웃은 화면 밖 column일 수 있다(SW-M2 plan 확정 4).
                     try self.revealFocus(ws);
                 },
-                .new_workspace, .workspace_1, .workspace_2, .workspace_3, .workspace_4, .workspace_5, .workspace_6, .workspace_7, .workspace_8, .workspace_9, .close_app => unreachable,
+                .new_workspace, .workspace_1, .workspace_2, .workspace_3, .workspace_4, .workspace_5, .workspace_6, .workspace_7, .workspace_8, .workspace_9, .close_app, .menu_open => unreachable,
                 // 전체 화면(FU-M0, `Cmd+Ctrl+F`). strip은 그대로이고 패널의 사각형만 커지거나 준다. 앞의 워크스페이스
                 // 하나의 값이다(WY design 결정 8).
                 .fullscreen_toggle => try self.setFullscreen(self.current, !ws.fullscreen),
@@ -5846,13 +5996,18 @@ const App = struct {
             .mods = self.key_state.modifiers(),
             .clips = &self.clips,
         };
+        // 메뉴 바(TK-M5 단계 C, plan 확정 11)가 먼저 본다 — 연 동안은 움직임이 강조이고(창에는 leave) 누름 · 뗌 · 휠을 다 먹는다.
+        // 닫혀 있으면 모델 있는 바의 제목 누름만 먹는다(연다). 그 밖은 PD의 길 그대로다.
         for (round.edges[0..round.edge_count]) |e| {
-            try wire.moved(e.x, e.y);
+            if (self.menu != null) self.menuHover(e.x, e.y, t_ms) else try wire.moved(e.x, e.y);
+            if (self.menuPress(e)) continue;
             try wire.edge(e);
         }
         self.grab.settle(self.pointer_state.buttons);
-        if (round.woke) try wire.moved(self.pointer_state.x, self.pointer_state.y);
-        if (round.wheel != 0) try wire.wheel(round.wheel, self.pointer_state.x, self.pointer_state.y);
+        if (round.woke) {
+            if (self.menu != null) self.menuHover(self.pointer_state.x, self.pointer_state.y, t_ms) else try wire.moved(self.pointer_state.x, self.pointer_state.y);
+        }
+        if (round.wheel != 0 and self.menu == null) try wire.wheel(round.wheel, self.pointer_state.x, self.pointer_state.y);
         if (wire.redraw) self.needs_redraw = true;
     }
 
@@ -6109,7 +6264,7 @@ const App = struct {
                     clips.push(s.x, s.y, pointer.ARROW_W, pointer.ARROW_H);
                 }
                 // 화살표 상자가 물리로 합성한 창 위면 늘리기가 덮은 그 상자만 창에서 다시 옮긴다(WY-M3 확정 7).
-                const px = try presentComposed(self.fb, &self.sprite, self.wl, &self.phys, &clips);
+                const px = try presentComposed(self.fb, &self.sprite, self.wl, &self.phys, &clips, self.drop_area);
                 if (px > 0 and self.phys_lines.arrow < PHYS_LINES) {
                     self.phys_lines.arrow += 1;
                     logline.print("terminal: wl> phys arrow px={d}\n", .{px});
@@ -6152,6 +6307,9 @@ const App = struct {
         /// 메뉴 바(TK-M5 단계 B)와 그것이 지난 프레임과 다른가(`BarMemo`). 띠를 다시 그릴지와 `menu> bar` 줄을 찍을지가 이 하나를 본다.
         bar_line: BarLine = .{},
         bar_changed: bool = false,
+        /// 펼친 메뉴(TK-M5 단계 C)와 그 사각형. 그림자와 덤프가 같은 값을 본다.
+        drop: ?DropLine = null,
+        drop_rect: ?menubar.Rect = null,
         frame_us: i96 = 0,
     };
 
@@ -6166,8 +6324,176 @@ const App = struct {
         const srv = self.wl orelse return .{};
         return switch (ws.panes[ws.focus].?) {
             .shell => .{},
-            .app => |a| .{ .id = a.toplevel, .name = srv.appName(a.toplevel), .menu = srv.menuOf(a.toplevel) },
+            .app => |a| .{
+                .id = a.toplevel,
+                .name = srv.appName(a.toplevel),
+                .menu = srv.menuOf(a.toplevel),
+                .open = if (self.menu) |o| if (o.id == a.toplevel) o.m else null else null,
+            },
         };
+    }
+
+    // ── 펼친 메뉴(TK-M5 단계 C, plan 확정 8 ~ 12) ──
+
+    /// 앞 셸 workspace의 포커스 창 바 — 메뉴를 열 수 있는 자리면(전체 화면이 아니고 위 여백이 있고 포커스 slot이 모델 있는 창) 그 바.
+    fn menuBar(self: *App) ?BarLine {
+        const ws = self.workspaces[self.current].?.asShell() orelse return null;
+        if (grid_origin.y < menubar.BAR_H) return null;
+        const b = self.barLine(ws);
+        if (b.hidden or b.id == null or b.menu == null) return null;
+        return b;
+    }
+
+    /// 메뉴 `m`을 연다. 키로 열면 첫 고를 수 있는 칸을 강조한다(포인터로 열면 강조 없음). 앱 조합이 있으면 먼저 확정한다(plan 확정 10 —
+    /// `focusTo`와 같은 확정, 키보드 `leave`는 안 보낸다).
+    fn openMenu(self: *App, b: BarLine, m: u8, by_key: bool) void {
+        const view = b.menu.?;
+        const bar = barLayout(self.fb, &self.cache, b);
+        if (m >= bar.count) return;
+        if (self.wl) |srv| self.commitAppComposition(srv);
+        const hl = if (by_key) menubar.step(view.model, m, null, .down) else null;
+        self.menu = .{ .id = b.id.?, .m = m, .hl = hl, .generation = view.generation };
+        self.menu_full = true;
+        self.needs_redraw = true;
+        logline.print("terminal: menu> open id={d} menu={d}\n", .{ b.id.?, m });
+    }
+
+    fn closeMenu(self: *App, why: []const u8) void {
+        const o = self.menu orelse return;
+        self.menu = null;
+        self.menu_full = true;
+        self.needs_redraw = true;
+        logline.print("terminal: menu> close id={d} why={s}\n", .{ o.id, why });
+    }
+
+    /// 열린 메뉴가 아직 맞는가(plan 확정 12 — `syncFocus` 다음 한 자리). 포커스 창이 바뀜 · workspace 전환 · 전체 화면 · 그 창의
+    /// 모델이 다시 commit됨 · 창이나 모델이 사라짐이면 닫는다.
+    fn checkMenu(self: *App) void {
+        const o = self.menu orelse return;
+        const b = self.menuBar() orelse {
+            const ws = self.workspaces[self.current].?.asShell();
+            const why: []const u8 = if (ws == null) "workspace" else if (ws.?.fullscreen) "fullscreen" else "focus";
+            return self.closeMenu(why);
+        };
+        if (b.id.? != o.id) return self.closeMenu("focus");
+        if (b.menu.?.generation != o.generation) return self.closeMenu("model");
+    }
+
+    /// 옆 메뉴로(`←` `→`, 제목 클릭). 통째 프레임.
+    fn moveMenu(self: *App, m: u8, by_key: bool) void {
+        const o = &(self.menu orelse return);
+        const b = self.menuBar() orelse return;
+        o.m = m;
+        o.hl = if (by_key) menubar.step(b.menu.?.model, m, null, .down) else null;
+        self.menu_full = true;
+        self.needs_redraw = true;
+        self.logMove();
+    }
+
+    fn logMove(self: *App) void {
+        const o = self.menu orelse return;
+        var buf: [8]u8 = undefined;
+        const item = if (o.hl) |h| std.fmt.bufPrint(&buf, "{d}", .{h}) catch "-" else "-";
+        logline.print("terminal: menu> move menu={d} item={s}\n", .{ o.m, item });
+    }
+
+    /// 칸 `i`를 고른다 — 고를 수 있으면 `activated(id)`를 보내고 닫는다. 아니면 아무것도.
+    fn pickMenu(self: *App, i: u8) void {
+        const o = self.menu orelse return;
+        const b = self.menuBar() orelse return;
+        const e = b.menu.?.model.entriesOf(o.m)[i];
+        if (!e.pickable()) return;
+        if (self.wl) |srv| srv.activate(o.id, e.id);
+        logline.print("terminal: menu> activate id={d} item={d}\n", .{ o.id, e.id });
+        self.closeMenu("pick");
+    }
+
+    /// 메뉴가 연 동안의 키 하나(plan 확정 9).
+    fn menuKey(self: *App, k: input.MenuKey) void {
+        const o = &(self.menu orelse return);
+        const b = self.menuBar() orelse return;
+        const model = b.menu.?.model;
+        switch (k) {
+            .left, .right => {
+                const bar = barLayout(self.fb, &self.cache, b);
+                self.moveMenu(menubar.nextMenu(bar.count, o.m, if (k == .left) .left else .right), true);
+            },
+            .up, .down => {
+                const next = menubar.step(model, o.m, o.hl, if (k == .up) .up else .down);
+                if (std.meta.eql(next, o.hl)) {
+                    self.logMove();
+                    return;
+                }
+                o.hl = next;
+                self.needs_redraw = true;
+                self.logMove();
+            },
+            .pick => if (o.hl) |h| self.pickMenu(h),
+            .close => self.closeMenu("esc"),
+        }
+    }
+
+    /// 앱의 조합을 그 창에 확정한다(WY design 결정 42 — `focusTo`의 첫 갈래와 같은 확정). 포커스 창에 `commit_string` + 빈 preedit
+    /// + `done`, 그리고 조합을 버린다. 조합이 없거나 셸의 것이면 아무것도 안 한다.
+    fn commitAppComposition(self: *App, srv: *wls.Server) void {
+        const ks = &self.key_state;
+        const cp = ks.preedit() orelse return;
+        if (ks.hangul_owner != .app or srv.focused == null) return;
+        var utf8: [4]u8 = undefined;
+        const n = std.unicode.utf8Encode(cp, &utf8) catch 0;
+        srv.imeSend(utf8[0..n], "");
+        ks.dropComposition();
+        dumpHangul(ks);
+        self.needs_redraw = true;
+    }
+
+    /// 메뉴가 받는 포인터 전이 하나(plan 확정 11). 먹었으면 참 — 패널 · 창으로 안 간다. 메뉴가 열려 있으면 모든 누름 · 뗌을 먹는다
+    /// (제목 = 그 메뉴로 옮기기, 열린 제목이면 닫기 · 칸 = 고르기 · 바깥 = 닫기만). 닫혀 있으면 모델 있는 바의 제목 누름만 먹는다(연다).
+    /// 먹은 누름의 뗌도 먹는다(`menu_grab`).
+    fn menuPress(self: *App, e: PointerEdge) bool {
+        const bit: u8 = @as(u8, 1) << @backingInt(e.button);
+        if (!e.down) {
+            if (self.menu_grab & bit == 0) return self.menu != null;
+            self.menu_grab &= ~bit;
+            return true;
+        }
+        const b = self.menuBar() orelse return false;
+        const bar = barLayout(self.fb, &self.cache, b);
+        const model = b.menu.?.model;
+        if (self.menu) |o| {
+            const g = dropGeom(self.fb, &self.cache, .{ .bar = b, .m = o.m, .hl = o.hl });
+            self.menu_grab |= bit;
+            if (e.button != .left) return true;
+            switch (menubar.hit(model, &bar, .{ .m = o.m, .rect = g.rect }, e.x, e.y)) {
+                .title => |m| if (m == o.m) self.closeMenu("click") else self.moveMenu(m, false),
+                .entry => |i| self.pickMenu(i),
+                .inside => {},
+                .outside => self.closeMenu("click"),
+            }
+            return true;
+        }
+        if (e.button != .left or e.y >= menubar.BAR_H) return false;
+        switch (menubar.hit(model, &bar, null, e.x, e.y)) {
+            .title => |m| {
+                self.menu_grab |= bit;
+                self.openMenu(b, m, false);
+                return true;
+            },
+            else => return false,
+        }
+    }
+
+    /// 메뉴가 연 동안 포인터가 움직였다 — 드롭다운의 고를 수 있는 칸 위면 그 칸을 강조한다(바뀔 때만 그린다). 창에는 leave.
+    fn menuHover(self: *App, x: u32, y: u32, t_ms: u32) void {
+        const o = &(self.menu orelse return);
+        if (self.wl) |srv| srv.pointerMove(null, x, y, t_ms);
+        const b = self.menuBar() orelse return;
+        const g = dropGeom(self.fb, &self.cache, .{ .bar = b, .m = o.m, .hl = o.hl });
+        if (!g.rect.contains(x, y)) return;
+        const i = menubar.entryAt(b.menu.?.model, o.m, y - g.rect.y) orelse return;
+        if (!b.menu.?.model.entriesOf(o.m)[i].pickable() or o.hl == i) return;
+        o.hl = i;
+        self.needs_redraw = true;
     }
 
     fn render(self: *App, frame: *Frame, want: ?pointer.Spot) !void {
@@ -6205,8 +6531,11 @@ const App = struct {
         // 화면 전체를 다시 그릴 프레임인가(DR-M2 plan 확정 3). 첫 프레임, 워크스페이스가 바뀜,
         // strip이 바뀜(분할 · 닫기 · scroll — 구분선과 여백, 보이는 pane이 바뀐다). strip이 같으면 패널의
         // 사각형도 같다(`first`도 비교에 든다, SW-M2).
-        const full = self.last_current != self.current or
+        // 메뉴를 열었거나 닫았거나 옮긴 프레임도 통째다(TK-M5 단계 C) — 펼친 메뉴 밑의 픽셀을 저장하지 않는다.
+        const full = self.last_current != self.current or self.menu_full or
             if (self.last_strip) |t| !std.meta.eql(t, ws.strip) else true;
+        const menu_full = self.menu_full;
+        self.menu_full = false;
         if (full) {
             renderBackdrop(self.fb, &ws.strip, self.whole);
             // 빈 공간의 이름(SW-M3, plan 확정 8). `/proc`은 통째 프레임에서만 읽는다 — strip이
@@ -6364,11 +6693,22 @@ const App = struct {
         frame.prompt_ink = if (frame.prompt) |p| try drawPrompt(self.fb, &self.cache, p) else null;
         try paintBand(self.fb, &self.cache, frame.status_line, full or frame.status_changed, &clips);
         // 위 띠(TK-M5 단계 B) — `paintBand`와 같은 꼴. 통째 프레임은 `renderBackdrop`이 띠를 지웠으므로 다시 그린다.
+        const menu_start = std.Io.Clock.now(.awake, self.io);
         try paintBar(self.fb, &self.cache, frame.bar_line, full or frame.bar_changed, &clips);
+        // 펼친 메뉴(TK-M5 단계 C) — 프레임의 마지막 그리기. 열려 있는 동안 매 프레임 다시 그리고 그 사각형을 clip에.
+        frame.drop = if (self.menu) |o| if (frame.bar_line.open != null and frame.bar_line.id == o.id) DropLine{ .bar = frame.bar_line, .m = o.m, .hl = o.hl } else null else null;
+        self.drop_area = null;
+        if (frame.drop) |d| {
+            const r = try renderDrop(self.fb, &self.cache, d);
+            clips.push(r.x, r.y, r.w, r.h);
+            self.drop_area = .{ .x = r.x, .y = r.y, .w = r.w, .h = r.h };
+            frame.drop_rect = r;
+        }
+        const menu_us = @divTrunc(menu_start.untilNow(self.io, .awake).nanoseconds, 1000);
         // 화살표와 `present` 앞이다(DR design 위험 2). 그림자에는 화살표가 없으므로 비교도
         // 화살표가 실제 fb에 오르기 전에 한다.
         const verified = try self.verifyFrame(frame, ws);
-        const phys_px = try presentFrame(self.fb, &self.sprite, want, &clips, self.wl, &self.phys);
+        const phys_px = try presentFrame(self.fb, &self.sprite, want, &clips, self.wl, &self.phys, self.drop_area);
         // 옮긴 창의 frame 콜백에 `done`(결정 10) — 이 프레임을 낸 뒤다.
         if (self.wl) |srv| {
             const ms: u32 = @truncate(@as(u64, @intCast(self.nowMs())));
@@ -6384,6 +6724,13 @@ const App = struct {
         }
         // 부분 blit이 든 프레임(WY-M6 실측 5) — 처음 몇 번만.
         if (part_seen) self.logPartFrame(frame.frame_us, phys_px);
+        // 메뉴를 그린 프레임(TK-M5 실측 4 · 5) — 갈래마다 처음 몇 번. `us=`는 바 · 드롭다운 그리기, `frame_us=`는 프레임 전체.
+        const kind: ?usize = if (menu_full) 1 else if (frame.drop != null) 2 else if (frame.bar_changed and frame.bar_line.id != null) 0 else null;
+        if (kind) |k| if (self.menu_draw_lines[k] < MENU_DRAW_LINES) {
+            self.menu_draw_lines[k] += 1;
+            const names = [_][]const u8{ "bar", "full", "drop" };
+            logline.print("terminal: menu> draw kind={s} us={d} frame_us={d}\n", .{ names[k], menu_us, frame.frame_us });
+        };
         if (!self.first_frame_timed) {
             self.first_frame_timed = true;
             logline.print("terminal: render> first frame {d}us\n", .{frame.frame_us});
@@ -6472,6 +6819,8 @@ const App = struct {
 
     fn renderApp(self: *App, frame: *Frame, want: ?pointer.Spot, id: u32) !void {
         frame.app = id;
+        // app workspace에는 메뉴 바가 없다(늘 chrome 없음) — 펼친 메뉴도 없다.
+        self.drop_area = null;
         const frame_start = std.Io.Clock.now(.awake, self.io);
         var clips = drm.ClipList.init(self.fb.width, self.fb.height);
         if (self.sprite.at) |sp| clips.push(sp.x, sp.y, pointer.ARROW_W, pointer.ARROW_H);
@@ -6514,7 +6863,7 @@ const App = struct {
         // 물리 합성(WY-M3 확정 7) — 화면 전체가 그 창의 자리다.
         self.phys = .{};
         if (self.fb.scale > 1 and srv.bufferScale(id) > 1) self.phys.add(id, screen_area);
-        const phys_px = try presentFrame(self.fb, &self.sprite, want, &clips, self.wl, &self.phys);
+        const phys_px = try presentFrame(self.fb, &self.sprite, want, &clips, self.wl, &self.phys, self.drop_area);
         if (self.verify) |*v| self.copyClips(v.screen, &clips);
         srv.presented(id, @truncate(@as(u64, @intCast(self.nowMs()))));
         frame.frame_us = @divTrunc(frame_start.untilNow(self.io, .awake).nanoseconds, 1000);
@@ -6787,6 +7136,8 @@ const App = struct {
                 @memcpy(v.fb.pixels[off..][0..len], self.fb.pixels[off..][0..len]);
             }
         }
+        // 펼친 메뉴(TK-M5 단계 C)는 창 사각형 위에도 온다 — 그 복사 뒤에 같은 함수로.
+        if (frame.drop) |d| _ = try renderDrop(v.fb, &self.cache, d);
         const report = verify.compare(
             self.fb.pixels,
             v.fb.pixels,
@@ -6818,6 +7169,18 @@ const App = struct {
         }
     }
 
+    /// 펼친 메뉴가 바뀌었으면(열기 · 옮기기 · 강조) `menu> drop` 줄(TK-M5 단계 C).
+    fn dumpDropFrame(self: *App, frame: *const Frame) void {
+        const d = frame.drop orelse {
+            self.last_drop = null;
+            return;
+        };
+        const sig: @TypeOf(self.last_drop.?) = .{ .id = d.bar.id.?, .m = d.m, .hl = d.hl };
+        if (self.last_drop) |l| if (std.meta.eql(l, sig)) return;
+        self.last_drop = sig;
+        dumpDrop(self.fb, d, frame.drop_rect.?);
+    }
+
     /// 글리프 캐시가 자랐으면 한 줄(`font>`).
     fn dumpGlyphs(self: *App) void {
         if (self.cache.count() == self.last_glyph_count) return;
@@ -6841,6 +7204,7 @@ const App = struct {
         const focus = frame.focus orelse {
             dumpStatus(self.fb, frame.status_line, frame.status_changed);
             dumpBar(self.fb, &self.cache, frame.bar_line, frame.bar_changed);
+            self.dumpDropFrame(frame);
             dumpPane(self.fb, frame.shell, self.whole, self.current, workspaceCount(&self.workspaces), &self.last_pane);
             dumpStrip(self.fb, frame.shell, self.whole, self.peek, &self.last_strip_sig);
             self.dumpGlyphs();
@@ -6857,6 +7221,7 @@ const App = struct {
         dumpPromptInk(self.fb, frame.prompt_ink, frame.prompt);
         dumpStatus(self.fb, frame.status_line, frame.status_changed);
         dumpBar(self.fb, &self.cache, frame.bar_line, frame.bar_changed);
+        self.dumpDropFrame(frame);
         dumpPane(self.fb, frame.shell, self.whole, self.current, workspaceCount(&self.workspaces), &self.last_pane);
         dumpStrip(self.fb, frame.shell, self.whole, self.peek, &self.last_strip_sig);
         // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.

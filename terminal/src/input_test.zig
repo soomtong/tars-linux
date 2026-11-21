@@ -3004,6 +3004,59 @@ fn appImeChecks() !void {
         if (pressesOf(&b, K.KEY_J) != 0) return error.AppImeSymbol;
     }
     std.debug.print("input_test: 켠 창에서 세벌식 기호가 음절과 함께 확정된다 OK\n", .{});
+
+    // TK-M5 단계 C. 메뉴 바를 여는 키 `Cmd+Shift+/`는 표의 chord다(셸 · app 같은 표 — 위 검사 91의 대조가 함께 본다). 메뉴가 열린
+    // 동안(`menuKey`)은 수정키만 창으로 가고, 방향키 넷 · Enter · Esc는 메뉴 키, 그 밖의 누름은 버리며, 표의 chord는 그대로 명령이다.
+    {
+        var sh: input.State = .{};
+        _ = sh.handleKey(K.KEY_LEFTMETA, 1, 0, .{});
+        _ = sh.handleKey(K.KEY_LEFTSHIFT, 1, 0, .{});
+        try expectPane(&sh, K.KEY_SLASH, .menu_open);
+        var ap: input.State = .{};
+        _ = ap.appKey(K.KEY_LEFTMETA, 1, .{});
+        _ = ap.appKey(K.KEY_LEFTSHIFT, 1, .{});
+        try expectAppPane(&ap, K.KEY_SLASH, .menu_open);
+        // Shift 없는 Cmd+/는 표 밖 — app에는 Super와 함께 키로 간다.
+        var ap2: input.State = .{};
+        _ = ap2.appKey(K.KEY_LEFTMETA, 1, .{});
+        try expectAppKey(&ap2, .{}, K.KEY_SLASH, 1, K.KEY_SLASH, true, .{ .super = true });
+
+        var mk: input.State = .{};
+        const ctx: input.Context = .{ .menu = true };
+        const want = [_]struct { code: u16, key: input.MenuKey }{
+            .{ .code = K.KEY_LEFT, .key = .left }, .{ .code = K.KEY_RIGHT, .key = .right }, .{ .code = K.KEY_UP, .key = .up },
+            .{ .code = K.KEY_DOWN, .key = .down }, .{ .code = K.KEY_ENTER, .key = .pick },  .{ .code = K.KEY_KPENTER, .key = .pick },
+            .{ .code = K.KEY_ESC, .key = .close },
+        };
+        for (want) |w| {
+            const got = mk.menuKey(w.code, 1, ctx);
+            if (!std.meta.eql(got, input.AppAction{ .menu = w.key })) {
+                std.debug.print("FAIL: menuKey({d}) = {any}, want menu {s}\n", .{ w.code, got, @tagName(w.key) });
+                return error.WrongMenuKey;
+            }
+            // 뗌 · 자동 반복은 아무것도 아니다 — 먹은 누름의 뗌은 서버의 `Held`가 거른다.
+            if (mk.menuKey(w.code, 0, ctx) != .none or mk.menuKey(w.code, 2, ctx) != .none) return error.MenuKeyRelease;
+        }
+        // 글자 · 숫자 · Space는 먹고 버린다(글자로 건너뛰기는 뒤로).
+        for ([_]u16{ K.KEY_A, K.KEY_1, K.KEY_SPACE, K.KEY_TAB }) |code| {
+            if (mk.menuKey(code, 1, ctx) != .none) return error.MenuKeyLeak;
+        }
+        // 수정키는 창으로 간다 — 누름 · 뗌 둘 다, 수정키 비트와 함께.
+        const down = mk.menuKey(K.KEY_LEFTMETA, 1, ctx);
+        if (!std.meta.eql(down, input.AppAction{ .key = .{ .code = K.KEY_LEFTMETA, .pressed = true, .mods = .{ .super = true } } })) return error.MenuModifierDown;
+        // Cmd를 쥔 채 표의 chord는 명령 — `main.zig`가 메뉴를 닫고 평소대로 한다.
+        if (!std.meta.eql(mk.menuKey(K.KEY_1, 1, ctx), input.AppAction{ .pane = .workspace_1 })) return error.MenuChord;
+        if (!std.meta.eql(mk.menuKey(K.KEY_LEFTBRACE, 1, ctx), input.AppAction{ .pane = .focus_prev })) return error.MenuChord;
+        // Cmd + 표 밖의 글자도 먹는다(창에 안 간다).
+        if (mk.menuKey(K.KEY_C, 1, ctx) != .none) return error.MenuCmdLeak;
+        const up = mk.menuKey(K.KEY_LEFTMETA, 0, ctx);
+        if (!std.meta.eql(up, input.AppAction{ .key = .{ .code = K.KEY_LEFTMETA, .pressed = false, .mods = .{} } })) return error.MenuModifierUp;
+        // 한글을 켜 둬도 메뉴 키는 한글 층을 안 지난다.
+        mk.hangul_on = true;
+        if (!std.meta.eql(mk.menuKey(K.KEY_DOWN, 1, ctx), input.AppAction{ .menu = .down })) return error.MenuHangul;
+        if (mk.menuKey(K.KEY_R, 1, ctx) != .none or mk.preedit() != null) return error.MenuHangulComposed;
+    }
+    std.debug.print("input_test: Cmd+Shift+/는 메뉴를 열고, 연 동안 방향키 · Enter · Esc만 메뉴의 것이고 수정키는 창으로 간다 OK\n", .{});
 }
 
 fn expectAppKey(state: *input.State, ctx: input.Context, raw: u16, value: i32, code: u16, pressed: bool, mods: input.AppMods) !void {
