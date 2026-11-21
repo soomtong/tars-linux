@@ -111,3 +111,13 @@ Status: 진행 중. 브랜치 `app-layer-0-3`.
    `alt-shift-slash`는 evdev 53 + Shift + Super(0x41)로 온다.
    plan과 달라진 것: (가) `already_constructed`는 `tars_menu_v1`의 error에. (나) `--native`는 판 1로 남고 `--menu`가 판 2(원래 모드 포함). (다) 메뉴 객체가 생긴 뒤
    commit 전에는 모델 없음(이름만).
+2. 단계 B `0fe7e75`(닫힌 바): `main.zig`의 `BarLine` · `BarMemo` · `renderBarBand`(실제 경로와 그림자가 함께 지나는 한 곳) · `paintBar`(바뀐 프레임 · 통째 프레임만,
+   위 띠를 clip에) · `dumpBar` · `renderOverlay`의 바 · `App.barLine`(전체 화면이면 감춤, 셸 pane이면 빈 바, 창이면 이름 + 모델). 판정 31의 화면 부분 · 판정 35.
+   체인 wayland 두 번 · terminal · toolkit · hidpi · pointer · display PASS — 다른 체인의 판정은 한 줄도 안 고쳤다.
+   판정의 실제 값: 31 `menu> bar id=11 name=tars-wl-test titles=File,Edit` · 이름 칸(20, 2, 96 × 16)의 `e8d8b0` 188픽셀 = 덤프 = 띠 전체 · `File`(x 132) + `Edit`(x 180)의
+   `d0d8e0` 151 · 셸 포커스에 `menu> bar empty`와 띠 한 가지 색. 35 `titles=-` · 이름 잉크만.
+   plan과 달라진 것: (가) `menu> bar ink`에 `other=`(늘 0). (나) `menu> bar hidden`(전체 화면). (다) 판정 31의 셸 포커스 쪽은 `Cmd+[`의 부분 프레임으로.
+   lead의 화면 판정: 위 띠 4배 덤프 — `tars-wl-test  File  Edit`.
+   실측: hidpi(bs 2)에서 바가 있는 채 블록 판정 0. SDL3는 `set_app_id`를 먼저 보낸다(바 이름 `tars-gpu-demo`). 바 그리기 시간은 단계 C가 `us=`로 잰다.
+   루트 게이트 36/36 첫 판(`out/gate-logs/20261121-101205`), verify mismatch 0. 전체 화면 체인(FU)에서 `menu> bar hidden`이 찍혔다 — 위 여백을 보는 기존 판정은
+   하나도 안 깨졌다(실측 9).
