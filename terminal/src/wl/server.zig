@@ -25,6 +25,7 @@ const zwp = wayland.server.zwp;
 const tars = wayland.server.tars;
 const logic = @import("../wl_logic.zig");
 const logline = @import("../logline.zig");
+const menubar = @import("../menubar.zig");
 
 /// 내는 global의 판(WY design 결정 5 — 구현한 요청이 다 되는 가장 낮은 판). `wl_shm`은 libwayland가 직접
 /// 낸다(`wl_display_init_shm`, ARGB8888 · XRGB8888 둘). compositor는 WY-M3에서 6이다(design 결정 27) — surface 판 6의
@@ -39,8 +40,16 @@ const DECORATION_VERSION = 1;
 const DATA_DEVICE_MANAGER_VERSION = 2;
 /// 한글 IME(WY-M5, design 결정 38). 판 1뿐이다.
 const TEXT_INPUT_MANAGER_VERSION = 1;
-/// 원래 모드의 문(WY-M6, design 결정 46). 판 1은 `destroy` 하나 — bind가 곧 "Cmd를 Super로 받는다"다.
-const MENU_MANAGER_VERSION = 1;
+/// 원래 모드의 문(WY-M6, design 결정 46). 판 1은 `destroy` 하나 — bind가 곧 "Cmd를 Super로 받는다"다. 판 2(TK-M5, plan 확정 3)가
+/// 메뉴 모델(`get_menu` · `tars_menu_v1`)을 더한다. 판 1로 bind한 클라이언트는 그대로 원래 모드이고 모델이 없다(바에 이름만).
+const MENU_MANAGER_VERSION = 2;
+
+/// title · app_id의 상한(TK-M5 plan 확정 4) — 넘으면 UTF-8 경계에서 자른다.
+const NAME_BYTES = 64;
+/// `wl> title` 줄의 창마다 상한(plan 확정 4) — Chromium처럼 탭마다 제목을 바꾸는 창이 로그를 불리지 않게.
+const TITLE_LINES: u8 = 4;
+/// `wl> menu` 줄의 창마다 상한(plan 확정 14).
+const MENU_LINES: u8 = 8;
 
 /// 파이프의 깃발(값은 asm-generic/fcntl.h — x86_64도 같다). 받기의 읽기 끝만 비블록이다 — epoll이 깨운 만큼만 읽는다.
 /// `pipe2`에 O_NONBLOCK을 주면 클라이언트가 받는 쓰기 끝까지 비블록이 되어, EAGAIN을 다루지 않는 클라이언트가 64 KiB를
@@ -99,6 +108,12 @@ pub const Event = union(enum) {
     /// `clipboard=shared`면 셸 클립보드에 넣는다(결정 37). 바이트를 싣지 않는 것은 사본의 주인이 서버라서다 — App은
     /// 꺼낸 그 바퀴에 복사한다.
     selection,
+};
+
+/// `Server.menuOf`의 답 — 보이는 모델과 그 세대. 포인터는 다음 `dispatch`까지 유효하다(클라이언트의 commit · destroy가 바꾼다).
+pub const MenuView = struct {
+    model: *const menubar.Model,
+    generation: u32,
 };
 
 /// 첫 commit에 정해진 것(`Event.toplevel`).
@@ -434,6 +449,29 @@ pub const Server = struct {
                 kb.sendModifiers(serial, shown.depressed, 0, shown.locked, 0);
             self.sent_mods = shown;
         }
+    }
+
+    // ── 메뉴 바(TK-M5) ──
+
+    /// 창 `id`의 바 이름(plan 확정 4 — app_id의 마지막 조각, 없으면 title). 창이 없으면 빈 글.
+    pub fn appName(self: *Server, id: u32) []const u8 {
+        const t = self.find(id) orelse return "";
+        return menubar.appName(t.app_id.get(), t.title.get());
+    }
+
+    /// 창 `id`의 보이는 메뉴 모델과 그 세대(commit마다 는다 — 그리기가 바뀜을 안다). 메뉴 객체가 없거나 아직 commit이 없으면 null.
+    pub fn menuOf(self: *Server, id: u32) ?MenuView {
+        const t = self.find(id) orelse return null;
+        const m = t.menu orelse return null;
+        if (m.generation == 0) return null;
+        return .{ .model = &m.current, .generation = m.generation };
+    }
+
+    /// 창 `id`의 앱에 고른 항목을 알린다(`tars_menu_v1.activated`). 메뉴 객체가 없으면 아무것도 안 한다.
+    pub fn activate(self: *Server, id: u32, item: u32) void {
+        const t = self.find(id) orelse return;
+        const m = t.menu orelse return;
+        m.resource.sendActivated(item);
     }
 
     /// 포인터가 화면 좌표 `x` · `y`로 움직였다(WY-M2 확정 8). `cand`는 그 자리의 창(App이 strip이나 앞 workspace로 고른다)이고,
@@ -1478,8 +1516,48 @@ const Toplevel = struct {
     cursor_hidden: bool = false,
     /// `wl> blit` 줄을 찍은 수(WY-M6 확정 7).
     blit_lines: struct { whole: u8 = 0, part: u8 = 0 } = .{},
+    /// `set_title` · `set_app_id`(TK-M5 plan 확정 4) — `NAME_BYTES`까지, UTF-8만. 바의 앱 이름은 `menubar.appName`이 고른다.
+    title: Name = .{},
+    app_id: Name = .{},
+    /// `wl> title` 줄을 찍은 수.
+    title_lines: u8 = 0,
+    /// 이 창의 메뉴 객체(TK-M5 plan 확정 3). 하나뿐이다 — 둘째 `get_menu`는 `already_constructed`.
+    menu: ?*Menu = null,
 
     const Sig = struct { w: i32, h: i32, fit: logic.Fit, bs: u32 };
+    const Name = struct {
+        buf: [NAME_BYTES]u8 = undefined,
+        len: u8 = 0,
+
+        fn get(self: *const Name) []const u8 {
+            return self.buf[0..self.len];
+        }
+
+        /// 클라이언트의 글로 바꾼다. UTF-8이 아니면 그대로 두고 false.
+        fn set(self: *Name, raw: [*:0]const u8) bool {
+            const text = menubar.clampUtf8(std.mem.span(raw), NAME_BYTES) orelse return false;
+            @memcpy(self.buf[0..text.len], text);
+            self.len = @intCast(text.len);
+            return true;
+        }
+    };
+
+    /// `set_title` · `set_app_id` 하나. 바뀌었으면 `wl> title id=ID app_id=… title=…`(비면 `-`, 창마다 `TITLE_LINES`번), UTF-8이
+    /// 아니면 버리고 `wl> title id=ID dropped (not UTF-8)`.
+    fn setName(t: *Toplevel, which: *Name, raw: [*:0]const u8) void {
+        const was = which.*;
+        if (!which.set(raw)) {
+            if (t.title_lines < TITLE_LINES) logline.print("terminal: wl> title id={d} dropped (not UTF-8)\n", .{t.id});
+            t.title_lines +|= 1;
+            return;
+        }
+        if (std.mem.eql(u8, was.get(), which.get())) return;
+        if (t.title_lines >= TITLE_LINES) return;
+        t.title_lines += 1;
+        const a = t.app_id.get();
+        const n = t.title.get();
+        logline.print("terminal: wl> title id={d} app_id={s} title={s}\n", .{ t.id, if (a.len > 0) a else "-", if (n.len > 0) n else "-" });
+    }
     const Sent = struct { w: u32, h: u32, act: bool };
 };
 
@@ -1553,13 +1631,16 @@ fn sendConfigure(t: *Toplevel, w: u32, h: u32, act: bool) void {
 }
 
 /// 창 메뉴 · 옮기기 · 크기 · 최대화 · 최소화 요청은 받기만 한다 — 크기는 서버가 정한다(자기 workspace는 화면, column은
-/// pane). 전체 화면은 첫 commit 전의 것만 뜻이 있다(WY-M2 확정 3) — 그 뒤의 것은 받기만 한다(풀스크린으로 옮기기는
-/// 결정 1의 다음 milestone 거리). 제목과 app id는 아직 안 쓴다.
+/// pane). `set_min_size`도 그렇다(strip의 pane 크기가 이긴다, TK design 결정 10). 전체 화면은 첫 commit 전의 것만 뜻이 있다
+/// (WY-M2 확정 3) — 그 뒤의 것은 받기만 한다(풀스크린으로 옮기기는 결정 1의 다음 milestone 거리). 제목과 app id는 담아 둔다
+/// (TK-M5 plan 확정 4) — 메뉴 바가 앱 이름으로 쓴다.
 fn toplevelRequest(res: *xdg.Toplevel, req: xdg.Toplevel.Request, t: *Toplevel) void {
     switch (req) {
         .destroy => res.destroy(),
         .set_fullscreen => t.want_fullscreen = true,
         .unset_fullscreen => t.want_fullscreen = false,
+        .set_title => |r| t.setName(&t.title, r.title),
+        .set_app_id => |r| t.setName(&t.app_id, r.app_id),
         else => {},
     }
 }
@@ -1599,22 +1680,87 @@ fn decorationRequest(d: *zxdg.ToplevelDecorationV1, req: zxdg.ToplevelDecoration
 /// 클라이언트가 지금 bind했으면 다음 키에서 보일 값이 바뀌어 `modifiers`가 다시 간다(`key`의 비교).
 fn bindMenuManager(client: *wl.Client, srv: *Server, version: u32, id: u32) void {
     const m = tars.MenuManagerV1.create(client, version, id) catch return client.postNoMemory();
-    m.setHandler(?*anyopaque, menuManagerRequest, null, null);
+    m.setHandler(*Server, menuManagerRequest, null, srv);
     const rec = srv.recordOf(client) orelse return;
     if (rec.native) return;
     rec.native = true;
     logline.print("terminal: wl> keys pid={d} native\n", .{rec.pid});
 }
 
-fn menuManagerRequest(m: *tars.MenuManagerV1, req: tars.MenuManagerV1.Request, _: ?*anyopaque) void {
+/// `get_menu`(판 2, TK-M5 plan 확정 3). 판 1로 bind한 객체에는 libwayland가 이 요청을 들이지 않는다(그 판의 요청 수 밖이다).
+fn menuManagerRequest(m: *tars.MenuManagerV1, req: tars.MenuManagerV1.Request, srv: *Server) void {
     switch (req) {
         .destroy => m.destroy(),
+        .get_menu => |r| {
+            const t: *Toplevel = @ptrCast(@alignCast(r.toplevel.getUserData() orelse return));
+            const res = tars.MenuV1.create(m.getClient(), m.getVersion(), r.id) catch return m.postNoMemory();
+            if (t.menu != null) return res.postError(.already_constructed, "the toplevel already has a tars_menu_v1");
+            const menu = srv.allocator.create(Menu) catch {
+                res.destroy();
+                return m.postNoMemory();
+            };
+            menu.* = .{ .srv = srv, .resource = res, .toplevel = t };
+            t.menu = menu;
+            res.setHandler(*Menu, menuRequest, menuDestroyed, menu);
+        },
     }
+}
+
+// ── tars_menu_v1(TK-M5, plan 확정 3) ───────────────────────────────────
+
+/// 창 하나의 메뉴 모델. 쌓는 중인 것(`pending`)과 보이는 것(`current`) 둘 — `commit`이 통째로 옮긴다. 상한은 `menubar`가 지키고
+/// 넘으면 프로토콜 에러다. 창이 먼저 사라지면 `toplevel`이 null이 되어 요청을 받고 버린다(xml의 inert).
+const Menu = struct {
+    srv: *Server,
+    resource: *tars.MenuV1,
+    toplevel: ?*Toplevel,
+    pending: menubar.Model = .{},
+    current: menubar.Model = .{},
+    /// commit 수 — 0이면 아직 보인 모델이 없다(바에 이름만).
+    generation: u32 = 0,
+    lines: u8 = 0,
+};
+
+fn menuRequest(res: *tars.MenuV1, req: tars.MenuV1.Request, menu: *Menu) void {
+    if (req == .destroy) return res.destroy();
+    const t = menu.toplevel orelse return;
+    const result: menubar.Error!void = switch (req) {
+        .destroy => unreachable,
+        .reset => menu.pending.clear(),
+        .add_menu => |r| menu.pending.addMenu(std.mem.span(r.title)),
+        .add_item => |r| menu.pending.addItem(r.id, std.mem.span(r.label), r.shortcut_mods, r.shortcut_key, @as(u32, @bitCast(r.flags))),
+        .add_separator => menu.pending.addSeparator(),
+        .commit => {
+            menu.current = menu.pending;
+            menu.pending.clear();
+            menu.generation +%= 1;
+            if (menu.generation == 0) menu.generation = 1;
+            if (menu.lines < MENU_LINES) {
+                menu.lines += 1;
+                logline.print("terminal: wl> menu id={d} menus={d} items={d}\n", .{ t.id, menu.current.menu_count, menu.current.entry_count });
+            }
+            return;
+        },
+    };
+    result catch |err| switch (err) {
+        error.TooMany => res.postError(.too_many, "tars_menu_v1: more than 8 menus, 32 entries in a menu or 128 entries in all"),
+        error.TooLong => res.postError(.too_long, "tars_menu_v1: a title or a label is longer than 64 bytes"),
+        error.BadUtf8 => res.postError(.bad_utf8, "tars_menu_v1: a title or a label is not UTF-8"),
+        error.NoMenu => res.postError(.no_menu, "tars_menu_v1: an item or a separator before any add_menu"),
+    };
+}
+
+/// 객체가 사라졌다(`destroy` 또는 클라이언트의 끝) — 모델도 없어진다(바에 이름만).
+fn menuDestroyed(_: *tars.MenuV1, menu: *Menu) void {
+    if (menu.toplevel) |t| t.menu = null;
+    menu.srv.allocator.destroy(menu);
 }
 
 fn toplevelDestroyed(_: *xdg.Toplevel, t: *Toplevel) void {
     const srv = t.srv;
     if (t.xdg) |xs| xs.toplevel = null;
+    // 메뉴 객체는 남되 무력해진다(xml — 요청을 받고 버린다). 객체가 사라질 때 이 창을 찾지 않게 끊는다.
+    if (t.menu) |m| m.toplevel = null;
     // 포커스 창이 사라졌다. surface가 같이 사라지므로 `leave`는 없다 — 클라이언트가 지운 것이다.
     if (srv.focused == t.id) {
         srv.focused = null;

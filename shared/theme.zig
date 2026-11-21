@@ -44,6 +44,16 @@ pub const CURSOR_COLOR: u32 = 0x00F0F0F0;
 pub const POINTER_FILL: u32 = 0x00FCFCF4;
 pub const POINTER_EDGE: u32 = 0x00040810;
 
+/// 메뉴 바(TK-M5, plan 확정 6 — 위 여백의 바와 펼친 메뉴). 앱 이름 · 메뉴 제목과 항목의 글 · 펼친 메뉴의 바탕 · 열린 제목과 강조
+/// 행의 바탕 · 비활성 항목의 글 · 펼친 메뉴의 구분선. 여섯 다 위 셸 색 · 아래 앱 토큰 · 게이트의 테스트 클라이언트와 툴킷 데모가
+/// 쓰는 색 어느 것과도 다르고 서로도 다르다 — 덤프가 바의 픽셀을 이 값으로 센다(`menubar_test`의 comptime 검사가 지킨다).
+pub const MENU_NAME: u32 = 0x00E8D8B0;
+pub const MENU_FG: u32 = 0x00D0D8E0;
+pub const MENU_BG: u32 = 0x00283448;
+pub const MENU_HL_BG: u32 = 0x00305C9C;
+pub const MENU_DIM: u32 = 0x00687484;
+pub const MENU_SEP: u32 = 0x00485468;
+
 // ── 앱 토큰(R-CA-5) ─────────────────────────────────────────────
 //
 // 툴킷의 색 · 간격 · 반지름 · 글꼴 크기(TK-M0 단계 B부터, TK-M1에서 한 벌로). 색은 위 셸 색 어느 것과도 다른 값이다 — 게이트가

@@ -133,9 +133,11 @@ pub fn build(b: *std.Build) void {
     scanner.addCustomProtocol(b.path("vendor/wayland/text-input-unstable-v3.xml"));
     scanner.generate("zwp_text_input_manager_v3", 1);
     // WY-M6(design 결정 46): 원래 모드의 문 `tars_menu_v1`. 받는 것이 아니라 저장소의 것이라 vendor 밖(`protocol/`)이다.
-    // bind한 클라이언트는 Cmd를 Super로 받고, 아니면 호환 모드(Super → Ctrl)다. 판 1은 `destroy` 하나 — 메뉴는 TK-M5.
+    // bind한 클라이언트는 Cmd를 Super로 받고, 아니면 호환 모드(Super → Ctrl)다. 판 1은 `destroy` 하나.
+    // TK-M5(plan 확정 3): 판 2가 메뉴 모델을 더한다 — manager의 `get_menu`(since 2)와 자식 `tars_menu_v1`. 자식은 new_id로 닿으므로
+    // 같은 판으로 함께 생긴다(스캐너의 `find_children`). 툴킷 build는 TK-M6까지 1 그대로다.
     scanner.addCustomProtocol(b.path("protocol/tars-menu-v1.xml"));
-    scanner.generate("tars_menu_manager_v1", 1);
+    scanner.generate("tars_menu_manager_v1", 2);
     const wayland_mod = b.createModule(.{ .root_source_file = scanner.result });
 
     // libwayland는 컨테이너의 x86_64 sysroot에 있다(Dockerfile 층 22 — dpkg -x로 푼 libwayland-dev:amd64의 무버전
@@ -641,6 +643,20 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(wl_logic_test);
 
+    // menubar_test도 호스트에서 돈다(TK-M5). 메뉴 바의 순수한 셈 — 모델 검증 · 바 배치 · 드롭다운 · 키 · hit-test · 단축키 글 —
+    // wl_logic_test와 같은 모양이다. `theme`은 메뉴 색이 다른 색과 겹치지 않는지 comptime으로 본다(plan 확정 6).
+    const menubar_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/menubar_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+    });
+    menubar_test_mod.addImport("theme", theme);
+    const menubar_test = b.addExecutable(.{
+        .name = "menubar_test",
+        .root_module = menubar_test_mod,
+    });
+    b.installArtifact(menubar_test);
+
     // yield_test도 호스트에서 돈다(DY-M0). `control_test`(init)와 같은 수법이다 — 양보의 상태
     // 규칙을 가짜 ops로 보고 fd는 안 연다. socket과 ioctl은 `display/check.sh`가 본다.
     const yield_test_mod = b.createModule(.{
@@ -680,6 +696,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(dirty_test).step);
     test_step.dependOn(&b.addRunArtifact(yield_test).step);
     test_step.dependOn(&b.addRunArtifact(wl_logic_test).step);
+    test_step.dependOn(&b.addRunArtifact(menubar_test).step);
 
     // pty_test만 x86_64로 남는다. /usr/bin/fish를 exec하는데 그 fish는
     // 게스트용 x86_64라 호스트로 옮길 수 없다 — 빌드만 되고 아무도

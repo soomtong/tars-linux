@@ -23,6 +23,9 @@
 //! 통째, 그 뒤 frame마다 한 걸음: 1 섞은 commit(상자 A(0,0)는 `damage_buffer`, B(64,0)는 `damage` — 실측 4), 2 몰아친 commit(상자 C(0,64)
 //! commit 하나, D(64,64) commit 하나를 frame을 안 기다리고 — 실측 7), 3~10 A의 색만 바꿔 그 자리만 `damage_buffer`. 상자는 32 × 32
 //! (surface 단위, 버퍼는 × buffer_scale), A의 마지막 색은 00FF00, 나머지는 흰색. 걸음마다 `damage step=N`, 10에서 frame을 그친다.
+//! TK-M5(plan 확정 13): `--menu`면 `tars_menu_manager_v1`을 판 2로 bind하고(원래 모드 — `native` 줄도 찍는다) 창에 `get_menu`로 고정
+//! 모델을 보낸다 — File[Open id 1 Cmd+O, 구분선, Quit id 2 비활성], Edit[Copy id 3 Cmd+C, 한글 id 4]. 보낸 뒤 `menu sent menus=2 items=5`,
+//! 서버가 판 1만 내면 `menu unsupported`. 서버가 고른 항목을 알리면 `menu activated id=N`. `--native`는 판 1 그대로다(툴킷과 같은 판).
 //! `wl_surface.enter`의 줄에 `enter`라는 낱말을 안 쓰는 것은 wayland 체인 판정 16이 이 로그의 `enter`(키보드)를 세기 때문이다.
 //!
 //! 바인딩은 terminal의 서버와 같은 스캐너가 만든 것이다(`build.zig`의 `wayland` 모듈 — 서버는 `server`, 이쪽은
@@ -48,8 +51,10 @@ const WM_BASE_VERSION: u32 = 5;
 const DATA_DEVICE_MANAGER_VERSION: u32 = 2;
 /// 한글 IME(WY-M5, design 결정 38).
 const TEXT_INPUT_MANAGER_VERSION: u32 = 1;
-/// 원래 모드의 문(WY-M6, design 결정 46).
+/// 원래 모드의 문(WY-M6, design 결정 46). `--native`는 판 1로 bind한다 — 툴킷(TK-M6 전)과 같은 판이 판 2 서버에서 그대로 도는지 본다.
 const MENU_MANAGER_VERSION: u32 = 1;
+/// `--menu`의 판(TK-M5) — 메뉴 모델(`get_menu`)이 생긴 판.
+const MENU_MODEL_VERSION: u32 = 2;
 
 /// `--copy`가 offer하는 mime — SDL3 3.2.10의 텍스트 다섯과 같은 순서다(`SDL_waylandclipboard.c` text_mime_types). 서버가
 /// 그중에서 고르는 것(`wl_logic.pickMime`)을 남의 클라이언트와 같은 목록으로 본다.
@@ -120,6 +125,8 @@ const Args = struct {
     native: bool = false,
     /// `--damage`(WY-M6 단계 B) — 상자만 다시 그리고 그 자리만 damage로 알린다.
     damage: bool = false,
+    /// `--menu`(TK-M5) — 판 2로 bind하고 고정 메뉴 모델을 보낸다.
+    menu: bool = false,
 };
 
 /// 바둑판의 둘째 색. 둘레의 검정과 갈리게 흰색이다.
@@ -172,6 +179,8 @@ fn parseArgs(argv: []const []const u8) ?Args {
             args.native = true;
         } else if (std.mem.eql(u8, a, "--damage")) {
             args.damage = true;
+        } else if (std.mem.eql(u8, a, "--menu")) {
+            args.menu = true;
         } else if (std.mem.eql(u8, a, "--copy")) {
             i += 1;
             if (i == argv.len) return null;
@@ -191,7 +200,7 @@ fn usage() u8 {
     writeAll(2,
         \\usage: tars-wl-test [--color RRGGBB] [--size WxH] [--ignore-close] [--follow-size] [--fullscreen]
         \\       [--hide-cursor] [--buffer-scale N] [--checker] [--copy TEXT] [--paste] [--paste-drop]
-        \\       [--text-input] [--native] [--damage]
+        \\       [--text-input] [--native] [--damage] [--menu]
         \\  open one xdg_toplevel filled with one colour (default 3366CC, 320x200) and
         \\  print what the compositor sends, one line each. Ends on close, unless
         \\  --ignore-close (then close and ping are ignored). The buffer keeps its
@@ -211,6 +220,9 @@ fn usage() u8 {
         \\  the compositor shows Cmd as Ctrl (compat mode).
         \\  --damage redraws only 32x32 boxes after the first frame and tells the
         \\  compositor just those rectangles (damage), from a ring of four buffers.
+        \\  --menu binds tars_menu_manager_v1 version 2 (native mode) and sends a
+        \\  fixed menu model for the window: File (Open, -, Quit disabled) and
+        \\  Edit (Copy, 한글). It prints the ids the compositor sends back.
         \\
     );
     return EXIT_USAGE;
@@ -499,6 +511,32 @@ fn drawRing(state: *State, fresh: bool) void {
 fn requestFrame(state: *State) void {
     const cb = state.surface.frame() catch return;
     cb.setListener(*State, frameListener, state);
+}
+
+// ── 메뉴(TK-M5) ───────────────────────────────────────────────────
+
+/// evdev KEY_O — `Open`의 단축키(Cmd+O).
+const KEY_O: u32 = 24;
+/// `wl_keyboard.modifiers`의 Super 비트(xml `add_item`).
+const MOD_SUPER: u32 = 0x40;
+
+/// 고정 모델(plan 확정 13). 항목 넷과 구분선 하나 — 서버의 `wl> menu id= menus=2 items=5`.
+fn sendMenu(menu: *tars.MenuV1) void {
+    menu.addMenu("File");
+    menu.addItem(1, "Open", MOD_SUPER, KEY_O, .{});
+    menu.addSeparator();
+    menu.addItem(2, "Quit", 0, 0, .{ .disabled = true });
+    menu.addMenu("Edit");
+    menu.addItem(3, "Copy", MOD_SUPER, KEY_C, .{});
+    menu.addItem(4, "한글", 0, 0, .{});
+    menu.commit();
+    say("menu sent menus=2 items=5", .{});
+}
+
+fn menuListener(_: *tars.MenuV1, event: tars.MenuV1.Event, _: *State) void {
+    switch (event) {
+        .activated => |a| say("menu activated id={d}", .{a.id}),
+    }
 }
 
 // ── 이벤트 ─────────────────────────────────────────────────────────
@@ -877,8 +915,11 @@ fn run(args: Args) !u8 {
         state.text_input = ti;
     };
     // 원래 모드(WY-M6) — 창보다 먼저 bind해 첫 포커스의 `modifiers`부터 Super로 받는다. 서버가 그 global을 안 내면 줄이 없다.
-    if (args.native) if (g.menu_global) |mg| {
-        _ = try registry.bind(mg.name, tars.MenuManagerV1, @min(mg.version, MENU_MANAGER_VERSION));
+    // `--menu`(TK-M5)는 판 2로 bind하고 manager를 들고 있다가 창이 생기면 `get_menu`를 보낸다.
+    var menu_manager: ?*tars.MenuManagerV1 = null;
+    if (args.native or args.menu) if (g.menu_global) |mg| {
+        const want = if (args.menu) MENU_MODEL_VERSION else MENU_MANAGER_VERSION;
+        menu_manager = try registry.bind(mg.name, tars.MenuManagerV1, @min(mg.version, want));
         say("native", .{});
     };
     // seat의 capabilities를 여기서 받아 `get_keyboard` · `get_pointer`를 첫 commit보다 먼저 보낸다(WY-M3 단계 A). 서버는
@@ -892,6 +933,16 @@ fn run(args: Args) !u8 {
     toplevel.setListener(*State, toplevelListener, &state);
     toplevel.setTitle("tars-wl-test");
     toplevel.setAppId("tars-wl-test");
+    // 메뉴 모델(TK-M5) — 첫 commit 전에 보내 창이 처음 보일 때부터 모델이 있다.
+    if (args.menu) if (menu_manager) |mgr| {
+        if (mgr.getVersion() < MENU_MODEL_VERSION) {
+            say("menu unsupported", .{});
+        } else {
+            const menu = try mgr.getMenu(toplevel);
+            menu.setListener(*State, menuListener, &state);
+            sendMenu(menu);
+        }
+    };
     // 첫 commit 전이라 서버가 자리를 정할 때 본다(WY-M2 확정 3).
     if (args.fullscreen) toplevel.setFullscreen(null);
     // 첫 commit은 버퍼 없이 — 서버가 첫 configure를 보내게 한다(xdg-shell의 순서).

@@ -13,14 +13,18 @@
 
     A client that does not bind tars_menu_manager_v1 is in compat mode: the
     compositor shows the Super modifier (Cmd) as Control in wl_keyboard.modifiers,
-    so Cmd+V reaches it as Ctrl+V. A client that binds tars_menu_manager_v1 is in
-    native mode: Cmd reaches it as Super, and Cmd+A is not Ctrl+A.
+    so Cmd+V reaches it as Ctrl+V. A client that binds tars_menu_manager_v1 (any
+    version) is in native mode: Cmd reaches it as Super, and Cmd+A is not Ctrl+A.
 
-    Version 1 has no menu requests yet. Binding the global is the whole message.
-    The menu model (menu bar drawn by the compositor) is added later.
+    Version 2 adds the menu model. The compositor draws the menu bar at the top
+    of the screen and the menus that drop from it. A window that has a menu model
+    shows its menus there while it has the keyboard focus; a window without one
+    shows only its name. When the user picks an item, the compositor sends the
+    item's id back (tars_menu_v1.activated). The client only declares the model;
+    shortcut keys still reach the client as keys, the compositor only shows them.
   </description>
 
-  <interface name="tars_menu_manager_v1" version="1">
+  <interface name="tars_menu_manager_v1" version="2">
     <description summary="declares that the client takes Cmd as Super">
       Binding this global puts the client in native mode for its whole life.
       Destroying the object does not change the mode.
@@ -28,8 +32,101 @@
 
     <request name="destroy" type="destructor">
       <description summary="destroy the manager object">
-        Destroy the object. The client stays in native mode.
+        Destroy the object. The client stays in native mode. Menu objects made
+        from it keep working.
       </description>
     </request>
+
+    <request name="get_menu" since="2">
+      <description summary="get the menu model object of a toplevel">
+        Create the menu model object of a toplevel. A toplevel has at most one;
+        asking again for the same toplevel while the first one exists is the
+        already_constructed error. The new object has an empty model: the
+        window shows only its name until the first commit.
+      </description>
+      <arg name="id" type="new_id" interface="tars_menu_v1"/>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+    </request>
+  </interface>
+
+  <interface name="tars_menu_v1" version="2">
+    <description summary="the menu model of one toplevel">
+      The requests build a pending model: add_menu starts a menu, and add_item
+      and add_separator append to the last menu started. commit makes the
+      pending model the shown model, replacing the old one as a whole, and
+      empties the pending model. reset empties the pending model without
+      showing anything. There is no partial update.
+
+      Limits: 8 menus, 32 entries (items and separators) in one menu, 128
+      entries in all, 64 bytes for a title or a label, which must be UTF-8.
+      Going over a limit is a protocol error.
+
+      If the toplevel is destroyed first, the object becomes inert: requests
+      are accepted and ignored. Destroying the object removes the model.
+    </description>
+
+    <enum name="error">
+      <entry name="too_many" value="0" summary="more menus or entries than the limits"/>
+      <entry name="too_long" value="1" summary="a title or a label longer than 64 bytes"/>
+      <entry name="bad_utf8" value="2" summary="a title or a label that is not UTF-8"/>
+      <entry name="no_menu" value="3" summary="an item or a separator before any add_menu"/>
+      <entry name="already_constructed" value="4" summary="the toplevel already has a menu object"/>
+    </enum>
+
+    <enum name="item_flags" bitfield="true">
+      <entry name="disabled" value="1" summary="shown dimmed, cannot be picked"/>
+    </enum>
+
+    <request name="destroy" type="destructor">
+      <description summary="destroy the menu object">
+        Destroy the object and remove the model. The window shows only its name.
+      </description>
+    </request>
+
+    <request name="reset">
+      <description summary="empty the pending model"/>
+    </request>
+
+    <request name="add_menu">
+      <description summary="start a menu in the pending model">
+        Start a menu with this title. Items and separators added after it go
+        into it.
+      </description>
+      <arg name="title" type="string"/>
+    </request>
+
+    <request name="add_item">
+      <description summary="append an item to the last menu">
+        Append an item. id is what activated sends back; the compositor does not
+        check that ids are unique. shortcut_mods uses the bits of
+        wl_keyboard.modifiers (shift 0x1, ctrl 0x4, alt 0x8, super 0x40) and
+        shortcut_key is an evdev key code; a key of 0 means no shortcut. The
+        compositor only shows the shortcut.
+      </description>
+      <arg name="id" type="uint"/>
+      <arg name="label" type="string"/>
+      <arg name="shortcut_mods" type="uint"/>
+      <arg name="shortcut_key" type="uint"/>
+      <arg name="flags" type="uint" enum="item_flags"/>
+    </request>
+
+    <request name="add_separator">
+      <description summary="append a separator line to the last menu"/>
+    </request>
+
+    <request name="commit">
+      <description summary="show the pending model">
+        Replace the shown model with the pending model, then empty the pending
+        model. A commit of an empty pending model leaves the window with only
+        its name.
+      </description>
+    </request>
+
+    <event name="activated">
+      <description summary="the user picked an item">
+        The user picked the item with this id from the shown model.
+      </description>
+      <arg name="id" type="uint"/>
+    </event>
   </interface>
 </protocol>

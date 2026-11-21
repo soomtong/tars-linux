@@ -30,6 +30,8 @@ cd "$(dirname "$0")" || exit 1
 # WY-M6: 판정 29(28 뒤 · 9 앞) — `tars_menu_v1`을 bind하지 않은 창(호환 모드)은 Cmd+V를 Ctrl(0x4)+V로 받고 Cmd+1은 여전히
 #   compositor의 것이다, `--native`로 bind한 창(원래 모드)은 Cmd를 Super(0x40)로 받는다. 판정 30(29 뒤 · 9 앞) — `--damage` 창의
 #   32 × 32 상자만 바뀐 commit은 서버가 그 화면 사각형만 옮기고(`wl> blit … w=32 h=32`) 상자 넷과 둘레가 화면에 맞다.
+# TK-M5: 판정 31(30 뒤 · 9 앞) — `tars_menu_v1` 판 2로 bind한 창(`--menu`)의 메뉴 모델이 서버에 닿고(`wl> menu … menus=2 items=5`)
+#   창의 title · app_id를 서버가 담는다(`wl> title`). 단계 A는 줄만, 바의 화면은 단계 B가 같은 판정에 더한다.
 # WY-M2(단계 B): 창 모드로 띄운 창은 셸 오른쪽 column이 된다(판정 16 · 17 · 22) — `wl> column`, pane 픽셀 크기의 configure
 #   (activated · tiled), 포커스 slot이 창이면 키가 그 창으로, Cmd+[로 셸에 오면 activated를 잃고 keyboard leave, Cmd+R의 새
 #   configure, Cmd+Q에 slot이 닫히고 셸이 전체 폭을 되찾는다. 자기 workspace를 보는 판정 2~8은 `--fullscreen`으로 띄운다.
@@ -788,6 +790,35 @@ type_text 'echo c30-(grep -c damage.step /tmp/wl10.log)-(grep -c burst.2 /tmp/wl
 type_keys ret
 wait_for_screen '\| c30-10-1' || report_failure "(30) the client's log does not have ten damage steps with a two-commit burst"
 echo "(30): box A was copied alone eight times, all four boxes and the window around them are on screen"
+
+# ── 판정 31: 메뉴 모델 — 판 2의 `get_menu`와 title · app_id(TK-M5 단계 A, plan 확정 3 · 4 · 13 · 14) ─────────────────────
+# 셸만 남은 자리다(판정 30 끝). 단계 A는 그리기가 없다 — 이 판정은 줄만 본다(바의 화면은 단계 B가 같은 번호에 더한다). `--menu` 창은 판 2로
+# bind하고(원래 모드 — `native`) 첫 commit 전에 고정 모델(File 셋 · Edit 둘, 구분선 포함 다섯 칸)을 commit한다 — 서버가
+# `wl> menu id=ID menus=2 items=5`, 그리고 set_title · set_app_id를 담아 `wl> title id=ID app_id=tars-wl-test title=tars-wl-test`.
+# 실측 8: 그 창에 Cmd+Shift+/(`alt-shift-slash`)를 친다 — 단계 A에는 여는 키가 없으므로 표 밖 Cmd 조합이라 창에 Super+Shift로
+# 간다(evdev 53, 클라이언트의 수정키 0x41). 줄 수만 찍고 판정하지 않는다(단계 C에서 서버가 먹는 키가 된다).
+echo "=== (31) menu model: a version 2 client's model and the window's name reach the server ==="
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+NATIVES="$(count_log 'terminal: wl> keys pid=[0-9]+ native')"
+type_text 'tars-wl-test --follow-size --menu > /tmp/wl11.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(31) the menu client did not open as a column"
+MENU_ID="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+wait_for_count 'terminal: wl> keys pid=[0-9]+ native' $((NATIVES + 1)) || report_failure "(31) the menu client did not come in native mode"
+wait_for_log "terminal: wl> menu id=${MENU_ID} menus=2 items=5([^0-9]|$)" || report_failure "(31) no 'wl> menu id=${MENU_ID} menus=2 items=5'"
+wait_for_log "terminal: wl> title id=${MENU_ID} app_id=tars-wl-test title=tars-wl-test" ||
+  report_failure "(31) no 'wl> title id=${MENU_ID} app_id=tars-wl-test title=tars-wl-test'"
+wait_for_log "terminal: wl> configure id=${MENU_ID} w=[0-9]+ h=[0-9]+ act=1" || report_failure "(31) the menu window did not get the keys"
+type_keys alt-shift-slash
+wait_for_log "terminal: wl> key code=53 state=1 to=${MENU_ID}([^0-9]|$)" > /dev/null || true
+echo "(31) measurement 8: Cmd+Shift+/ reached the window as code 53 $(count_log "terminal: wl> key code=53 state=1 to=${MENU_ID}([^0-9]|$)") time(s)"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${MENU_ID} ws=1 slot=1" || report_failure "(31) Cmd+Q did not close the menu window"
+# 클라이언트가 본 것: `native` 하나, 모델을 보낸 줄 하나, 그리고 실측 8의 Super+Shift(0x41) 수.
+type_text 'echo c31-(grep -cx wl-test..native /tmp/wl11.log)-(grep -c menu.sent.menus.2.items.5 /tmp/wl11.log)-(grep -cw depressed.0x41 /tmp/wl11.log)'
+type_keys ret
+wait_for_screen '\| c31-1-1-[0-9]+' || report_failure "(31) the client's log does not have one native line and one sent model"
+echo "(31): the version 2 client's model (2 menus, 5 entries) and its name reached the server; client log $(tlog | grep -aoE 'c31-[0-9]+-[0-9]+-[0-9]+' | tail -n 1)"
 
 # ── 판정 9: render verify ───────────────────────────────────────────────
 #
