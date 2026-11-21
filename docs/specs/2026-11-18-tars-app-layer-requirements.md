@@ -297,8 +297,8 @@ app pane에서 `Cmd+Shift+C`(copy mode)는 아무 일도 하지 않는다.
 - R-WY-12 장식은 서버가 그린다. 클라이언트 쪽 장식을 고집하는 클라이언트는
   장식 없이 그린다.
 - R-WY-13 (새) 배율은 결정 5.
-- R-WY-14 popup은 pane 사각형 안에서 부모 기준으로 그리고, 밖으로 나가면 안으로
-  민다.
+- R-WY-14 (고침, WY design 결정 52) popup은 부모 기준으로 그리고, 앞 workspace의 화면 밖으로 나가면 안으로 민다(flip → slide → resize).
+  column 밖으로 나가 셸 pane을 덮어도 된다 — Chromium의 하위 메뉴가 column 안에 못 들어간다.
 
 ### TK — 툴킷
 

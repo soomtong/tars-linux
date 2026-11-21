@@ -1,0 +1,92 @@
+# WY-M7 — subsurface · window geometry · surface 단위 포인터 · popup · 호환 Cmd 키
+
+Date: 2026-11-22
+Design: `docs/specs/2026-11-19-tars-wayland-server-design.md`(결정 48~55, milestone 표 WY-M7), CR design `docs/specs/2026-11-22-tars-chromium-design.md`(확인 3 · 4 · 8 · 9,
+결정 7), 요구사항 R-WY-14(고침)
+Status: 진행 중. 브랜치 `app-layer-0-3`.
+
+## 확인(조사 `wy-m7`, 세션 scratchpad `wy7/research.md` — HEAD `dcf6046`, 작업 사본의 시제품 서버로 browser 묶음의 Chromium을 띄움)
+
+- `wl_subcompositor` 판 1 하나만 내면 "주소창에 글자를 치면 죽는다"가 사라진다. bubble은 subsurface 하나(부모 = toplevel surface, `set_desync` · `set_position(109, 35)` ·
+  `destroy`)뿐이고 다른 global을 더 바라지 않았다(CR design 위험 2 해소). 자동 완성 목록은 네트워크 없이 뜬다. F11 안내 bubble · 둘째 창 · 한글(`ㅎ` `하` `한`)도 산다.
+- bubble은 ARGB 버퍼(그림자 반투명)이고 입력 영역을 보낸다(`set_input_region(0, 44, 454, 45)` — 위 44줄은 부모의 주소창으로 가야 한다). bubble이 떠 있는 동안 Chromium은
+  그 아래 주소창 캐럿을 계속 깜빡인다 — 부모만 다시 옮기면 bubble 위에 구멍이 난다. bubble에 `frame`을 건다(자식의 frame done이 필요하다).
+- popup 다섯 장면(문맥 메뉴 · `<select>` · 툴팁 · 앱 메뉴 · 하위 메뉴): positioner 다섯 요청(`set_size` · `set_anchor_rect` · `set_anchor` · `set_gravity` ·
+  `set_constraint_adjustment`)만 쓰고 `grab` · `reposition`은 없다. 닫기는 Chromium 스스로(Esc · 고름 · 포커스 잃음에 `destroy`). popup의 window geometry가 버퍼와 다르다
+  (문맥 메뉴 geometry `(24, 12, 319, 319)` · 버퍼 367 × 367). 하위 메뉴의 부모는 popup이다. 메뉴가 열린 동안 키보드 포커스는 toplevel에 남고 `↓` Enter Esc가 메뉴에 먹는다.
+- 하위 메뉴(폭 364, `flip_x`는 있고 `slide_x`가 없다)는 616폭 pane 안에서는 resize로 6픽셀이 된다 — 화면을 경계로 하면 flip해 셸 column 위에 선다.
+- 시제품의 잘못이 알려 준 것: "보이는 popup이 있으면 바깥 누름에 닫고 삼킨다"로 하자 툴팁이 누름을 삼켜 앱 메뉴 단추가 안 눌렸다 — 바깥 누름 규칙은 grab한 popup만.
+- 지금 서버: surface는 opaque · input region과 `set_window_geometry`를 버린다. `fit`이 버퍼 전체를 pane 가운데에 둔다(Chromium의 그림자 10이 대칭이라 우연히 맞는다 —
+  configure 전 첫 geometry는 비대칭이었다). `paint`는 복사 하나(알파 무시), `paintPhys`는 "창 하나 = 버퍼 하나" 전제, `presented`는 toplevel surface의 frame만 `done`.
+  배율 2에서 시제품은 자식을 그림자에만 섞어 물리 합성이 덮어 bubble이 사라졌다.
+- text-input: `Cmd+N`의 둘째 창에서 한글이 그 창으로 간다 — 동작의 귀속은 이미 surface다. 어긋난 것은 `logEnabled` · `textInputDestroyed`가 `toplevelOf(client)`(첫 창)를
+  찍는 표기뿐이다.
+- 호환 Cmd 키를 세 갈래로 쟀다: 지금(125 그대로) 페이지가 `key=Meta`를 보고 누름 `ctrl=false` · 뗌 `ctrl=true`, 29로 바꾸면 진짜 Ctrl과 같지만 둠에서 Cmd가 쏜다
+  (`doomgeneric_wayland.c`의 `KEY_LEFTCTRL` = 사격), 보내지 않으면 Cmd 이벤트가 없고 `Cmd+C` `V`가 `ctrl=true`로 먹는다. 어느 체인도 `code=125`를 세지 않는다.
+- 곁에서: initrd 뒤에 cpio를 이어 붙일 때 앞 파일 크기가 4의 배수가 아니면 커널이 조용히 무시한다(512 경계까지 0으로 채운다).
+
+## 누가 무엇을 하나
+
+구현은 Herdr 서브에이전트 `wy-m7`(Opus — 조사도 같은 에이전트)에 두 단계로. lead는 plan · 대조 · 게이트 · commit. 루트 게이트는 단계 A 뒤와 B 뒤(서버의 그리기를 건드려
+verify가 모든 체인에서 돈다).
+
+- 단계 A — subsurface와 작은 고침 둘(죽음을 없앤다): 할 일 1~5.
+- 단계 B — popup: 할 일 6~9.
+
+## 착수 전에 확정한 것(design 결정 48~55)
+
+1. `wl_subcompositor` 판 1을 xml대로 다 받는다(결정 48) — sync 캐시(pending → cached → 부모 적용 때 current, 부모의 sync 여부는 재귀) · `place_above/below` · 에러
+   (`bad_surface` · `bad_parent`) · 수명(자식 surface · 부모 · subsurface가 어느 순서로 사라져도). 순수한 부분(트리의 z 순서 · sync 판단)은 `wl_logic.zig`에 두고 호스트 검사.
+2. 합성(결정 49): `paint` · `paintPhys`가 트리를 지난다 — 부모(복사) → 자식(z 순, ARGB는 premultiplied over) → (단계 B) popup. clip 안에서. 자식의 buffer_scale이 부모와
+   달라도 물리 합성이 맞다. 자식의 매핑/해제/움직임/크기 바뀜은 부모 통째, 자식의 damage만 온 commit은 화면 좌표의 부분 blit. `presented`는 트리 전체의 frame에 `done`,
+   자식이 처음 보일 때 `wl_surface.enter(output)`. subsurface는 app slot 사각형으로 자른다. 줄 `wl> subsurface id= …`는 만들기 · 매핑 · 닫기만(창마다 상한).
+3. window geometry와 입력 영역(결정 50): `set_window_geometry`는 double-buffered로 담아 `fit`의 대상으로(없으면 버퍼 전체 — 둠 · SDL · tars-wl-test의 좌표 불변).
+   `set_input_region`은 상자의 합(`wl_region.add` — `subtract`는 받되 단순하게: 조사에서 Chromium은 0번).
+4. 포인터(결정 51): (창, surface). 고르는 순수 함수 `pick`(단계 A는 자식과 부모, 단계 B가 popup을 앞에). surface가 바뀌면 leave · enter, 버튼을 쥔 동안 고정, 좌표는 surface 기준.
+5. 호환 Cmd 키(결정 54): 호환 창에 evdev 125 · 126의 key 이벤트를 보내지 않는다(modifiers는 Ctrl). 원래 모드 창은 지금처럼 125.
+6. text-input 표기(결정 55): `ti enable` · `ti disable`의 `to=`를 그 text_input이 들어가 있는 surface의 창으로.
+7. popup(결정 52 · 53): positioner 셈은 순수 함수 + 호스트 표(Chromium의 다섯 장면 값이 표본 — 문맥 41 · select 8 · 툴팁 11 · 앱 메뉴 41 · 하위 메뉴 54). 경계는 앞 workspace의
+   화면(위 띠 · 상태 줄 제외). popup 원점 = 부모 geometry 원점 + configure (x, y) − popup geometry (x, y). column 밖 합성 · verify 그림자에 실제 fb 복사 · 닫히거나 움직인
+   프레임은 통째 · 포인터는 app slot보다 먼저 popup. grab은 받되 키보드 포커스를 안 옮긴다, grab한 popup만 바깥 누름에 `popup_done` + 삼킴. 서버 쪽 닫기 셋(포커스 떠남 ·
+   toplevel 닫힘/숨음 · 부모 크기 바뀜). `reposition` · `set_reactive` · `set_parent_*` · `set_offset`은 xml대로(다시 셈하지 않는 것은 닫기로). 에러(`invalid_positioner` ·
+   `invalid_grab` · `not_the_topmost_popup`). 메뉴 바(TK-M5)가 열린 동안은 그쪽이 먼저다.
+8. 테스트 클라이언트: `tars-wl-test --subsurface`(창 3366CC 위 64 × 64 자식 `set_position(40, 40)`, 키로 위치만 바꾸고 부모 commit은 다음 키에, `--subsurface-sync`) ·
+   `--popup`(누른 점 anchor, 120 × 80, `--popup-grab` · `--popup-ca N` · 가장자리 시험). 받은 enter의 surface와 좌표 · `popup configure` · `popup_done`을 찍는다.
+9. 체인 wayland(판정 37~, 좌표는 단계가 실제 덤프로):
+   - 37(A) subsurface 좌표 색. 38(A) 부모 commit에 묶인 위치 + sync 모드에서 자식 색 바꿈이 부모 commit 전에는 안 보임. 39(A) 포인터 enter의 surface와 자식 좌표.
+   - 40(B) popup 좌표 색과 configure 값(제약 없는 자리 하나, 화면 가장자리의 flip/slide 하나 — 그중 하나는 셸 pane 위로 나가 verify를 함께 본다).
+   - 41(B) grab한 popup의 바깥 누름 → `popup_done` 한 줄 · 그 누름은 창에 안 감. grab 없는 popup의 바깥 누름은 창에 간다. 42(B) popup이 열린 채 `Cmd+[` → `popup_done`.
+   - 43(A) text-input 표기: 창 둘, 둘째 창에서 `ti enable to=<둘째>`. 44(A) 호환 Cmd 단독 tap → `key code=125` 0줄(서버 · 클라이언트), 뒤이은 `Cmd+V`는 `depressed=0x4`.
+   hidpi 체인: bs 2 창의 subsurface(자식도 bs 2)와 자식 bs 1 한 장면(A), popup 한 장면(B) — 물리 좌표 색.
+10. 체인 browser(판정 3과 4 사이): 3a(A) `Cmd+L` · `a` → `wl> subsurface` 줄 · `wl> gone pid=` 0 · `Crash Reports/pending` 비었음 · bubble 자리의 좌표 색이 페이지 색에서
+    바뀜, Esc 둘. 한글은 넣지 않는다(CR-M2). 3b(B) 페이지 안 오른쪽 누름 → `wl> popup` 줄 · 메뉴 자리의 좌표 색, Esc → 그 자리가 다시 페이지 색. 좌표는 Chromium 판에
+    덜 묶이게 넉넉한 상자로.
+11. 서버 쪽 장식은 하지 않는다(결정 55). `docs/help/desk.md`의 "주소창에 글자를 치면 죽는다" 문장을 단계 A가 지운다.
+
+## 할 일
+
+1. (A) `wl_subcompositor` · `wl_subsurface`(확정 1), 트리 합성 · 물리 합성 · frame done · `enter`(확정 2).
+2. (A) geometry · 입력 영역(확정 3), surface 단위 포인터(확정 4 — 자식까지).
+3. (A) 호환 Cmd 키(확정 5), text-input 표기(확정 6).
+4. (A) `tars-wl-test --subsurface`, 호스트 검사(트리 · sync · `pick` · geometry의 `fit`), 판정 37~39 · 43 · 44 · hidpi 둘 · browser 3a.
+5. (A) `docs/help/desk.md`, `measurements.md` 116(블렌드 비용 — bubble 한 장 · 캐럿 깜빡임 때 자식 재합성).
+6. (B) positioner 셈과 호스트 표, `xdg_popup` 전부(확정 7).
+7. (B) popup 합성(column 밖) · verify 복사 · 통째 프레임 · 포인터 · grab · 서버 쪽 닫기.
+8. (B) `tars-wl-test --popup`, 판정 40~42 · hidpi 하나 · browser 3b.
+9. (B) `measurements.md`(메뉴 한 장의 블렌드 · 열고 닫는 프레임), carryover에 넘길 것.
+10. lead: 단계마다 대조 · commit · 루트 게이트(37), 끝에 WY design Status · CR design의 확인 9 고침 · carryover · HANDOFF.
+
+## 판정
+
+- 호스트 검사, `make quick`, 체인 wayland 두 번 연속 · terminal · toolkit · hidpi · pointer · display · browser PASS(단계마다), 루트 게이트 37/37, verify mismatch 0.
+
+## plan에서 실측할 것
+
+1. 블렌드 비용 — bubble 454 × 298 · 앱 메뉴 412 × 735 한 장의 µs, 캐럿 깜빡임 때 자식 재합성. 2. 배율 2에서 자식 · popup의 물리 좌표(bubble 676 × 178 bs 2가 1:1인가).
+3. column 밖 popup의 verify(mismatch 0)와 닫은 뒤 셸 pane의 다시 그림. 4. 자식에 `wl_surface.enter`를 안 보내면 Chromium의 bubble 배율이 달라지는가. 5. 부모 크기 바뀜
+(`Cmd+R`)에 닫힌 popup을 Chromium이 다시 여는가. 6. SDL3 앱에서 "Cmd 이벤트 없음"이 Ctrl 조합으로 먹는가(display 체인의 SDL 판정이 그대로인가). 7. 체인 3a · 3b의 좌표.
+8. geometry를 `fit`에 쓴 뒤 Chromium의 첫 화면 좌표(browser 판정 2 · 3의 `buf=636x772` · 페이지 원점 (644, 107))가 그대로인가.
+
+## 결과
+
+(단계마다 채운다.)

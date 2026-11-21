@@ -3,7 +3,7 @@
 접두사: WY
 
 Date: 2026-11-19
-Status: WY-M0~M6 끝(2026-11-20, 결정 1~47). 남은 것은 WY-M7(popup · 장식 — CR-M0이 Chromium의 요청을 잰 뒤). 사용자 위임으로 Claude가 정했다.
+Status: WY-M0~M6 끝(2026-11-20, 결정 1~47). WY-M7(결정 48~55, plan `docs/plans/2026-11-22-tars-wayland-server-wy-m7.md`)이 진행 중이다. 사용자 위임으로 Claude가 정했다.
 브랜치 `app-layer-0-3`.
 
 계기: App Layer의 2단(`docs/plans/2026-11-18-tars-app-layer-roadmap.md`). 사용자(2026-11-18):
@@ -265,6 +265,33 @@ WY-M6을 열며(2026-11-20, 조사 `wy-m6` — HEAD `e654a8e`, SDL 3.2.10 · 둠
     옮기고 clip에 넣는다(둘레 검정 칠하기 없음). 통째로 되돌아가는 조건은 버퍼 크기 · buffer_scale · `fit` 바뀜, 첫 그림, 통째 프레임, 앞 창이 바뀜 —
     지금 "둘레를 다시 검정으로"를 정하는 자리와 같다. 물리 합성은 clip을 따라 저절로 작아진다. 사각형 목록은 숫자가 바랄 때.
 
+48. subsurface(WY-M7, 조사 `wy-m7` — 시제품으로 Chromium을 띄워 쟀다): `wl_subcompositor` 판 1을 xml대로 다 받는다(`get_subsurface` · `set_position` · `place_above/below` ·
+    `set_sync/desync` · 역할 · 부모 에러). 위치 · 순서는 부모 commit에 적용되고 sync의 자식 commit은 캐시했다가 부모 적용 직후에 적용한다. Chromium의 bubble은 이 가운데
+    desync · `set_position` · `destroy`만 쓴다 — 그래도 xml의 기본 모드가 sync라 전부 한다. 자식은 키보드 포커스를 받지 않는다.
+49. 합성은 "창 하나 = surface 트리 하나"다 — `paint` · `paintPhys` 안에서 부모(복사) → 자식들(z 순, ARGB는 premultiplied over로 섞음) → popup들(만든 순, 각자의 자식 포함),
+    clip이 있으면 모두 그 안에서. terminal(main.zig)은 지금처럼 창 번호와 사각형만 안다. 배율 > 1의 물리 합성도 같은 트리를 지난다(자식의 buffer_scale이 부모와 달라도).
+    자식 · popup이 매핑/해제/움직임/크기 바뀜이면 부모를 통째로, 자식의 damage만 온 commit은 그 사각형을 화면 좌표로 바꿔 부분 blit에 더한다. frame done과
+    `wl_surface.enter(output)`은 트리 전체에 간다. subsurface는 app slot 사각형으로 자른다(xml은 안 자르지만 셸 위로 나가는 subsurface를 쓰는 클라이언트가 없다).
+50. `xdg_surface.set_window_geometry`를 쓴다(지금 버린다): toplevel의 놓는 자리 셈(`fit`)의 대상이 "버퍼 전체"가 아니라 geometry 사각형이 된다(그림자를 화면에 안 싣는다 —
+    popup의 기준과 같은 좌표). geometry를 안 보내는 클라이언트(둠 · SDL · tars-wl-test)는 지금 길 그대로다. `wl_surface.set_input_region`도 쓴다(상자의 합 — bubble의 위 44줄은
+    입력 영역이 아니라 부모의 주소창으로 가야 한다).
+51. 포인터 포커스는 (창, surface)다: 그 창 안에서 맨 위 popup부터 geometry 사각형, 자식은 입력 영역, 마지막에 부모를 고른다(순수 함수). 창 안에서 surface가 바뀌면 같은
+    frame에 leave · enter, 버튼을 쥔 동안은 안 바꾼다. 좌표는 그 surface 기준.
+52. popup(R-WY-14를 고친다): `xdg_positioner` · `xdg_popup`을 판 5로 받는다. 자리 셈은 순수 함수(anchor · gravity · offset → flip → slide → resize, xml의 순서)이고 경계는
+    pane이 아니라 앞 workspace의 화면(위 띠 · 아래 상태 줄 제외)이다 — popup은 column 밖으로 나가 셸 pane을 덮어도 된다. Chromium의 하위 메뉴(폭 364, `flip_x`만 있고
+    `slide_x`가 없다)는 616폭 column 안에서는 resize로 6픽셀이 된다. 그 대가로: popup이 덮은 자리를 verify의 그림자에 실제 fb에서 복사해 비교에서 빼고(app slot과 같은
+    처리), popup이 닫히거나 움직인 프레임은 통째로 그리며, 포인터는 app slot보다 먼저 "어느 창의 popup 위인가"를 본다.
+53. popup의 닫기: 클라이언트의 `destroy`가 보통의 길이다(Chromium은 Esc · 고름 · 포커스 잃음에 스스로 닫는다). 서버는 안전망 셋에 `popup_done`을 보낸다 — 키보드 포커스가
+    그 toplevel을 떠남, toplevel이 닫힘 · 숨음(workspace 전환 · 화면 밖 column), 부모 크기 바뀜(`set_reactive` · `set_parent_*`는 받아 담기만 하고 다시 셈하지 않는다).
+    `grab`은 받되 키보드 포커스를 popup으로 옮기지 않는다(xml과 다른 점 — 옮기면 text-input의 enter/leave(결정 43)와 조합 확정(42)이 popup까지 넓어진다). grab한 popup의
+    바깥 누름만 위에서부터 `popup_done`하고 그 누름을 삼킨다 — grab 없는 popup(툴팁)은 바깥 누름에 닫지 않는다(시제품이 닫았다가 앱 메뉴 단추를 못 눌렀다).
+    `reposition`은 새 positioner로 다시 셈해 `repositioned` → `configure` → `xdg_surface.configure`.
+54. (결정 45를 고친다) 호환 창에는 Cmd(evdev 125 · 126)의 key 이벤트를 보내지 않는다 — modifiers의 Super → Ctrl은 그대로다. 지금은 웹 페이지가 `key=Meta` keydown을 보고
+    같은 키의 누름과 뗌이 다른 수정키 상태를 본다. 29(Ctrl)로 바꿔 보내면 둠에서 Cmd가 쏜다(결정 45가 피하려던 것). 안 보내면 Ctrl 조합이 진짜 Ctrl과 같은 값으로 들어가고
+    `Held`의 짝도 그대로다. 잃는 것: 호환 앱이 Cmd 단독 tap을 못 본다 — 그 길은 원래 모드다.
+55. text-input의 귀속은 이미 surface다(둘째 창에서 한글이 그 창으로 간다 — CR design 확인 9는 로그를 잘못 읽었다). 고치는 것은 `ti enable` · `ti disable` 줄의 `to=`가 첫 창을
+    찍던 표기뿐이다. 서버 쪽 장식(포커스 테두리 · 빈 칸 이름)은 WY-M7에서도 하지 않는다 — Chromium은 자기 장식을 그린다(뒤의 필요가 생길 때).
+
 ## Milestone
 
 로드맵의 WY-M0을 둘로 나눈다. 서버 뼈대 · 키 · workspace · 보호만으로도 milestone 하나의 크기이고, 둠은 별도
@@ -279,4 +306,4 @@ WY-M6을 열며(2026-11-20, 조사 `wy-m6` — HEAD `e654a8e`, SDL 3.2.10 · 둠
 | WY-M4 | 클립보드 `wl_data_device_manager` 2(결정 32~37) — 즉시 받기, 포커스 앞 selection, SIGPIPE | 테스트 클라이언트와 셸 사이 양방향 붙여넣기(wayland 판정 23 · 24) |
 | WY-M5 | 한글 `text-input-v3`(결정 38~43) — 오토마타 하나, 켠 창에서만, 먹은 키는 안 보냄, 포커스를 잃으면 확정 | 조합 · 확정, 두 번 찍히지 않음(wayland 판정 26~28). 녹화 B |
 | WY-M6 | 호환 모드(결정 45) · `tars_menu_v1` 뼈대(46) · damage 부분 blit(47) | 호환 창 `mods depressed=0x4` · 원래 창 `0x40`, 부분 `wl> blit` 줄과 좌표 색(wayland 판정 29 · 30) |
-| WY-M7 | `xdg_popup` · `xdg_positioner`(slide) · 서버 쪽 장식(포커스 테두리 · 빈 칸 이름) — CR-M0 실측 뒤(결정 44) | popup 위치 · grab · 포커스 잃음, 장식의 좌표 색 |
+| WY-M7 | `wl_subcompositor`(결정 48 · 49) · geometry · 입력 영역 · surface 단위 포인터(50 · 51) · `xdg_popup` · `xdg_positioner`(52 · 53) · 호환 Cmd 키(54) · text-input 표기(55). 장식은 뒤로 | 테스트 클라이언트의 subsurface · popup 좌표와 grab, browser 체인에서 주소창 타이핑이 안 죽음 |
