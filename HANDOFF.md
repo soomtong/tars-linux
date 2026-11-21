@@ -1,4 +1,4 @@
-# HANDOFF: App Layer(0.3) — TK 끝(TK-M0~M6, `11346d5`, 루트 게이트 36/36, 2026-11-22). 다음 CR-M0(Chromium이 무엇을 요청하는지 잰다) → WY-M7 → CR-M1. tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) — TK 끝, CR-M0 끝(재기만 — Chromium이 sandbox를 켠 채 `tars`로 뜬다, 벽은 `wl_subcompositor` 하나). 다음 CR-M1(묶음 `browser` · `tars-browser` · 체인) → WY-M7 → CR-M2. tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
 
 ## 목표
 
@@ -22,6 +22,12 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 실제 파일과 대조한다. 기억 `feedback_herdr_subagents`.
 
 ## 완료된 작업 (2026-11-19~20, WY-M0 단계 C · WY-M1 착수 — 이 세션)
+
+- [x] CR design(`docs/specs/2026-11-22-tars-chromium-design.md`, 결정 1~9) · CR-M0(재기만, 저장소 변화 0, 서브에이전트 `cr-m0` — 끝나고 pane 닫음): Debian trixie
+      `chromium` 156을 그대로 sandbox 켠 채 `tars`로 우리 compositor에 띄웠다(HTTPS · 한글 preedit · 호환 모드 · 클립보드 · `display_scale=2`가 이미 된다).
+      치명적 벽 하나: `wl_subcompositor`가 없어 주소창에 글자를 치면 bubble에서 죽는다. 조사 · 임시 스크립트 · 화면 PNG 열여덟은 세션 scratchpad `cr0/`
+      (다음 세션에는 없을 수 있다 — 사실은 design의 확인 절에 다 옮겼다). docker에 측정용 이미지 둘이 남아 있다(`cr0-chromium-img` · `cr0-dbg` — CR이 끝나면
+      `docker rmi`, `cr0-dbg`는 minidump를 푸는 `chromium-dbgsym`이 들어 있어 WY-M7 검증에 쓸 수 있다)
 
 - [x] TK-M6(plan `docs/plans/2026-11-21-tars-ui-toolkit-tk-m6.md`, design 결정 17, 서브에이전트 `tk-m6` — 끝나고 pane 닫음) — TK 서브프로젝트 끝: A `5339440` 순수 모듈
       `toolkit/src/menu.zig` · kit의 `perform` · `validate`(단축키의 정의가 메뉴 모델 하나 — `files/menus.zig`) · 창 층 판 2 · `tars-files`의 바 File · Edit · View · Go ·
@@ -156,9 +162,12 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
       `devlayer/cache/<sha256>`에 손으로 두었다 — 캐시 없는 기계에서는 release 전까지 `make dev-layers`가 받기에서 멈춘다.
       release 방법 두 갈래: (가) 태그 push → Actions가 빌드 · 업로드(sha256이 바뀌어 manifest를 고치고 wayland 체인 한 번), (나) 로컬 tarball을
       `gh release create`로 올림(sha256 그대로). Actions workflow가 태그에서 함께 돌면 자산이 겹치니 (나)면 workflow를 고르게 손본다
-- [ ] CR-M0(Chromium — 로드맵의 4단 첫 milestone: devlayer 묶음으로 얹고 무엇을 요청하는지 잰다 — popup · 장식 · 프로토콜 목록 · title/app_id). 아직 design 전 —
-      `docs/plans/2026-11-18-tars-app-layer-roadmap.md`의 CR 절과 요구사항의 Chromium 결정부터 읽는다. 그 결과로 WY-M7(popup · 장식)을 고르고 CR-M1로.
-      Chromium 묶음은 받기(수백 MB)와 라이선스 고지가 따르므로 design에서 출처 · 판 고정 · sha256을 먼저 정한다(밖에서 받는 일은 devlayer의 기존 절차)
+- [ ] CR-M1(devlayer 묶음 `browser`(Debian `chromium` + `fonts-noto-cjk`, base · gpu · media 위 — 새로 zstd 약 164 MiB + 글꼴) · 실행 문 `tars-browser`
+      (`--ozone-platform=wayland --disable-gpu`) · init의 `/dev/shm` · 새 체인 `browser/check.sh`(display 체인 부팅 3의 모양, `-m 2048`↑, 첫 화면 60초 상한)).
+      끝나는 조건: `file://` 첫 화면의 좌표 색 + 렌더러의 `Seccomp: 2` · 다른 user ns. plan을 쓰기 전에 볼 것: harvest가 `snapshot.debian.org` 날짜 고정을 받을 수 있는가
+      (Debian chromium은 주 1회 바뀌고 옛 판이 사라진다), postinst가 만드는 캐시가 묶음에 실리는가, 묶음에 setuid가 끌려오는가
+- [ ] WY-M7(CR design 결정 7): `wl_subcompositor` · `wl_subsurface` → `xdg_popup` · `xdg_positioner` → text-input의 귀속을 포커스 surface로. browser 체인에서
+      "주소창에 글자를 쳐도 안 죽는다"까지. 그 뒤 CR-M2(주소창 한글 · 클립보드 양방향 · `net` · 풀스크린 — 녹화 D)
 - [ ] 녹화 C(사람 녹화 — `tars-files`: column에 뜸 · 방향키 · `Cmd+L` 한글 경로 · `Cmd+K` · `Cmd+C` → 셸 `Cmd+V` · 메뉴 바 · 강조 애니메이션. 장면은 toolkit 체인
       판정 15~34가 돈다). 녹화 A(둠)도 아직 안 찍었다
 - [ ] 녹화 B(사람 녹화 — strip + SDL3 column + 클립보드 + 한글, 조사 `wy-m5/research.md` 6절 끝에 보일 것)

@@ -129,8 +129,11 @@ design doc: `docs/specs/2026-11-20-tars-ui-toolkit-design.md`(접두사 TK, 결�
 
 ## 4단 — CR: Chromium
 
-design doc: `tars-chromium-design.md`(접두사 CR). 새 체인 `browser/check.sh`.
+design doc: `docs/specs/2026-11-22-tars-chromium-design.md`(접두사 CR). 새 체인 `browser/check.sh`.
 전제는 WY-M5.
+
+5판(2026-11-22, CR design 결정 8): CR-M0이 재 보니 첫 화면은 지금 서버로 이미 뜬다. 그래서 CR-M1(묶음 · 문 · 체인)을 WY-M7보다 먼저 하고, WY-M7의 결과를
+진짜 Chromium으로 바로 검증한다. 순서는 CR-M0(끝) → CR-M1 → WY-M7(`wl_subcompositor` → `xdg_popup` → text-input의 surface 귀속) → CR-M2.
 
 | milestone | 서는 것 | 끝나는 조건 |
 |---|---|---|
