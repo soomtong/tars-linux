@@ -4,7 +4,7 @@
 
 Date: 2026-11-22
 Status: CR-M0 끝(2026-11-22 — 재기만 했다, 저장소 변화 0). 사용자 위임(2026-11-18 "주요 결정은 너의 의견에 따를 테니까")으로 Claude가 정했다.
-다음은 CR-M1 plan. 브랜치 `app-layer-0-3`.
+CR-M1 plan `docs/plans/2026-11-22-tars-chromium-cr-m1.md`. 브랜치 `app-layer-0-3`.
 
 요구사항 `docs/specs/2026-11-18-tars-app-layer-requirements.md`(R-CR-1~6, 결정 3 · 8, 위험 6, 녹화 D), 순서 `docs/plans/2026-11-18-tars-app-layer-roadmap.md`의 4단.
 
@@ -42,7 +42,8 @@ App Layer(0.3)의 4단. Wayland 서버(WY-M0~M6)와 툴킷(TK)이 섰고, 남은
 10. 빌드와 의존: `.deb` 91.7 MB, `--no-install-recommends` 폐포 170 패키지(받기 203 MiB · 설치 735 MiB). GTK는 `Depends`지만 NEEDED가 아니다(dlopen — 파일 선택 ·
     인쇄 대화상자). base · gpu · media 묶음 위에 얹으면 새로 드는 것은 80 패키지 · 압축 전 450 MiB · zstd15 164 MiB(글꼴 제외). postinst가 만드는 캐시(`gschemas.compiled` ·
     gdk-pixbuf · gio · mime)가 없으면 첫 키에서 죽는다 — harvest는 설치 전후 비교라 이것을 싣는다. 업스트림 스냅샷은 트렁크(160.0.8177.0)이고 261 MiB zip · 의존 수작업.
-11. 실행 환경: dbus 없이 뜬다(경고만). `/dev/shm`이 없어 `/tmp`를 쓴다. Debian 래퍼 `/usr/bin/chromium`은 `--ozone-platform`을 안 붙여 X11을 골라 끝난다(`expr` 없음 경고도).
+11. 실행 환경: dbus 없이 뜬다(경고만). `/dev/shm`은 없어도 된다 — 공유 메모리는 memfd이고 `/tmp/org.chromium.Chromium.*`은 ProcessSingleton 소켓 자리다
+    (CR-M0은 "없어서 `/tmp`를 쓴다"로 잘못 읽었다 — CR-M1 조사가 `/proc/<pid>/maps`의 `memfd:` 53줄 · `/dev/shm` 0줄로 바로잡았다). Debian 래퍼 `/usr/bin/chromium`은 `--ozone-platform`을 안 붙여 X11을 골라 끝난다(`expr` 없음 경고도).
     fontconfig가 아는 글꼴은 묶음의 것뿐이다 — initrd의 Pretendard · unifont는 경로 밖. `fonts-noto-cjk`를 실은 실험 묶음에서 한글 · 한자 · 가나가 보였다.
     로캘은 `C.utf8`뿐(`--lang=en-US`로 뜸). 프로필은 `~/.config/chromium`(홈 디스크).
 12. 보안 갱신: trixie-security의 chromium은 주 1회쯤 올라오고 옛 판은 `deb.debian.org`에서 사라진다(`apt-cache madison`에 한 줄). devlayer의 Debian 줄은 `version=`으로
@@ -57,13 +58,16 @@ App Layer(0.3)의 4단. Wayland 서버(WY-M0~M6)와 툴킷(TK)이 섰고, 남은
 1. 빌드는 Debian trixie의 `chromium`이다. R-CR-1의 "업스트림 빌드가 수정 없이"를 "TARS가 소스를 고치지 않은 Chromium"으로 읽는다 — Debian 판은 서명된 Release로 검증되는
    기존 harvest 길을 그대로 타고 보안 갱신이 매주 온다. 업스트림 스냅샷은 트렁크라 안정판이 아니고 의존을 손으로 채워야 한다.
 2. 묶음은 `browser` 하나, base · gpu · media 위에 얹는 일반 묶음이다(R-CR-2 — initrd에 안 들어간다). GTK는 싣는다(대화상자 — Depends를 그대로 따른다).
-   판 고정은 `version=`이고, 주마다 옛 판이 사라지는 문제는 `snapshot.debian.org`의 날짜 고정으로 푼다(CR-M1이 harvest에서 재고 정한다 — 안 되면 "harvest 실패가 곧 올릴 때").
-3. 한글 · 한자 · 가나 글꼴은 `fonts-noto-cjk`를 같은 묶음에 싣는다(웹 페이지는 한자와 일본어가 섞인다 — Pretendard만으로는 두부가 된다). 크기는 CR-M1이 zstd로 잰다.
+   판 고정은 `version=`과 `snapshot.debian.org`의 시각 하나(`devlayer/snapshot`)다 — 저장소 전체에 쓴다(CR-M1 조사: browser에만 쓰면 다른 묶음과 같은 의존의 판이
+   갈라져 대조에 걸리고, live 미러의 `=판` 고정은 2026-11-21 point release로 이미 base에서 깨져 있었다). 지금 도구는 base와 같은 파일만 지우므로 "gpu · media 위"는
+   "gpu · media와 같은 파일을 함께 싣는다"가 된다 — 294 MiB(겹친 것까지 지우면 228, carryover).
+3. 한글 · 한자 · 가나 글꼴은 `fonts-noto-cjk`를 같은 묶음에 싣는다(웹 페이지는 한자와 일본어가 섞인다 — Pretendard만으로는 두부가 된다). zstd15로 68 MiB
+   (Sans + Serif `.ttc` 넷 — CFF라 거의 안 줄어든다. Serif를 빼면 −40 MiB, carryover).
 4. 실행 문은 우리 것 `tars-browser`다 — `--ozone-platform=wayland --disable-gpu`를 붙여 `/usr/lib/chromium/chromium`을 exec한다. Debian 래퍼와 그 Google API 키 env는 쓰지
    않는다. 인자(URL · 파일)는 그대로 넘긴다.
 5. 계정과 sandbox는 지금 모양 그대로다(요구사항 결정 8이 이미 선다). `--no-sandbox`를 붙이는 길을 만들지 않는다. 체인은 렌더러의 `Seccomp: 2`와 브라우저 ≠ 렌더러의
    user namespace로 판정한다.
-6. `/dev/shm`은 init이 tmpfs로 만든다(POSIX shm의 관행 — 없어도 뜨지만 `/tmp`로 돌아가는 것은 Chromium만의 처리다). CR-M1에서, 다른 체인의 변화 0을 확인하며.
+6. (고침, CR-M1) `/dev/shm`은 CR에서 다루지 않는다 — Chromium은 memfd를 쓴다(확인 11). POSIX shm의 관행으로 init이 만들 값은 CR 밖의 carryover다.
 7. WY-M7의 범위와 순서: (가) `wl_subcompositor` · `wl_subsurface`(죽음을 없앤다) → (나) `xdg_popup` · `xdg_positioner`(메뉴가 보인다) → (다) text-input의 귀속을
    클라이언트가 아니라 포커스 surface로. 서버 쪽 장식은 뒤로 미룬다 — Chromium이 스스로 그린다. 호환 모드에서 Cmd 키 자체(evdev 125)를 Ctrl로 바꿔 보낼지는
    WY-M7이 재고 정한다(WY 결정 44는 "키 코드 그대로"였다).
@@ -77,7 +81,7 @@ App Layer(0.3)의 4단. Wayland 서버(WY-M0~M6)와 툴킷(TK)이 섰고, 남은
 | milestone | 서는 것 | 끝나는 조건 |
 |---|---|---|
 | CR-M0 | 재기만 한다(끝) | 이 문서의 확인 절 |
-| CR-M1 | devlayer 묶음 `browser`(+ 글꼴) · `tars-browser` · `/dev/shm` · 체인 `browser` | `file://` 첫 화면의 좌표 색, 렌더러의 sandbox 판정 |
+| CR-M1 | 거두기의 snapshot 고정 · devlayer 묶음 `browser`(+ 글꼴) · `tars-browser` · 체인 `browser` | `file://` 첫 화면의 좌표 색, 렌더러의 sandbox 판정 |
 | WY-M7 | `wl_subcompositor` · `xdg_popup`/`xdg_positioner` · text-input의 surface 귀속(WY design에 결정을 더한다) | 테스트 클라이언트의 subsurface · popup 좌표와 grab, browser 체인에서 주소창 타이핑이 안 죽음 |
 | CR-M2 | 주소창 한글 · 셸과 클립보드 양방향 · `net` · 풀스크린 workspace | 녹화 D의 장면을 체인 판정으로(녹화 자체는 사람) |
 
