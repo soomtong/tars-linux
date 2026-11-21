@@ -28,6 +28,7 @@ const vt = @import("vt.zig");
 const yield = @import("yield.zig");
 // WY-M0: terminal 안의 Wayland 서버(WY design 결정 1)와 그 순수한 셈.
 const wls = @import("wl/server.zig");
+const menubar = @import("menubar.zig");
 const wl_logic = @import("wl_logic.zig");
 const display_proto = @import("display_proto");
 
@@ -684,6 +685,9 @@ fn renderOverlay(
     // import하는데 Zig는 안쪽 블록에서도 이름 가리기를 막는다
     // (HI-M1 실측 8 · SP-M0 실측 9와 같은 자리).
     st: Status,
+    // 메뉴 바(TK-M5 단계 B). 위 띠라 프롬프트 · 상태 띠와 안 겹친다. 그림자는 app slot 사각형을 이 함수 뒤에 실제 fb에서
+    // 옮기는데 바는 y < 20이라 그 사각형(`appArea`, y ≥ 20)과도 안 겹친다.
+    bar: BarLine,
 ) !?PromptInk {
     // 그린 결과를 돌려준다(SH-M2). 게이트가 "무엇을 그렸는가"를 볼 창구가
     // 이것이고, 반전 구간의 픽셀 범위를 여기서 나르므로 `dumpPromptInk`가
@@ -694,6 +698,7 @@ fn renderOverlay(
     // 프롬프트와 안 겹친다 — 프롬프트는 격자의 마지막 줄이고 이것은 격자
     // 바깥이다. 그래서 순서에 뜻이 없고, `present` 앞이라는 것만 중요하다.
     try renderStatusBand(fb, cache, st);
+    try renderBarBand(fb, cache, bar);
     return ink;
 }
 
@@ -720,6 +725,139 @@ fn paintBand(fb: drm.Framebuffer, cache: *font.Cache, st: Status, want: bool, cl
     try renderStatusBand(fb, cache, st);
     const grid_bottom = grid_origin.y + @as(u32, st.rows) * ROW_HEIGHT;
     if (grid_bottom < fb.height) clips.push(0, grid_bottom, fb.width, fb.height - grid_bottom);
+}
+
+// ── 메뉴 바(TK-M5 단계 B, plan 확정 1 · 2 · 7) ────────────────────────────
+//
+// 위 여백 20 px(`geometry.MARGIN`) 안의 16 px 한 줄. 상태 줄 띠와 같은 꼴이다 — 실제 경로는 내용이 바뀐 프레임과 통째 프레임에만
+// `paintBar`가 띠를 지우고 그린 뒤 clip에 넣고, verify의 그림자는 매 프레임 `renderOverlay`에서 같은 `renderBarBand`로 그린다. 셸 pane이
+// 포커스면 띠를 `MARGIN_COLOR`로 지우기만 한다 — 통째 경로의 `renderBackdrop`이 칠한 바이트 그대로다. 배치는 `menubar.zig`의 셈이다.
+
+/// 이 프레임의 바. `render`가 포커스 slot에서 짓는다. 이름과 모델은 서버의 것을 가리킨다 — 다음 `dispatch`까지 유효해서 이 프레임
+/// (실제 경로 · 그림자 · 덤프) 안에서만 쓴다.
+const BarLine = struct {
+    /// 띠가 없다 — 셸 workspace의 전체 화면(격자가 화면 위 끝부터라 위 여백이 없다). 아무것도 안 지우고 안 그린다.
+    hidden: bool = false,
+    /// 포커스 slot의 창. null이면 셸 pane이 포커스라 바가 빈다.
+    id: ?u32 = null,
+    name: []const u8 = "",
+    menu: ?wls.MenuView = null,
+};
+
+/// 마지막으로 본 바(`StatusMemo`와 같은 꼴). 바뀌었으면 띠를 다시 그리고 `menu> bar` 줄을 찍는다. 이름은 값으로 든다 — 서버의
+/// 슬라이스는 다음 프레임에 없을 수 있다. 모델은 세대로 견준다(commit마다 는다).
+const BarMemo = struct {
+    seen: bool = false,
+    hidden: bool = false,
+    id: ?u32 = null,
+    name: [menubar.MAX_TEXT]u8 = undefined,
+    name_len: usize = 0,
+    generation: ?u32 = null,
+
+    fn changed(self: *const BarMemo, b: BarLine) bool {
+        if (!self.seen) return true;
+        const gen: ?u32 = if (b.menu) |m| m.generation else null;
+        return self.hidden != b.hidden or self.id != b.id or self.generation != gen or
+            !std.mem.eql(u8, self.name[0..self.name_len], b.name);
+    }
+
+    fn remember(self: *BarMemo, b: BarLine) void {
+        self.seen = true;
+        self.hidden = b.hidden;
+        self.id = b.id;
+        self.generation = if (b.menu) |m| m.generation else null;
+        const n = @min(b.name.len, self.name.len);
+        @memcpy(self.name[0..n], b.name[0..n]);
+        self.name_len = n;
+    }
+};
+
+/// 글자 하나의 칸 수 — `runWidth`와 같은 셈(`cell_width / CELL_W`, 적어도 1)이라 배치와 그리기가 맞는다. 굽다 실패하면 1칸.
+fn barCells(ctx: *const anyopaque, cp: u21) u8 {
+    const cache: *font.Cache = @ptrCast(@alignCast(@constCast(ctx)));
+    const glyph = cache.find(cp) catch return 1;
+    return @intCast(@max(1, glyph.cell_width / CELL_W));
+}
+
+fn barWidths(cache: *font.Cache) menubar.Widths {
+    return .{ .ctx = cache, .cellsOf = barCells };
+}
+
+/// 바의 배치(`menubar.layoutBar`). 글자가 격자 왼쪽 끝(`grid_origin.x`)에서 시작한다.
+fn barLayout(fb: drm.Framebuffer, cache: *font.Cache, b: BarLine) menubar.Bar {
+    const model: ?*const menubar.Model = if (b.menu) |m| m.model else null;
+    return menubar.layoutBar(barWidths(cache), grid_origin.x, b.name, model, fb.width);
+}
+
+/// 위 띠를 지우고 바를 쓴다 — 실제 경로(`paintBar`)와 그림자(`renderOverlay`)가 함께 지나는 한 곳. 띠가 없으면(`hidden`, 또는 위
+/// 여백이 바보다 낮다) 아무것도 안 한다. 글자는 `drawRun`이라 x를 격자의 col로 바꾼다 — 바의 x는 모두 `grid_origin.x`에서 칸 단위로
+/// 떨어져 있다(`layoutBar`).
+fn renderBarBand(fb: drm.Framebuffer, cache: *font.Cache, b: BarLine) !void {
+    if (b.hidden or grid_origin.y < menubar.BAR_H) return;
+    fb.fillRect(0, 0, fb.width, menubar.BAR_H, MARGIN_COLOR);
+    if (b.id == null) return;
+    const bar = barLayout(fb, cache, b);
+    _ = try drawRun(fb, cache, bar.name, menubar.TEXT_Y, theme.MENU_NAME, (bar.name_span.x - grid_origin.x) / CELL_W, fb.width);
+    const model = (b.menu orelse return).model;
+    for (bar.titles[0..bar.count], 0..) |t, i| {
+        _ = try drawRun(fb, cache, model.menus[i].title.get(), menubar.TEXT_Y, theme.MENU_FG, (t.x - grid_origin.x) / CELL_W, fb.width);
+    }
+}
+
+/// 실제 경로의 바(`paintBand`와 같은 꼴). `want`이 거짓이면 띠에 손대지 않는다 — 지난 프레임에 그린 바가 그대로이고 내용이 같다.
+/// 참이면 다시 그리고 띠를 clip에 넣는다. 띠가 없으면 clip도 없다.
+fn paintBar(fb: drm.Framebuffer, cache: *font.Cache, b: BarLine, want: bool, clips: *drm.ClipList) !void {
+    if (!want) return;
+    try renderBarBand(fb, cache, b);
+    if (b.hidden or grid_origin.y < menubar.BAR_H) return;
+    clips.push(0, 0, fb.width, menubar.BAR_H);
+}
+
+/// `menu> bar` 줄(plan 확정 7 · 14). 바가 바뀐 프레임만. 모양은 셋 —
+///
+///   terminal: menu> bar id=ID name=NAME titles=File,Edit   (모델이 없으면 titles=-, 이름이 없으면 name=-)
+///   terminal: menu> bar empty                              (셸 pane 포커스)
+///   terminal: menu> bar hidden                             (전체 화면 — 띠가 없다)
+///
+/// 띠가 있으면 뒤에 `terminal: menu> bar ink name=N fg=M other=K` — 위 띠에서 `MENU_NAME` · `MENU_FG` 픽셀과, 그 둘도 `MARGIN_COLOR`도
+/// 아닌 픽셀(화살표 등)의 수. 셸 포커스면 `name=0 fg=0`이다.
+fn dumpBar(fb: drm.Framebuffer, cache: *font.Cache, b: BarLine, changed: bool) void {
+    if (!changed) return;
+    if (b.hidden or grid_origin.y < menubar.BAR_H) {
+        logline.print("terminal: menu> bar hidden\n", .{});
+        return;
+    }
+    if (b.id) |id| {
+        var titles: [menubar.MAX_MENUS * (menubar.MAX_TEXT + 1)]u8 = undefined;
+        var n: usize = 0;
+        if (b.menu) |m| {
+            const bar = barLayout(fb, cache, b);
+            for (m.model.menus[0..bar.count], 0..) |menu, i| {
+                if (i > 0) {
+                    titles[n] = ',';
+                    n += 1;
+                }
+                const t = menu.title.get();
+                @memcpy(titles[n..][0..t.len], t);
+                n += t.len;
+            }
+        }
+        logline.print("terminal: menu> bar id={d} name={s} titles={s}\n", .{ id, if (b.name.len > 0) b.name else "-", if (n > 0) titles[0..n] else "-" });
+    } else {
+        logline.print("terminal: menu> bar empty\n", .{});
+    }
+    var name_px: usize = 0;
+    var fg_px: usize = 0;
+    var other_px: usize = 0;
+    var y: u32 = 0;
+    while (y < menubar.BAR_H) : (y += 1) {
+        var x: u32 = 0;
+        while (x < fb.width) : (x += 1) {
+            const px = fb.getPixel(x, y) & 0x00FFFFFF;
+            if (px == theme.MENU_NAME) name_px += 1 else if (px == theme.MENU_FG) fg_px += 1 else if (px != MARGIN_COLOR) other_px += 1;
+        }
+    }
+    logline.print("terminal: menu> bar ink name={d} fg={d} other={d}\n", .{ name_px, fg_px, other_px });
 }
 
 /// 물리로 합성하는 창 하나(WY-M3 확정 7, design 결정 30) — 창 번호와 그 창이 놓인 논리 사각형(셸 프레임은 slot의
@@ -4369,6 +4507,8 @@ const App = struct {
     /// 마지막으로 본 상태 줄의 내용(SB-M0). `render`가 띠를 다시 그릴지를 이것으로 정하고,
     /// `dumpStatus`가 `status>` 줄을 찍을지도 같은 답(`Frame.status_changed`)을 본다.
     status_memo: StatusMemo = .{},
+    /// 마지막으로 본 메뉴 바(TK-M5 단계 B).
+    bar_memo: BarMemo = .{},
     /// TR-M2의 구조 변경. 그전에는 렌더가 PTY 출력 분기 안에만 있었다 —
     /// 스크롤은 키로 일어나므로 그대로 두면 뷰포트만 움직이고 화면은 안 바뀐다.
     needs_redraw: bool = false,
@@ -6009,6 +6149,9 @@ const App = struct {
         /// 상태 줄의 내용이 지난 프레임과 다른가(SB-M0). `render`가 `StatusMemo`로 정한다 —
         /// 띠를 다시 그릴지와 `dumpStatus`가 찍을지가 이 하나를 본다.
         status_changed: bool = false,
+        /// 메뉴 바(TK-M5 단계 B)와 그것이 지난 프레임과 다른가(`BarMemo`). 띠를 다시 그릴지와 `menu> bar` 줄을 찍을지가 이 하나를 본다.
+        bar_line: BarLine = .{},
+        bar_changed: bool = false,
         frame_us: i96 = 0,
     };
 
@@ -6016,6 +6159,17 @@ const App = struct {
     /// 패널(각각 `paintPane`) → 프롬프트(`drawPrompt`) · 상태 줄 띠(`paintBand`, 바뀐 프레임과 통째
     /// 프레임만) → verify(`verifyFrame`, 켜져 있을 때) → 화살표 · `present`(`presentFrame`). 덤프가
     /// 읽을 것은 `frame`에 남긴다.
+    /// 이 프레임의 메뉴 바(TK-M5 단계 B, plan 확정 1 · 2). 전체 화면이면 띠가 없고, 포커스 slot이 창이면 그 창의 바 이름
+    /// (`appName` — app_id의 마지막 조각, 없으면 title)과 보이는 모델(없으면 이름만), 셸 pane이면 빈 바.
+    fn barLine(self: *App, ws: *const ShellWs) BarLine {
+        if (ws.fullscreen) return .{ .hidden = true };
+        const srv = self.wl orelse return .{};
+        return switch (ws.panes[ws.focus].?) {
+            .shell => .{},
+            .app => |a| .{ .id = a.toplevel, .name = srv.appName(a.toplevel), .menu = srv.menuOf(a.toplevel) },
+        };
+    }
+
     fn render(self: *App, frame: *Frame, want: ?pointer.Spot) !void {
         // 포커스를 그리기 직전에 구한다(WP-M1). `readKeyboard`가 잡았던 포커스는 그 단계
         // 안의 것이고, 그 뒤 패널 명령이 옮겼거나 EOF가 포커스 패널을 닫았을 수 있다 —
@@ -6190,6 +6344,10 @@ const App = struct {
         // `full`과 함께 보고, `dumpStatus`가 찍을지는 이 값 하나다.
         frame.status_changed = self.status_memo.changed(frame.status_line);
         if (frame.status_changed) self.status_memo.remember(frame.status_line);
+        // 메뉴 바(TK-M5 단계 B, plan 확정 2 · 7) — 포커스 slot이 창이면 그 창의 이름과 모델, 셸 pane이면 빈다. 상태 줄과 같은 메모 꼴.
+        frame.bar_line = self.barLine(ws);
+        frame.bar_changed = self.bar_memo.changed(frame.bar_line);
+        if (frame.bar_changed) self.bar_memo.remember(frame.bar_line);
 
         // `images()`의 데이터는 다음 `feed`까지만 유효하다. 이 자리는 feed와
         // render 사이라 안전하다.
@@ -6205,6 +6363,8 @@ const App = struct {
         // 다시 쓴다. 띠는 내용이 바뀐 프레임과 통째 프레임(`renderBackdrop`이 띠도 지웠다)에만.
         frame.prompt_ink = if (frame.prompt) |p| try drawPrompt(self.fb, &self.cache, p) else null;
         try paintBand(self.fb, &self.cache, frame.status_line, full or frame.status_changed, &clips);
+        // 위 띠(TK-M5 단계 B) — `paintBand`와 같은 꼴. 통째 프레임은 `renderBackdrop`이 띠를 지웠으므로 다시 그린다.
+        try paintBar(self.fb, &self.cache, frame.bar_line, full or frame.bar_changed, &clips);
         // 화살표와 `present` 앞이다(DR design 위험 2). 그림자에는 화살표가 없으므로 비교도
         // 화살표가 실제 fb에 오르기 전에 한다.
         const verified = try self.verifyFrame(frame, ws);
@@ -6608,7 +6768,7 @@ const App = struct {
             const imgs = if (leaf == ws.focus) frame.imgs else p.screen.images(&v.img_buf);
             try renderPane(v.fb, &self.cache, fresh, imgs, p.screen.defaultBg(), p.rect, p.screen.cursorMark());
         }
-        _ = try renderOverlay(v.fb, &self.cache, frame.prompt, frame.status_line);
+        _ = try renderOverlay(v.fb, &self.cache, frame.prompt, frame.status_line, frame.bar_line);
         // 창 slot은 그림자가 흉내 내지 않는다(WY design 결정 17, WY-M2 확정 6). 보이는 창의 사각형을 실제 fb에서 그림자로
         // 옮겨 비교에서 뺀다 — 그 사각형 밖(구분선 · 이웃 패널)은 그대로 비교된다.
         var rs: [layout.MAX_LEAVES]layout.Rect = undefined;
@@ -6680,6 +6840,7 @@ const App = struct {
         // 잉크 · 커서 · 스크롤)는 없다 — 그 패널이 없다. 상태 줄 · `pane>` · `strip>` · 글리프 · 화살표 줄은 같다.
         const focus = frame.focus orelse {
             dumpStatus(self.fb, frame.status_line, frame.status_changed);
+            dumpBar(self.fb, &self.cache, frame.bar_line, frame.bar_changed);
             dumpPane(self.fb, frame.shell, self.whole, self.current, workspaceCount(&self.workspaces), &self.last_pane);
             dumpStrip(self.fb, frame.shell, self.whole, self.peek, &self.last_strip_sig);
             self.dumpGlyphs();
@@ -6695,6 +6856,7 @@ const App = struct {
         dumpOverlay(frame.prompt);
         dumpPromptInk(self.fb, frame.prompt_ink, frame.prompt);
         dumpStatus(self.fb, frame.status_line, frame.status_changed);
+        dumpBar(self.fb, &self.cache, frame.bar_line, frame.bar_changed);
         dumpPane(self.fb, frame.shell, self.whole, self.current, workspaceCount(&self.workspaces), &self.last_pane);
         dumpStrip(self.fb, frame.shell, self.whole, self.peek, &self.last_strip_sig);
         // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.

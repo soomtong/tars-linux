@@ -31,7 +31,8 @@ cd "$(dirname "$0")" || exit 1
 #   compositor의 것이다, `--native`로 bind한 창(원래 모드)은 Cmd를 Super(0x40)로 받는다. 판정 30(29 뒤 · 9 앞) — `--damage` 창의
 #   32 × 32 상자만 바뀐 commit은 서버가 그 화면 사각형만 옮기고(`wl> blit … w=32 h=32`) 상자 넷과 둘레가 화면에 맞다.
 # TK-M5: 판정 31(30 뒤 · 9 앞) — `tars_menu_v1` 판 2로 bind한 창(`--menu`)의 메뉴 모델이 서버에 닿고(`wl> menu … menus=2 items=5`)
-#   창의 title · app_id를 서버가 담는다(`wl> title`). 단계 A는 줄만, 바의 화면은 단계 B가 같은 판정에 더한다.
+#   창의 title · app_id를 서버가 담는다(`wl> title`). 단계 B: 그 창이 포커스면 위 여백의 바에 이름과 제목(`menu> bar` 줄과 좌표의
+#   잉크), 셸로 옮기면 바가 빈다. 판정 35(31 뒤 · 9 앞) — 모델이 없는 창(호환)은 이름만.
 # WY-M2(단계 B): 창 모드로 띄운 창은 셸 오른쪽 column이 된다(판정 16 · 17 · 22) — `wl> column`, pane 픽셀 크기의 configure
 #   (activated · tiled), 포커스 slot이 창이면 키가 그 창으로, Cmd+[로 셸에 오면 activated를 잃고 keyboard leave, Cmd+R의 새
 #   configure, Cmd+Q에 slot이 닫히고 셸이 전체 폭을 되찾는다. 자기 workspace를 보는 판정 2~8은 `--fullscreen`으로 띄운다.
@@ -153,6 +154,25 @@ type_text() {
     esac
   done
   type_keys "${keys[@]}"
+}
+
+# 상자 안에서 한 색(RRGGBB, 소문자)인 픽셀의 수(TK-M5) — 메뉴 바의 이름 · 제목 글자가 그 칸에만 있는지 센다.
+ppm_count() {
+  perl -e '
+    my ($f, $x0, $y0, $w, $h, $c) = @ARGV;
+    open(my $fh, "<:raw", $f) or die "$f: $!\n";
+    local $/; my $d = <$fh>;
+    $d =~ s/\AP6\s+(\d+)\s+\d+\s+\d+\s//s or die "$f: not a P6 ppm\n";
+    my $row = $1 * 3; my $n = 0;
+    for my $y ($y0 .. $y0 + $h - 1) {
+      for my $x ($x0 .. $x0 + $w - 1) { $n++ if unpack("H6", substr($d, $y * $row + $x * 3, 3)) eq $c; }
+    }
+    print "$n\n";' "$@"
+}
+
+# 마지막 `menu> bar ink` 줄의 칸 하나(`name` · `fg` · `other`).
+bar_ink() {
+  tlog | tr -d '\r' | grep -a 'terminal: menu> bar ink ' | tail -n 1 | sed -E "s/.* $1=([0-9]+).*/\1/"
 }
 
 # 화면 한 장과 상자 다섯 — 창 안 둘(가운데 위아래)과 네 모서리. 창은 x 40..1239 전체 높이다. 가운데 바로 위는 화살표
@@ -809,6 +829,40 @@ wait_for_log "terminal: wl> menu id=${MENU_ID} menus=2 items=5([^0-9]|$)" || rep
 wait_for_log "terminal: wl> title id=${MENU_ID} app_id=tars-wl-test title=tars-wl-test" ||
   report_failure "(31) no 'wl> title id=${MENU_ID} app_id=tars-wl-test title=tars-wl-test'"
 wait_for_log "terminal: wl> configure id=${MENU_ID} w=[0-9]+ h=[0-9]+ act=1" || report_failure "(31) the menu window did not get the keys"
+# 단계 B — 화면. 포커스 창의 바: 이름 `tars-wl-test`(12칸)는 x 20부터 96 px, 두 칸 띄고 `File`(4칸) x 132, 두 칸 띄고 `Edit` x 180(menubar_test의 셈과
+# 같은 좌표). 글자 줄은 y 2..18. 이름 칸의 MENU_NAME(e8d8b0) 수 = 덤프의 `name=`, File · Edit 칸의 MENU_FG(d0d8e0) 합 = 덤프의 `fg=`, 그리고 위 띠
+# 전체(1280 × 20)의 두 색 수가 그 칸들의 수와 같다(다른 자리에 글자가 없다).
+wait_for_log "terminal: menu> bar id=${MENU_ID} name=tars-wl-test titles=File,Edit" ||
+  report_failure "(31) no 'menu> bar id=${MENU_ID} name=tars-wl-test titles=File,Edit'"
+sleep 0.5
+SHOT31="${SCREENS_DIR}/menu-bar.ppm"
+screendump "$SHOT31" || report_failure "(31) screendump did not write ${SHOT31}"
+B_NAME="$(bar_ink name)"
+B_FG="$(bar_ink fg)"
+S_NAME="$(ppm_count "$SHOT31" 20 2 96 16 e8d8b0)"
+S_FILE="$(ppm_count "$SHOT31" 132 2 32 16 d0d8e0)"
+S_EDIT="$(ppm_count "$SHOT31" 180 2 32 16 d0d8e0)"
+A_NAME="$(ppm_count "$SHOT31" 0 0 1280 20 e8d8b0)"
+A_FG="$(ppm_count "$SHOT31" 0 0 1280 20 d0d8e0)"
+echo "(31) bar ink: dump name=${B_NAME} fg=${B_FG}; screen name box ${S_NAME}, File ${S_FILE}, Edit ${S_EDIT}; band name ${A_NAME} fg ${A_FG}"
+[ "${S_NAME:-0}" -gt 0 ] && [ "$S_NAME" = "$B_NAME" ] && [ "$A_NAME" = "$S_NAME" ] ||
+  report_failure "(31) the name's ink is not in its box at x 20 (box ${S_NAME}, dump ${B_NAME}, band ${A_NAME})"
+[ "${S_FILE:-0}" -gt 0 ] && [ "${S_EDIT:-0}" -gt 0 ] && [ "$((S_FILE + S_EDIT))" = "$B_FG" ] && [ "$A_FG" = "$B_FG" ] ||
+  report_failure "(31) the titles' ink is not at x 132 and 180 (File ${S_FILE}, Edit ${S_EDIT}, dump ${B_FG}, band ${A_FG})"
+# 셸로 포커스를 옮기면(Cmd+[ — strip이 그대로라 부분 프레임) 바가 빈다: `menu> bar empty`, 위 띠가 MARGIN_COLOR(102030) 한 가지.
+EMPTIES="$(count_log 'terminal: menu> bar empty')"
+type_keys alt-bracket_left
+wait_for_count 'terminal: menu> bar empty' $((EMPTIES + 1)) || report_failure "(31) Cmd+[ to the shell did not empty the bar"
+sleep 0.5
+SHOT31E="${SCREENS_DIR}/menu-bar-empty.ppm"
+screendump "$SHOT31E" || report_failure "(31) screendump did not write ${SHOT31E}"
+got="$(ppm_ink "$SHOT31E" 0 0 1280 20)"
+[ "$got" = "bg=102030 ink=0" ] || report_failure "(31) with the shell focused the top band is not one colour 102030 (${got})"
+[ "$(bar_ink name)-$(bar_ink fg)" = "0-0" ] || report_failure "(31) the empty bar's dump is not name=0 fg=0"
+echo "(31) shell focused: menu> bar empty, top band ${got}"
+type_keys alt-bracket_right
+wait_for_log "terminal: wl> configure id=${MENU_ID} w=[0-9]+ h=[0-9]+ act=1" || report_failure "(31) Cmd+] did not give the keys back to the menu window"
+wait_for_count "terminal: menu> bar id=${MENU_ID} name=tars-wl-test titles=File,Edit" 2 || report_failure "(31) Cmd+] did not bring the bar back"
 type_keys alt-shift-slash
 wait_for_log "terminal: wl> key code=53 state=1 to=${MENU_ID}([^0-9]|$)" > /dev/null || true
 echo "(31) measurement 8: Cmd+Shift+/ reached the window as code 53 $(count_log "terminal: wl> key code=53 state=1 to=${MENU_ID}([^0-9]|$)") time(s)"
@@ -819,6 +873,29 @@ type_text 'echo c31-(grep -cx wl-test..native /tmp/wl11.log)-(grep -c menu.sent.
 type_keys ret
 wait_for_screen '\| c31-1-1-[0-9]+' || report_failure "(31) the client's log does not have one native line and one sent model"
 echo "(31): the version 2 client's model (2 menus, 5 entries) and its name reached the server; client log $(tlog | grep -aoE 'c31-[0-9]+-[0-9]+-[0-9]+' | tail -n 1)"
+
+# ── 판정 35: 이름만 — 메뉴 모델이 없는 창(TK-M5 단계 B, plan 확정 2 · 15) ──────────────────────────────────────────
+# 셸만 남은 자리다(판정 31 끝). 기본 창(호환 모드 — tars_menu_v1을 bind하지 않는다)은 모델이 없어 바에 이름만: `menu> bar id=ID name=tars-wl-test
+# titles=-`, 위 띠에 MENU_NAME 잉크가 이름 칸(x 20, 96 px)에만 있고 MENU_FG는 0. 여는 키가 아무 일도 안 하는 것은 단계 C가 본다.
+echo "=== (35) a window without a menu model shows only its name ==="
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size > /tmp/wl12.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(35) the compat client did not open as a column"
+NAME_ID="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+wait_for_log "terminal: menu> bar id=${NAME_ID} name=tars-wl-test titles=-" || report_failure "(35) no 'menu> bar id=${NAME_ID} name=tars-wl-test titles=-'"
+sleep 0.5
+SHOT35="${SCREENS_DIR}/menu-name-only.ppm"
+screendump "$SHOT35" || report_failure "(35) screendump did not write ${SHOT35}"
+S_NAME="$(ppm_count "$SHOT35" 20 2 96 16 e8d8b0)"
+A_NAME="$(ppm_count "$SHOT35" 0 0 1280 20 e8d8b0)"
+A_FG="$(ppm_count "$SHOT35" 0 0 1280 20 d0d8e0)"
+echo "(35) dump name=$(bar_ink name) fg=$(bar_ink fg); screen name box ${S_NAME}, band name ${A_NAME} fg ${A_FG}"
+[ "${S_NAME:-0}" -gt 0 ] && [ "$S_NAME" = "$(bar_ink name)" ] && [ "$A_NAME" = "$S_NAME" ] && [ "$A_FG" = "0" ] && [ "$(bar_ink fg)" = "0" ] ||
+  report_failure "(35) the name-only bar is not the name's ink alone (box ${S_NAME}, band ${A_NAME}, fg ${A_FG})"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${NAME_ID} ws=1 slot=1" || report_failure "(35) Cmd+Q did not close the compat window"
+echo "(35): the compat window's bar is its name alone"
 
 # ── 판정 9: render verify ───────────────────────────────────────────────
 #
