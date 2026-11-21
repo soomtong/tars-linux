@@ -57,6 +57,21 @@ pub const View = struct {
         child.layer.owner = child;
     }
 
+    /// 자식 뷰를 뗀다(TK-M3 — column view의 열 풀). 레이어는 건드리지 않는다(레이어 트리는 위젯이 뗀다). 떼어 낸 뷰나 그 자손이
+    /// first responder였으면 부르는 쪽이 `Root.viewRemoved`로 알린다.
+    pub fn removeChild(self: *View, child: *View) void {
+        const i = std.mem.indexOfScalar(*View, self.children.items, child) orelse return;
+        _ = self.children.orderedRemove(i);
+        child.parent = null;
+    }
+
+    /// `self`가 `v`이거나 `v`의 자손이다.
+    pub fn within(self: *const View, v: *const View) bool {
+        var x: ?*const View = self;
+        while (x) |y| : (x = y.parent) if (y == v) return true;
+        return false;
+    }
+
     pub fn acceptsFocus(self: *const View) bool {
         const f = self.vtable.acceptsFocus orelse return false;
         return f(self.ctx);
@@ -118,6 +133,13 @@ pub const Root = struct {
         if (v) |nv| if (nv.vtable.focusChanged) |f| f(nv.ctx, true);
         if (self.hook) |h| h.on(h.ctx, v);
         return true;
+    }
+
+    /// 뷰 `v`를 트리에서 뗐다 — first responder가 `v`나 그 자손이면 아무도 아니게 한다(`focusChanged(false)` · 줄). 새 자리는 부르는
+    /// 쪽이 정한다(column view는 떼기 전에 포커스 열로 옮겨 이것이 할 일이 없게 한다).
+    pub fn viewRemoved(self: *Root, v: *const View) void {
+        const f = self.first orelse return;
+        if (f.within(v)) _ = self.setFirstResponder(null);
     }
 
     /// 창 층의 이벤트 하나.

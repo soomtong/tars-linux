@@ -101,6 +101,10 @@ pub const Handler = struct {
     /// 부른다. 앱은 바뀐 것이 없으면 아무것도 안 하면 된다(idle commit 0).
     tick: ?*const fn (ctx: *anyopaque, now_ns: u64) void = null,
     input: ?*const fn (ctx: *anyopaque, ev: input.Event) void = null,
+    /// 바쁘지 않을 때의 일 한 조각(TK-M3 plan 확정 9 — 디렉터리 로딩의 getdents 한 번). `run`의 한 바퀴마다 이벤트 처리 · 반복 뒤에
+    /// 부르고, 참(할 일이 더 있다)이면 다음 대기를 0으로 해 곧 다시 부른다 — 그 사이 키 · configure · 그리기는 늘 먼저 돈다. 없거나 거짓이면
+    /// 지금처럼 이벤트가 올 때까지 잔다(idle commit 0).
+    idle: ?*const fn (ctx: *anyopaque) bool = null,
 };
 
 // ── 버퍼 ───────────────────────────────────────────────────────────
@@ -239,9 +243,12 @@ pub const Window = struct {
     ///
     /// 한 바퀴(TK-M2 plan 확정 2): 그릴 것을 그리고 → `prepareRead`(큐에 이미 있으면 그것부터 처리하고 다시) → `flush`(그린 요청을
     /// 보낸다) → 반복의 시각으로 timerfd를 맞추고 → 연결 fd와 timerfd를 `poll` → 읽을 것이 있으면 `readEvents`, 아니면 `cancelRead`
-    /// → `dispatchPending` → 반복 하나. libwayland의 `dispatch()`가 하던 일(flush · 기다림 · 읽기 · 처리)에 타이머를 끼운 모양이다.
+    /// → `dispatchPending` → 반복 하나 → `Handler.idle` 한 조각(참이면 다음 poll의 시간 제한 0, TK-M3). libwayland의 `dispatch()`가 하던 일
+    /// (flush · 기다림 · 읽기 · 처리)에 타이머와 idle을 끼운 모양이다.
     pub fn run(self: *Window) !void {
         const fd = self.display.getFd();
+        // `Handler.idle`이 참을 돌려줬다 — 다음 poll은 기다리지 않는다.
+        var busy = false;
         while (self.running) {
             self.maybeDraw();
             if (!self.running) break;
@@ -261,7 +268,7 @@ pub const Window = struct {
                 .{ .fd = fd, .events = linux.POLL.IN | (if (want_out) @as(i16, linux.POLL.OUT) else 0) },
                 .{ .fd = self.timer_fd, .events = linux.POLL.IN },
             };
-            const rc = linux.poll(&fds, fds.len, -1);
+            const rc = linux.poll(&fds, fds.len, if (busy) 0 else -1);
             if (linux.errno(rc) != .SUCCESS) {
                 self.display.cancelRead();
                 if (linux.errno(rc) == .INTR) continue;
@@ -279,6 +286,7 @@ pub const Window = struct {
             if (self.display.dispatchPending() != .SUCCESS) return error.DispatchFailed;
             // 읽은 이벤트를 먼저 처리한다 — 같은 깨움에 뗌이 함께 왔으면 반복은 이미 멈췄다(뗀 키를 한 번 더 내지 않는다).
             self.fireRepeat();
+            busy = if (self.handler.idle) |f| f(self.handler.ctx) else false;
         }
         if (self.failed) return error.DrawFailed;
     }

@@ -30,6 +30,9 @@ pub const padding: f32 = theme.TK_PADDING;
 pub const size = struct {
     /// 리스트 한 행(TK-M2 plan 확정 9).
     pub const row: f32 = theme.TK_ROW;
+    /// column view의 열 폭 · 분할 뷰의 미리보기 자리 폭(TK-M3 plan 확정 3 · 8).
+    pub const column: f32 = theme.TK_COLUMN;
+    pub const preview: f32 = theme.TK_PREVIEW;
 };
 
 pub const radius = struct {

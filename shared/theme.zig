@@ -85,3 +85,6 @@ pub const TK_FONT: u32 = 14;
 pub const TK_FONT_TITLE: u32 = 17;
 /// 리스트 한 행의 높이(TK-M2 — 13 px 레이블 줄 높이 16에 위아래 4).
 pub const TK_ROW: u32 = 24;
+/// column view의 열 폭(TK-M3 — 열 사이 구분선 1 px를 더해 열 i의 x = i × 201)과 분할 뷰의 미리보기 자리 폭.
+pub const TK_COLUMN: u32 = 200;
+pub const TK_PREVIEW: u32 = 200;

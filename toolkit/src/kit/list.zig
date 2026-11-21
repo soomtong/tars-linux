@@ -13,6 +13,9 @@
 //! 기본 120 ms ease-out — 녹화 C의 "짧게 움직인다"). 스크롤이 생기는 이동 · 강조가 안 보이던 때는 바로 옮긴다.
 //!
 //! 앱은 컨테이너 레이어(`view.layer`)를 자기 트리에 붙이고 frame을 준 뒤(스택 등) `sync()`를 부른다 — 크기가 바뀔 때마다.
+//!
+//! 데이터가 바뀌면(TK-M3) `reload()`(선택 · 오프셋을 자름), 안정 선택이 정한 자리로 되돌릴 때 `restore(index, offset)`, 다른 데이터로 다시 쓸 때
+//! `reset(source)` — 셋 다 줄 · 애니메이션 · delegate가 없다. 선택을 듣는 위젯은 `delegate`(로그 `hook`과 따로).
 
 const std = @import("std");
 const geom = @import("tk_geom");
@@ -61,6 +64,13 @@ pub const ListHook = struct {
     on: *const fn (ctx: *anyopaque, list: *List, ev: ListEvent) void,
 };
 
+/// 선택을 듣는 위젯(TK-M3 plan 확정 7 — 로그 `hook`과 따로). 키 · 클릭의 선택마다 한 번(`changed`는 색인이 바뀌었는가). column view가
+/// 이것으로 클릭한 열에 포커스를 옮기고 선택이 바뀐 열의 오른쪽을 버린다. `reload` · `restore` · `reset`은 부르지 않는다.
+pub const ListDelegate = struct {
+    ctx: *anyopaque,
+    selected: *const fn (ctx: *anyopaque, list: *List, sel: usize, changed: bool) void,
+};
+
 pub const List = struct {
     view: View,
     tree: *Tree,
@@ -73,7 +83,10 @@ pub const List = struct {
     selected: usize = 0,
     focused: bool = false,
     window_focused: bool = false,
+    /// first responder가 될 수 있는가(TK-M3 plan 확정 6 — column view는 포커스 열만 참으로 둬 Tab에서 한 자리가 된다).
+    accepts_focus: bool = true,
     hook: ?ListHook = null,
+    delegate: ?ListDelegate = null,
 
     const vtable: VTable = .{
         .keyDown = keyDown,
@@ -224,6 +237,7 @@ pub const List = struct {
 
     /// 선택을 `index`로 — 보이게 최소만 스크롤하고, 스크롤이 없으면 강조를 애니메이션으로 옮긴다. 줄 하나.
     pub fn select(self: *List, index: usize) void {
+        const before = self.selected;
         const n = self.count();
         if (n != 0) {
             self.selected = @min(index, n - 1);
@@ -236,6 +250,39 @@ pub const List = struct {
             self.placeHighlight(!scrolled);
         }
         self.emit(.{ .select = .{ .sel = self.selected, .first = self.first(), .offset = self.offset } });
+        if (self.delegate) |d| d.selected(d.ctx, self, self.selected, self.selected != before);
+    }
+
+    // ── 데이터 바뀜(TK-M3 plan 확정 7) — 줄 · 애니메이션 · delegate 없음 ──────────
+
+    /// 데이터 소스의 내용 · 행 수가 바뀌었다: 선택을 `count − 1`로(0행이면 0), 오프셋을 `maxOffset`으로 자르고 글자를 다시 그린다.
+    pub fn reload(self: *List) void {
+        const n = self.count();
+        self.selected = if (n == 0) 0 else @min(self.selected, n - 1);
+        self.offset = @min(self.offset, self.maxOffset());
+        self.refresh();
+    }
+
+    /// 선택과 오프셋을 그대로 놓는다(잘라서) — 안정 선택(R-FM-6)이 갱신 뒤 되돌리는 자리. 선택이 보이게 스크롤하지 않는다(부르는 쪽이 정한 오프셋).
+    pub fn restore(self: *List, index: usize, offset: u64) void {
+        const n = self.count();
+        self.selected = if (n == 0) 0 else @min(index, n - 1);
+        self.offset = @min(offset, self.maxOffset());
+        self.refresh();
+    }
+
+    /// 다른 데이터로 다시 쓴다(column view의 열 풀): 소스를 바꾸고 선택 · 오프셋을 0으로.
+    pub fn reset(self: *List, source: ListSource) void {
+        self.source = source;
+        self.selected = 0;
+        self.offset = 0;
+        self.refresh();
+    }
+
+    fn refresh(self: *List) void {
+        self.text.setNeedsDisplay();
+        self.placeHighlight(false);
+        self.placeBar();
     }
 
     fn emit(self: *List, ev: ListEvent) void {
@@ -290,8 +337,8 @@ pub const List = struct {
         return true;
     }
 
-    fn acceptsFocus(_: *anyopaque) bool {
-        return true;
+    fn acceptsFocus(ctx: *anyopaque) bool {
+        return me(ctx).accepts_focus;
     }
 
     fn focusChanged(ctx: *anyopaque, on: bool) void {

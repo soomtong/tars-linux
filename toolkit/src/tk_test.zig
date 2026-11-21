@@ -16,6 +16,10 @@
 //! 10 kit — responder chain(받음 · 부모로 · unhandled), Tab · Shift+Tab 순환(숨은 뷰 건너뜀), 클릭 포커스 · 휠 라우팅 · 창 포커스.
 //! 11 리스트(TK-M2 단계 B) — 행 수 100 · 10만 · 1,000만에서 같은 조작열의 선택 · 오프셋 · 더티 표가 같다, 세는 데이터 소스(통째 ≤ 보이는 행 + 1,
 //!    선택 이동은 0번, 부분은 clip과 겹치는 행만), 부분 = 통째 바이트 비교(무작위 조작, 리스트 둘), 끝 경계, 강조 애니메이션 · 색 · 휠 · 클릭.
+//! 12 List의 데이터 바뀜 · column view(TK-M3 단계 A) — `reload` · `restore` · `reset`, 가짜 디렉터리 트리로 `→ → ←`의 열 수 · 포커스 · 스크롤 ·
+//!    화면 색, 파일에서 `→`, 첫 열의 `←`, 선택 바뀜이 오른쪽 열을 버림, 클릭 포커스, Tab이 column view를 한 자리로, 버린 first responder,
+//!    풀(300바퀴에 레이어 수 그대로), 깊이 32의 거절, 부분 = 통째(가로 스크롤 포함).
+//! 13 분할 뷰 — 폭 616 · 1240 · 201 · 100의 배치 표와 알림.
 
 const std = @import("std");
 const theme = @import("theme");
@@ -207,6 +211,7 @@ pub fn main(init: std.process.Init) !u8 {
     try hitTests(alloc);
     try kitTests(alloc);
     try listTests(io, alloc, &f13, &lut1);
+    try columnTests(io, alloc, &f13, &lut1);
 
     if (failures != 0) {
         std.debug.print("tk_test: {d} failure(s)\n", .{failures});
@@ -514,7 +519,7 @@ fn stacks(alloc: std.mem.Allocator) !void {
 // ── 7 토큰 ───────────────────────────────────────────────────────────
 
 fn isSizeName(comptime name: []const u8) bool {
-    for ([_][]const u8{ "TK_RADIUS", "TK_SPACE", "TK_PADDING", "TK_FONT", "TK_ROW" }) |p| {
+    for ([_][]const u8{ "TK_RADIUS", "TK_SPACE", "TK_PADDING", "TK_FONT", "TK_ROW", "TK_COLUMN", "TK_PREVIEW" }) |p| {
         if (std.mem.startsWith(u8, name, p)) return true;
     }
     return false;
@@ -1115,4 +1120,421 @@ fn listTests(io: std.Io, alloc: std.mem.Allocator, face: *text.Face, lut: *const
         const pd = env.key(input.KEY_PAGEUP);
         check(env.lists[0].selected == 0 and pd != null, "PgUp from row 4 goes to row 0", .{});
     }
+}
+
+// ── 12 List의 데이터 바뀜 · column view · 13 분할 뷰(TK-M3 단계 A) ─────────────────
+
+/// 가짜 디렉터리 트리 — 이름과 자식(디렉터리면 `kids`가 null이 아님). kit은 파일을 모르므로 column view의 검사는 이것만 꽂는다.
+const FNode = struct {
+    name: []const u8,
+    kids: ?[]const FNode = null,
+};
+
+const TREE_B = [_]FNode{ .{ .name = "c", .kids = &.{} }, .{ .name = "x.txt" } };
+const TREE_A = [_]FNode{.{ .name = "b", .kids = &TREE_B }};
+const TREE_TOP = [_]FNode{ .{ .name = "a", .kids = &TREE_A }, .{ .name = "z", .kids = &.{} }, .{ .name = "m.txt" } };
+
+/// 열 하나의 데이터(가짜 디렉터리 하나).
+const FCol = struct {
+    kids: []const FNode = &.{},
+    face: *text.Face = undefined,
+    calls: usize = 0,
+    /// `deep`이면 행은 늘 열린다(깊이 검사).
+    deep: bool = false,
+
+    fn count(ctx: *anyopaque) usize {
+        const self: *FCol = @ptrCast(@alignCast(ctx));
+        return if (self.deep) 3 else self.kids.len;
+    }
+    fn drawRow(ctx: *anyopaque, p: *Painter, index: usize, rect: Rect, state: kit.RowState) anyerror!void {
+        const self: *FCol = @ptrCast(@alignCast(ctx));
+        self.calls += 1;
+        const name = if (self.deep) "d" else self.kids[index].name;
+        const base: i32 = rect.y + @as(i32, @intFromFloat(@round((@as(f32, @floatFromInt(rect.h)) + self.face.ascent - self.face.descent) / 2)));
+        _ = try p.drawGlyphs(self.face, @as(f32, @floatFromInt(rect.x)) + 16, base, name, theme.TK_TEXT, state.alpha);
+    }
+    fn source(self: *FCol) kit.ListSource {
+        return .{ .ctx = self, .count = count, .drawRow = drawRow };
+    }
+};
+
+/// 가짜 ColumnSource — 열마다 FCol 하나(열 i = 깊이 i).
+const FSrc = struct {
+    cols: [kit.column.MAX_COLUMNS]FCol = @splat(.{}),
+    opens: u32 = 0,
+    truncs: u32 = 0,
+    last_trunc: usize = 0,
+
+    fn open(ctx: *anyopaque, column: usize, row: usize) ?kit.ListSource {
+        const self: *FSrc = @ptrCast(@alignCast(ctx));
+        self.opens += 1;
+        const c = &self.cols[column];
+        const nc = &self.cols[column + 1];
+        nc.face = c.face;
+        if (c.deep) {
+            nc.deep = true;
+            return nc.source();
+        }
+        const kids = c.kids[row].kids orelse return null;
+        nc.* = .{ .kids = kids, .face = c.face };
+        return nc.source();
+    }
+    fn truncated(ctx: *anyopaque, n: usize) void {
+        const self: *FSrc = @ptrCast(@alignCast(ctx));
+        self.truncs += 1;
+        self.last_trunc = n;
+    }
+    fn source(self: *FSrc) kit.ColumnSource {
+        return .{ .ctx = self, .open = open, .truncated = truncated };
+    }
+};
+
+const ColLog = struct {
+    columns: u32 = 0,
+    selects: u32 = 0,
+    last: kit.ColumnEvent = undefined,
+
+    fn on(ctx: *anyopaque, _: *kit.ColumnView, ev: kit.ColumnEvent) void {
+        const self: *ColLog = @ptrCast(@alignCast(ctx));
+        switch (ev) {
+            .columns => self.columns += 1,
+            .select => self.selects += 1,
+        }
+        self.last = ev;
+    }
+};
+
+/// `tars-files`의 모양: 616 × 752 루트 → 분할 뷰(column view 신축 | 미리보기 200, `TK_SURFACE`) — 루트 뷰 아래 분할 뷰 → column view,
+/// 그리고 Tab 검사용 리스트 하나(`other`, 화면 밖 0 × 0 — 보이지 않게 숨기지는 않는다).
+const ColEnv = struct {
+    tree: ca.Tree,
+    alloc: std.mem.Allocator,
+    root_layer: *ca.Layer = undefined,
+    preview: *ca.Layer = undefined,
+    root_view: kit.View = undefined,
+    root: kit.Root = undefined,
+    split: kit.SplitView = undefined,
+    cv: kit.ColumnView = undefined,
+    src: FSrc = .{},
+    other_src: CountSource = undefined,
+    other: kit.List = undefined,
+    log: ColLog = .{},
+    kit_log: KitLog = .{},
+
+    fn init(self: *ColEnv, alloc: std.mem.Allocator, face: *text.Face, deep: bool) !void {
+        self.* = .{ .tree = ca.Tree.init(alloc), .alloc = alloc };
+        const t = &self.tree;
+        self.src.cols[0] = .{ .kids = &TREE_TOP, .face = face, .deep = deep };
+        self.root_layer = try t.create(.{ .frame = .{ .x = 0, .y = 0, .w = LW, .h = LH }, .background = theme.TK_BG });
+        t.setRoot(self.root_layer);
+        self.root_view = .{ .layer = self.root_layer, .vtable = &ROOT_VT, .ctx = self, .name = "root" };
+        self.root = kit.Root.init(t);
+        self.root.setView(&self.root_view);
+        self.root.unhandled = .{ .ctx = &self.kit_log, .on = KitLog.onUnhandled };
+        try self.cv.init(t, &self.root, alloc, "columns", self.src.source(), self.src.cols[0].source(), 0);
+        self.cv.hook = .{ .ctx = &self.log, .on = ColLog.on };
+        self.preview = try t.create(.{ .background = theme.TK_SURFACE });
+        try self.split.init(t, "split", self.cv.view.layer, self.preview, 200);
+        self.split.notify = .{ .ctx = self, .on = splitLaidOut };
+        try self.root_layer.addChild(self.split.view.layer);
+        try self.root_view.addChild(alloc, &self.split.view);
+        try self.split.view.addChild(alloc, &self.cv.view);
+        self.other_src = .{ .n = 5, .face = face };
+        try self.other.init(t, "other", self.other_src.source(), 0);
+        try self.root_layer.addChild(self.other.view.layer);
+        try self.root_view.addChild(alloc, &self.other.view);
+        self.split.layout(.{ .x = 0, .y = 0, .w = LW, .h = LH });
+        self.root.handle(.{ .focus = true });
+        self.cv.focusFirst();
+        _ = t.takeDirty();
+    }
+
+    fn splitLaidOut(ctx: *anyopaque, _: *kit.SplitView) void {
+        const self: *ColEnv = @ptrCast(@alignCast(ctx));
+        self.cv.sync();
+    }
+
+    fn deinit(self: *ColEnv) void {
+        self.cv.deinit();
+        self.other.deinit(self.alloc);
+        self.split.deinit(self.alloc);
+        self.root_view.deinit(self.alloc);
+        self.tree.deinit();
+    }
+
+    fn key(self: *ColEnv, code: u32) void {
+        self.root.handle(keyEv(code, .{}));
+    }
+
+    fn firstName(self: *ColEnv) []const u8 {
+        return if (self.root.first) |f| f.name else "-";
+    }
+};
+
+fn columnTests(io: std.Io, alloc: std.mem.Allocator, face: *text.Face, lut: *const [256]u8) !void {
+    const pixels = try alloc.alloc(u32, LW * LH);
+    defer alloc.free(pixels);
+    const ref = try alloc.alloc(u32, LW * LH);
+    defer alloc.free(ref);
+    const scratch = try alloc.alloc(u32, LW * LH);
+    defer alloc.free(scratch);
+
+    // ── List의 reload · restore · reset ──
+    {
+        var env: ListEnv = undefined;
+        try env.init(alloc, face, 100, 50, 120);
+        defer env.deinit();
+        var hooks: u32 = 0;
+        const HookCount = struct {
+            fn on(ctx: *anyopaque, _: *kit.List, _: kit.list.ListEvent) void {
+                const n: *u32 = @ptrCast(@alignCast(ctx));
+                n.* += 1;
+            }
+        };
+        const l = &env.lists[0];
+        l.hook = .{ .ctx = &hooks, .on = HookCount.on };
+        l.select(50);
+        hooks = 0;
+        const off50 = l.offset;
+        env.srcs[0].n = 10;
+        l.reload();
+        const d = env.tree.takeDirty();
+        check(l.selected == 9 and l.offset == 0 and off50 > 0 and hooks == 0 and !env.tree.animating(), "reload after 100 -> 10 rows: sel 50 -> 9, offset {d} -> 0, no line, no animation", .{off50});
+        check(d != null and Rect.eql(Rect.intersect(d.?, .{ .x = 0, .y = 0, .w = 416, .h = 752 }).?, .{ .x = 0, .y = 0, .w = 416, .h = 752 }), "reload redraws the whole list", .{});
+        // 같은 오프셋에서 내용만 바뀌어도 다시 그린다.
+        l.reload();
+        check(env.tree.takeDirty() != null, "reload with the same offset still redraws the text", .{});
+        env.srcs[0].n = 100_000;
+        l.reload();
+        l.restore(5000, 5000 * 24 - 100);
+        check(l.selected == 5000 and l.offset == 5000 * 24 - 100 and hooks == 0 and !l.highlight.hidden and l.highlight.frame.y == 100, "restore(5000, offset): selection and offset as given, highlight at y 100, no line", .{});
+        l.restore(200_000, 1 << 40);
+        check(l.selected == 99_999 and l.offset == l.maxOffset(), "restore clamps the index and the offset", .{});
+        env.srcs[0].n = 0;
+        l.reload();
+        check(l.selected == 0 and l.offset == 0 and l.highlight.hidden, "reload to 0 rows: sel 0, offset 0, no highlight", .{});
+        env.srcs[0].n = 30;
+        l.restore(20, 500);
+        var other: CountSource = .{ .n = 3, .face = face };
+        l.reset(other.source());
+        check(l.selected == 0 and l.offset == 0 and l.count() == 3 and hooks == 0, "reset(source): new data, sel 0, offset 0", .{});
+    }
+
+    // ── → → ← (design의 끝나는 조건) ──
+    {
+        var env: ColEnv = undefined;
+        try env.init(alloc, face, false);
+        defer env.deinit();
+        const cv = &env.cv;
+        check(cv.view.layer.frame.w == 415 and env.split.separator.frame.x == 415 and env.preview.frame.x == 416 and env.preview.frame.w == 200, "split 616: columns 0..414, separator 415, preview 416..615", .{});
+        check(cv.n == 1 and cv.focus == 0 and std.mem.eql(u8, env.firstName(), "col0"), "start: one column, col0 is first responder", .{});
+        env.key(input.KEY_RIGHT);
+        check(cv.n == 2 and cv.focus == 1 and cv.scroll == 0 and std.mem.eql(u8, env.firstName(), "col1"), "-> on a: two columns, focus col1, scroll 0", .{});
+        env.key(input.KEY_RIGHT);
+        check(cv.n == 3 and cv.focus == 2 and cv.scroll == 201, "-> on b: three columns, focus 2, scroll 201 (the third column needs 602 > 415)", .{});
+        env.key(input.KEY_LEFT);
+        const last = env.log.last;
+        check(cv.n == 3 and cv.focus == 1 and cv.scroll == 201 and std.mem.eql(u8, env.firstName(), "col1") and last == .columns and last.columns.n == 3 and last.columns.focus == 1 and last.columns.scroll == 201, "<-: three columns stay, focus col1, scroll 201 (columns n=3 focus=1 scroll=201)", .{});
+        check(!cv.list(0).accepts_focus and cv.list(1).accepts_focus and !cv.list(2).accepts_focus, "only the focused column accepts focus", .{});
+        try crender(io, alloc, &env.tree, pixels, scratch, LWHOLE, lut);
+        // 화면: col1 x 0..199, 구분선 200, col2 x 201..400, 구분선 401, 바탕 402..414, 분할 구분선 415, 미리보기 416..
+        check(lpx(pixels, 150, 10) == theme.TK_SELECTION and lpx(pixels, 300, 10) == theme.TK_SELECTION_INACTIVE and lpx(pixels, 300, 34) == theme.TK_BG, "col1 row 0 is TK_SELECTION, col2 row 0 TK_SELECTION_INACTIVE, col2 row 1 the background", .{});
+        check(lpx(pixels, 200, 300) == theme.TK_SEPARATOR and lpx(pixels, 401, 300) == theme.TK_SEPARATOR and lpx(pixels, 408, 300) == theme.TK_BG and lpx(pixels, 415, 300) == theme.TK_SEPARATOR and lpx(pixels, 500, 300) == theme.TK_SURFACE, "separators at x 200 / 401, background 402..414, split separator 415, preview TK_SURFACE", .{});
+        // 셈을 다시: 열 0의 행 0만 열 0에 남았다(화면 밖).
+        check(cv.list(0).selected == 0 and cv.list(1).selected == 0, "col0 and col1 keep their selections", .{});
+        // 파일에서 →: 아무 일 없고 체인은 멈춘다(unhandled 0).
+        env.key(input.KEY_LEFT);
+        env.key(input.KEY_DOWN);
+        env.key(input.KEY_DOWN);
+        const opens = env.src.opens;
+        env.key(input.KEY_RIGHT);
+        env.key(input.KEY_ENTER);
+        check(cv.focus == 0 and cv.n == 1 and cv.list(0).selected == 2 and env.src.opens == opens + 2 and env.kit_log.unhandled == 0, "-> and Enter on m.txt (a file): nothing, the keys stop at the column view", .{});
+        // 첫 열의 ←: 아무 일 없음.
+        const cols_before = env.log.columns;
+        env.key(input.KEY_LEFT);
+        check(cv.focus == 0 and env.log.columns == cols_before and env.kit_log.unhandled == 0, "<- on the first column: nothing", .{});
+        // 수정키가 섞이면 column view의 것이 아니다.
+        env.root.handle(keyEv(input.KEY_RIGHT, .{ .super = true }));
+        check(env.kit_log.unhandled == 1, "Super+-> is not the column view's (unhandled)", .{});
+    }
+
+    // ── 선택 바뀜이 오른쪽 열을 버린다 · 클릭 · Tab ──
+    {
+        var env: ColEnv = undefined;
+        try env.init(alloc, face, false);
+        defer env.deinit();
+        const cv = &env.cv;
+        env.key(input.KEY_RIGHT);
+        env.key(input.KEY_RIGHT);
+        env.key(input.KEY_LEFT);
+        env.key(input.KEY_LEFT);
+        check(cv.n == 3 and cv.focus == 0 and cv.scroll == 0, "<- <- to col0: three columns stay, scroll back to 0", .{});
+        env.key(input.KEY_DOWN);
+        check(cv.n == 1 and cv.focus == 0 and env.src.last_trunc == 1 and cv.list(0).selected == 1, "a down in col0 (a -> z) drops the columns on its right (truncated n=1)", .{});
+        env.key(input.KEY_UP);
+        env.key(input.KEY_RIGHT);
+        env.key(input.KEY_RIGHT);
+        env.key(input.KEY_LEFT);
+        // 클릭: 화면의 col2(x 201..400, 스크롤 201) 행 1(x.txt)을 누르면 col2가 포커스, 오른쪽 열이 없으니 버림 없음.
+        env.root.handle(.{ .button = .{ .code = input.BTN_LEFT, .pressed = true, .x = 300, .y = 30 } });
+        check(cv.focus == 2 and cv.n == 3 and cv.list(2).selected == 1 and std.mem.eql(u8, env.firstName(), "col2"), "a click on col2 row 1 focuses col2 and selects x.txt", .{});
+        // 같은 행 클릭(바뀌지 않음)으로 col1에 포커스 — 오른쪽 열은 남는다.
+        env.root.handle(.{ .button = .{ .code = input.BTN_LEFT, .pressed = true, .x = 100, .y = 10 } });
+        check(cv.focus == 1 and cv.n == 3, "a click on col1's selected row focuses col1 and keeps col2", .{});
+        // Tab: column view는 한 자리 — col1 → other → col1(col0 · col2를 안 거친다).
+        env.key(input.KEY_TAB);
+        const t1 = env.firstName();
+        env.key(input.KEY_TAB);
+        const t2 = env.firstName();
+        env.root.handle(keyEv(input.KEY_TAB, .{ .shift = true }));
+        const t3 = env.firstName();
+        check(std.mem.eql(u8, t1, "other") and std.mem.eql(u8, t2, "col1") and std.mem.eql(u8, t3, "other"), "Tab: col1 -> {s} -> {s}, Shift+Tab -> {s} (the column view is one stop)", .{ t1, t2, t3 });
+        // 포커스가 column view 밖일 때의 ←는 column view에 안 온다(other가 받지 않으니 unhandled).
+        const un = env.kit_log.unhandled;
+        env.key(input.KEY_LEFT);
+        check(cv.focus == 1 and env.kit_log.unhandled == un + 1, "<- while 'other' has the focus does not reach the column view", .{});
+        // 바깥 포커스에서 열을 클릭하면 열이 포커스를 가져온다.
+        env.root.handle(.{ .button = .{ .code = input.BTN_LEFT, .pressed = true, .x = 300, .y = 10 } });
+        check(cv.focus == 2 and std.mem.eql(u8, env.firstName(), "col2") and cv.n == 3, "a click on col2 from outside takes the focus to col2", .{});
+        // 창 포커스: 다시 붙은 열도 창 포커스를 안다.
+        env.root.handle(.{ .focus = false });
+        env.key(input.KEY_LEFT);
+        env.key(input.KEY_LEFT);
+        env.key(input.KEY_DOWN);
+        env.key(input.KEY_UP);
+        env.key(input.KEY_RIGHT);
+        env.key(input.KEY_RIGHT);
+        check(cv.list(2).highlight.background == theme.TK_SELECTION_INACTIVE and !cv.list(2).window_focused, "a column re-attached while the window is unfocused draws the inactive colour", .{});
+        env.root.handle(.{ .focus = true });
+        check(cv.list(2).highlight.background == theme.TK_SELECTION, "window focus back: the focused column is TK_SELECTION", .{});
+    }
+
+    // ── 버린 열이 first responder일 때(갱신이 오른쪽 열을 버림) ──
+    {
+        var env: ColEnv = undefined;
+        try env.init(alloc, face, false);
+        defer env.deinit();
+        const cv = &env.cv;
+        env.key(input.KEY_RIGHT);
+        env.key(input.KEY_RIGHT);
+        cv.truncate(2);
+        check(cv.n == 2 and cv.focus == 1 and std.mem.eql(u8, env.firstName(), "col1") and cv.scroll == 0, "truncate(2) while col2 has the focus: focus moves to col1 first, scroll 0", .{});
+        cv.truncate(1);
+        check(cv.n == 1 and cv.focus == 0 and std.mem.eql(u8, env.firstName(), "col0"), "truncate(1): col0", .{});
+        var probe: TV = .{ .accepts = true };
+        const pl = try env.tree.create(.{});
+        probe.init(pl, "probe");
+        defer probe.view.deinit(alloc);
+        try env.root_view.addChild(alloc, &probe.view);
+        _ = env.root.setFirstResponder(&probe.view);
+        env.root_view.removeChild(&probe.view);
+        env.root.viewRemoved(&probe.view);
+        check(env.root.first == null and probe.focus_off == 1 and probe.view.parent == null, "View.removeChild + Root.viewRemoved clear a removed first responder", .{});
+    }
+
+    // ── 풀: 수백 번 오가도 레이어 수가 늘지 않는다 · 깊이 32의 거절 ──
+    {
+        var env: ColEnv = undefined;
+        try env.init(alloc, face, false);
+        defer env.deinit();
+        env.key(input.KEY_RIGHT);
+        env.key(input.KEY_RIGHT);
+        env.key(input.KEY_LEFT);
+        env.key(input.KEY_LEFT);
+        env.key(input.KEY_DOWN);
+        env.key(input.KEY_UP);
+        const layers = env.tree.all.items.len;
+        const kids = env.cv.view.children.capacity;
+        for (0..300) |_| {
+            env.key(input.KEY_RIGHT);
+            env.key(input.KEY_RIGHT);
+            env.key(input.KEY_LEFT);
+            env.key(input.KEY_LEFT);
+            env.key(input.KEY_DOWN);
+            env.key(input.KEY_UP);
+        }
+        check(env.tree.all.items.len == layers and env.cv.view.children.capacity == kids and env.cv.n == 1, "300 rounds of -> -> <- <- down up: {d} layers before and after, view children capacity unchanged", .{layers});
+    }
+    {
+        var env: ColEnv = undefined;
+        try env.init(alloc, face, true);
+        defer env.deinit();
+        for (0..40) |_| env.key(input.KEY_RIGHT);
+        const cv = &env.cv;
+        const want_scroll = kit.column.columnX(31) + 200 - 415;
+        check(cv.n == kit.column.MAX_COLUMNS and cv.focus == 31 and env.kit_log.unhandled == 0 and cv.scroll >= want_scroll and cv.scroll % 201 == 0 and cv.scroll <= kit.column.columnX(31), "depth: 40 rights stop at 32 columns (focus 31, scroll {d} on a column boundary)", .{cv.scroll});
+        for (0..40) |_| env.key(input.KEY_LEFT);
+        check(cv.focus == 0 and cv.scroll == 0 and cv.n == 32, "40 lefts: focus 0, scroll 0, 32 columns stay", .{});
+    }
+
+    // ── 부분 = 통째(가로 스크롤 포함, 무작위 조작) ──
+    {
+        var env: ColEnv = undefined;
+        try env.init(alloc, face, false);
+        defer env.deinit();
+        try crender(io, alloc, &env.tree, pixels, scratch, LWHOLE, lut);
+        var prng = std.Random.DefaultPrng.init(0xC0C0);
+        const r = prng.random();
+        const keys = [_]u32{ input.KEY_RIGHT, input.KEY_RIGHT, input.KEY_LEFT, input.KEY_DOWN, input.KEY_UP, input.KEY_ENTER, input.KEY_HOME, input.KEY_END, input.KEY_TAB };
+        var mismatch: u32 = 0;
+        var partial: u32 = 0;
+        var scrolls: u32 = 0;
+        var last_scroll = env.cv.scroll;
+        var steps: u32 = 0;
+        while (steps < 300) : (steps += 1) {
+            switch (r.uintLessThan(u32, 6)) {
+                0, 1, 2 => env.key(keys[r.uintLessThan(usize, keys.len)]),
+                3 => env.root.handle(.{ .button = .{ .code = input.BTN_LEFT, .pressed = true, .x = @floatFromInt(r.uintLessThan(u32, 415)), .y = @floatFromInt(r.uintLessThan(u32, 80)) } }),
+                4 => env.root.handle(.{ .scroll = .{ .dy = 0, .discrete = r.intRangeAtMost(i32, -1, 1), .x = @floatFromInt(r.uintLessThan(u32, 415)), .y = 100 } }),
+                else => env.root.handle(.{ .focus = r.uintLessThan(u32, 4) != 0 }),
+            }
+            if (env.cv.scroll != last_scroll) scrolls += 1;
+            last_scroll = env.cv.scroll;
+            const d = env.tree.takeDirty() orelse continue;
+            const clip = Rect.intersect(d, LWHOLE) orelse continue;
+            if (!Rect.eql(clip, LWHOLE)) partial += 1;
+            try crender(io, alloc, &env.tree, pixels, scratch, clip, lut);
+            try crender(io, alloc, &env.tree, ref, scratch, LWHOLE, lut);
+            if (!std.mem.eql(u32, pixels, ref)) mismatch += 1;
+        }
+        check(mismatch == 0 and partial > 50 and scrolls > 5, "column view partial = whole: 300 random steps, {d} partial redraws, {d} horizontal scrolls, {d} mismatch(es)", .{ partial, scrolls, mismatch });
+    }
+
+    // ── 13 분할 뷰 배치 표 ──
+    {
+        var t = ca.Tree.init(alloc);
+        defer t.deinit();
+        const a = try t.create(.{});
+        const b = try t.create(.{});
+        var sv: kit.SplitView = undefined;
+        try sv.init(&t, "split", a, b, 200);
+        defer sv.deinit(alloc);
+        var notified: u32 = 0;
+        const N = struct {
+            fn on(ctx: *anyopaque, _: *kit.SplitView) void {
+                const n: *u32 = @ptrCast(@alignCast(ctx));
+                n.* += 1;
+            }
+        };
+        sv.notify = .{ .ctx = &notified, .on = N.on };
+        const Row = struct { w: f32, ax: f32, aw: f32, sx: f32, bx: f32, bw: f32 };
+        const rows = [_]Row{
+            .{ .w = 616, .ax = 0, .aw = 415, .sx = 415, .bx = 416, .bw = 200 },
+            .{ .w = 1240, .ax = 0, .aw = 1039, .sx = 1039, .bx = 1040, .bw = 200 },
+            .{ .w = 201, .ax = 0, .aw = 0, .sx = 0, .bx = 1, .bw = 200 },
+            .{ .w = 100, .ax = 0, .aw = 0, .sx = 0, .bx = 1, .bw = 200 },
+        };
+        var ok = true;
+        for (rows) |row| {
+            sv.layout(.{ .x = 10, .y = 20, .w = row.w, .h = 300 });
+            ok = ok and a.frame.x == row.ax and a.frame.w == row.aw and sv.separator.frame.x == row.sx and sv.separator.frame.w == 1 and
+                b.frame.x == row.bx and b.frame.w == row.bw and a.frame.h == 300 and b.frame.h == 300 and sv.view.layer.frame.x == 10;
+        }
+        check(ok and notified == rows.len and sv.view.layer.masks, "split layout table: 616 / 1240 / 201 / 100 wide (first flex, 1 px separator, second 200), notified each time", .{});
+    }
+}
+
+fn crender(io: std.Io, alloc: std.mem.Allocator, t: *ca.Tree, pixels: []u32, scratch: []u32, clip: Rect, lut: *const [256]u8) !void {
+    try lrender(io, alloc, t, pixels, scratch, clip, lut);
 }
