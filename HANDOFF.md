@@ -1,4 +1,4 @@
-# HANDOFF: App Layer(0.3) — TK-M3 끝(`a8397d4`, 루트 게이트 36/36). 다음 TK-M4(비례폭 텍스트 · 텍스트 필드 · 클립보드 · 검색). tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) — TK-M4 끝(`b0ff7d2`, 루트 게이트 36/36). 다음 TK-M5(서버 쪽 메뉴 바 · `tars_menu_v1` 판 2). tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
 
 ## 목표
 
@@ -22,6 +22,12 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 실제 파일과 대조한다. 기억 `feedback_herdr_subagents`.
 
 ## 완료된 작업 (2026-11-19~20, WY-M0 단계 C · WY-M1 착수 — 이 세션)
+
+- [x] TK-M4(plan `docs/plans/2026-11-21-tars-ui-toolkit-tk-m4.md`, design 결정 15, 서브에이전트 `tk-m4` — 끝나고 pane 닫음): A `ca95301` 놓기 층 `cg/layout.zig`
+      (클러스터 · NFD 자모를 음절로 · 캐럿 x ↔ 색인 · 가운데 생략 · 줄 나누기) · 글자 키 표 `input.charFor`(서버 키맵과 대조) · 판정 19, B `b7feb42` `kit/textfield.zig` ·
+      창 층 text-input(`ime.zig`) · 클립보드(`clip.zig`, SIGPIPE 무시) · `tars-files`의 바 · `Cmd+L` · `Cmd+C` · 판정 20~23(22 = 한글 preedit 밑줄 → commit, design의
+      끝나는 조건), C `b0ff7d2` 필터 `Cmd+F` · 검색 `Cmd+K`(`files/search.zig`) · 판정 24 · 25 · `measurements.md` 111 · 112 · `docs/help/desk.md`.
+      루트 게이트 36/36 둘 다 첫 판(`out/gate-logs/20261121-064938` · `20261121-075907`, toolkit lane 157초). 남은 것: carryover "TK-M4가 남긴 것"
 
 - [x] TK-M3(plan `docs/plans/2026-11-21-tars-ui-toolkit-tk-m3.md`, design 결정 14, 서브에이전트 `tk-m3` — 끝나고 pane 닫음): A `99e8567` `kit/column.zig`(열 풀 32 ·
       `→` `←` Enter · 가로 스크롤) · `kit/split.zig` · List의 `reload` · `restore` · `reset` · 창 층 `Handler.idle`, B `a8397d4` 첫 앱 `tars-files`(`toolkit/src/files/` —
@@ -138,9 +144,9 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
       `devlayer/cache/<sha256>`에 손으로 두었다 — 캐시 없는 기계에서는 release 전까지 `make dev-layers`가 받기에서 멈춘다.
       release 방법 두 갈래: (가) 태그 push → Actions가 빌드 · 업로드(sha256이 바뀌어 manifest를 고치고 wayland 체인 한 번), (나) 로컬 tarball을
       `gh release create`로 올림(sha256 그대로). Actions workflow가 태그에서 함께 돌면 자산이 겹치니 (나)면 workflow를 고르게 손본다
-- [ ] TK-M4(비례폭 텍스트 · 텍스트 필드(포커스에서 text-input enable · preedit · commit) · 클립보드 · 검색 — design milestone 표, "표시 → 편집 둘로 가른다"):
-      조사 `tk-m4`가 세션 scratchpad `tk4/research.md`에 있다(읽기만 한 조사 — 숫자는 구현 단계가 잰다). 끝나는 조건 "한글 `sendkey` → preedit 밑줄 → commit".
-      넘겨받은 것: 가운데 생략이 `›` 앞까지, `ColumnView.setPath` 꼴(`Cmd+L`), 글자 키 표(design 결정 13). 그 뒤 TK-M5 · M6(녹화 C), CR-M0 → WY-M7 → CR-M1
+- [ ] TK-M5(서버 쪽: `tars_menu_v1` 판 2(메뉴 모델 요청 · 고른 항목 이벤트) · 메뉴 바 그리기 · 키 · title/app_id 저장 — design 결정 10 · 11, milestone 표):
+      조사 `tk-m5`가 세션 scratchpad `tk5/research.md`에 있다(읽기만 한 조사). 끝나는 조건 "메뉴 바의 좌표 판정". 바의 자리 (가)/(나)는 plan이 고른다.
+      그 뒤 TK-M6(툴킷 쪽 메뉴 모델 · 단축키 표 · 미리보기 — 녹화 C), CR-M0 → WY-M7 → CR-M1
 - [ ] 녹화 B(사람 녹화 — strip + SDL3 column + 클립보드 + 한글, 조사 `wy-m5/research.md` 6절 끝에 보일 것)
 - [ ] 소개 페이지(`gh-pages`의 `data.js`)에 SW를 안 올렸다 — 사이트는 `main` 줄 기준(`commits`가 `rev-list --count main`)이고 SW는
       `app-layer-0-3`에만 있다. 0.3 줄이 `main`에 들어갈 때 올린다(사용자가 먼저 원하면 그때)

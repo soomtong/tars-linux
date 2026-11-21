@@ -3,7 +3,7 @@
 Date: 2026-11-21
 Design: `docs/specs/2026-11-20-tars-ui-toolkit-design.md`(결정 5 · 8 · 13 · 15, milestone 표 TK-M4), 요구사항 R-TXT-1~4, R-KIT-6, R-FM-2 · 4 · 8, R-KEY-6, 녹화 C,
 WY design 결정 32~43
-Status: 진행 중. 브랜치 `app-layer-0-3`.
+Status: 끝(2026-11-21). 브랜치 `app-layer-0-3`.
 
 ## 확인(조사 `tk-m4`, 세션 scratchpad `tk4/research.md` — HEAD `a8397d4`, 읽기만 한 조사)
 
@@ -137,3 +137,15 @@ Status: 진행 중. 브랜치 `app-layer-0-3`.
    실측: 필드 편집 한 번의 더티는 필드 사각형(536 × 24) · draw 중앙 1.1 ms · 서버 blit 30~39 µs. 바를 여는 프레임 2.9~17.3 ms(통째). `send` 225~266 µs,
    동기 붙여넣기 1.2 ms. enable/disable 왕복 뒤 모두 `match=1`.
    루트 게이트 36/36 첫 판(`out/gate-logs/20261121-064938`, toolkit lane 148초), verify mismatch 0.
+3. 단계 C `b0ff7d2`: `files/search.zig`(순수 — `Walker` 너비 우선 · 상한 20만/10초 · `score` · 상위 100 · `setQuery`의 이음) · `model.nameMatches` · `filterInto` ·
+   바의 세 모드 · 열의 필터(갱신이 지킴) · 결과 리스트 · `TextField`의 `Delegate.changed` · 숨긴 필드는 다시 안 그림 · `docs/help/desk.md` · 판정 24 · 25 ·
+   `measurements.md` 112. 체인 toolkit 두 번 · terminal PASS(첫 판부터).
+   판정의 실제 값: 24 `tk> filter text=m n=1` · 첫 열에 `m.txt` 한 행 · a가 걸러져 오른쪽 열이 버려짐 → Esc에 `n=4` · 선택이 `m.txt`(행 3)를 따라감.
+   25 `xtxt` → 결과 `a/b/x.txt` · `한/x.txt` → Enter → `tk> search open=/tmp/tkf/a/b/x.txt` · 열 셋 · 선택 `x.txt`.
+   호스트 검사 덩어리 17(걷기 상한 · 숨김 · 링크 · 제외, 점수 순서 표, 상위 100 = 전체 정렬의 앞 100, 질의 잇기 = 처음부터, 필터의 안정 선택).
+   plan과 달라진 것: (가) 판정 23의 `Cmd+Q`를 25 뒤로(같은 앱에 이어서). (나) 결과 리스트의 선택은 흐린 색 — 포커스는 필드에 있다. (다) "짧은 경로"는 바이트 길이.
+   (라) 호스트 검사의 모델 모듈이 `files_search`.
+   lead의 화면 판정: 4배 덤프 — 이름표 "검색" · 필드 `xtxt` · 결과 두 행.
+   실측: 게스트 initrd 트리 1,633항목 걷기 74 ms, 점수 첫 글자 11.6 ms · 이음 2 ms, 결과 리스트의 다시 그림 10.6~33.2 ms(점수보다 크다 — carryover).
+   네이티브 20만 가짜 항목(Debug): 걷기 43 ms · 첫 글자 49 ms.
+4. 루트 게이트 36/36 첫 판(`out/gate-logs/20261121-075907`, toolkit lane 157초), verify mismatch 0. TK-M4의 게이트는 둘(단계 B 뒤 · 단계 C 뒤) 다 첫 판 PASS.

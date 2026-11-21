@@ -3,8 +3,8 @@
 접두사: TK
 
 Date: 2026-11-20
-Status: TK-M3 끝(2026-11-21, `a8397d4`, 루트 게이트 36/36). 사용자 위임(2026-11-18 "주요 결정은 너의 의견에 따를 테니까")으로 Claude가 정했다.
-TK-M4 plan `docs/plans/2026-11-21-tars-ui-toolkit-tk-m4.md`. 브랜치 `app-layer-0-3`.
+Status: TK-M4 끝(2026-11-21, `b0ff7d2`, 루트 게이트 36/36). 사용자 위임(2026-11-18 "주요 결정은 너의 의견에 따를 테니까")으로 Claude가 정했다.
+다음은 TK-M5 plan. 브랜치 `app-layer-0-3`.
 
 계기: App Layer의 3단(`docs/plans/2026-11-18-tars-app-layer-roadmap.md` "3단 — TK", 4판 — WY-M6 뒤). 요구사항
 `2026-11-18-tars-app-layer-requirements.md`의 결정 4 · 9 · 13, R-ARCH · R-TKW · R-CG · R-TXT · R-CA · R-KIT · R-FM.
