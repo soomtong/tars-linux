@@ -15,6 +15,7 @@ const RectF = @import("tk_geom").RectF;
 const Canvas = @import("canvas.zig").Canvas;
 const text = @import("text.zig");
 const layout = @import("layout.zig");
+const image = @import("image.zig");
 
 pub const MAX_CLIPS = 16;
 
@@ -147,6 +148,22 @@ pub const Painter = struct {
         const dy: f64 = @floatFromInt(self.ty - vis.y);
         try small.roundedRect(self.io, self.alloc, dx, dy, r.x, r.y, r.w, r.h, radius, color, alpha);
         self.canvas.compositeOver(tmp, @intCast(vis.w), @intCast(vis.x - self.base_x), @intCast(vis.y - self.base_y), @intCast(vis.w), @intCast(vis.h));
+    }
+
+    /// premultiplied ARGB 판 `img`를 (x, y)(사용자 좌표, 물리 픽셀)에 1:1로 src-over로 얹는다(TK-M6 plan 확정 11). clip 스택과 translate를
+    /// 따른다 — 판 밖 · clip 밖은 자른다. 배율 변환은 부르는 쪽의 일(판을 이미 물리 크기로 만든다).
+    pub fn drawImage(self: *Painter, img: image.View, x: i32, y: i32) void {
+        const c = self.clips[self.depth] orelse return;
+        const r: Rect = .{ .x = x + self.tx, .y = y + self.ty, .w = @intCast(img.w), .h = @intCast(img.h) };
+        const b = Rect.intersect(r, c) orelse return;
+        const sx: usize = @intCast(b.x - r.x);
+        const sy: usize = @intCast(b.y - r.y);
+        const bw: usize = @intCast(b.w);
+        var row: usize = 0;
+        while (row < @as(usize, @intCast(b.h))) : (row += 1) {
+            const so = (sy + row) * img.w + sx;
+            self.canvas.compositeOver(img.pixels[so .. so + bw], @intCast(bw), @intCast(b.x - self.base_x), @intCast(b.y - self.base_y + @as(i32, @intCast(row))), @intCast(bw), 1);
+        }
     }
 
     /// UTF-8 한 줄을 baseline `baseline`, 펜 시작 `x`(소수, 사용자 좌표)에서 그린다(`draw_glyphs`). 돌려주는 것은 끝난 펜 x. clip 밖은

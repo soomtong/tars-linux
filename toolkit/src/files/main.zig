@@ -41,6 +41,8 @@ const kit = tk.kit;
 const model = @import("model.zig");
 const search_mod = @import("search.zig");
 const dir_mod = @import("dir.zig");
+const preview_mod = @import("preview.zig");
+const image = tk.cg.image;
 const Dir = dir_mod.Dir;
 
 const MAX = kit.column.MAX_COLUMNS;
@@ -186,6 +188,16 @@ const App = struct {
     win: ?*tk.Window = null,
     root: *tk.Layer = undefined,
     preview: *tk.Layer = undefined,
+    /// 미리보기 판의 두 레이어(TK-M6 plan 확정 13): 위 이름 한 줄 · 아래 본문(글 · 그림 · 아이콘) — 바뀐 쪽만 다시 그린다.
+    pv_name: *tk.Layer = undefined,
+    pv_body: *tk.Layer = undefined,
+    /// 선택이 바뀌었다 — idle 한 조각이 지금 선택과 다르면 읽는다(낡은 요청은 그냥 버려진다).
+    pv_pending: bool = true,
+    /// 지금 본문이 보이는 것의 열쇠(경로 · 배율).
+    pv_key: [4096]u8 = undefined,
+    pv_key_len: usize = 0,
+    pv_scale: u32 = 0,
+    pv: Preview = .none,
     root_view: kit.View = undefined,
     kit_root: kit.Root = undefined,
     split: kit.SplitView = undefined,
@@ -239,7 +251,11 @@ const App = struct {
         setPath(c0, start);
         try self.cv.init(t, &self.kit_root, self.alloc, "columns", .{ .ctx = self, .open = open, .truncated = truncated }, c0.listSource(), ANIM_MS);
         self.cv.hook = .{ .ctx = self, .on = columnEvent };
-        self.preview = try t.create(.{ .background = tokens.color.surface, .content = .{ .ctx = self, .draw = drawPreview } });
+        self.preview = try t.create(.{ .background = tokens.color.surface });
+        self.pv_name = try t.create(.{ .frame = .{ .x = 0, .y = 0, .w = tokens.size.preview, .h = PV_NAME_H }, .content = .{ .ctx = self, .draw = drawPreview } });
+        self.pv_body = try t.create(.{ .frame = .{ .x = 0, .y = PV_NAME_H, .w = tokens.size.preview, .h = PV_BODY_H }, .content = .{ .ctx = self, .draw = drawBody } });
+        try self.preview.addChild(self.pv_name);
+        try self.preview.addChild(self.pv_body);
         try self.split.init(t, "split", self.cv.view.layer, self.preview, tokens.size.preview);
         self.split.notify = .{ .ctx = self, .on = laidOut };
         try self.root.addChild(self.split.view.layer);
@@ -273,6 +289,7 @@ const App = struct {
         self.results.deinit(self.alloc);
         if (self.search) |*x| x.deinit();
         for (&self.cols) |*c| c.filtered.deinit(self.alloc);
+        self.pv.deinit(self.alloc);
     }
 
     fn setPath(c: *Col, p: []const u8) void {
@@ -382,6 +399,12 @@ const App = struct {
             self.step(c);
             return true;
         }
+        // 미리보기는 디렉터리 로딩 뒤(plan 확정 13): 로딩 중에는 조각마다 선택(0행)이 바뀌어 읽어 봐야 곧 낡고, 끼어든 조각이 첫 그림을 늦춘다
+        // (판정 18 — 끝나기 전에 항목이 그려져야 한다).
+        if (self.pv_pending and self.small != null) {
+            self.loadPreview();
+            return true;
+        }
         return self.searchStep();
     }
 
@@ -422,7 +445,7 @@ const App = struct {
         const t2 = nowNs();
         c.merge_us += (t2 - t1) / std.time.ns_per_us;
         if (l.chunks == 1) c.first_us = (t2 - c.t0) / std.time.ns_per_us;
-        if (c.index == self.cv.focus) self.preview.setNeedsDisplay();
+        if (c.index == self.cv.focus) self.previewChanged();
     }
 
     fn beforeOf(self: *App, c: *Col, list: *kit.List, touched: bool) model.Before {
@@ -483,7 +506,7 @@ const App = struct {
         });
         // 선택이 디렉터리였고 사라졌거나 다른 항목이 됐으면 오른쪽 열은 그 디렉터리의 것이 아니다.
         if (was_dir and after.gone and self.cv.n > c.index + 1) self.cv.truncate(c.index + 1);
-        if (c.index == self.cv.focus) self.preview.setNeedsDisplay();
+        if (c.index == self.cv.focus) self.previewChanged();
     }
 
     fn sayLoad(self: *App, c: *Col, l: *model.Listing, state: []const u8) void {
@@ -557,7 +580,7 @@ const App = struct {
             },
         }
         _ = cv;
-        self.preview.setNeedsDisplay();
+        self.previewChanged();
     }
 
     // ── 위의 한 줄(0행) · 미리보기 ──────────────────────────────────────
@@ -606,6 +629,161 @@ const App = struct {
         _ = try p.drawGlyphs(f, LABEL_X * s, base, shown, tokens.color.text_dim, alpha);
     }
 
+    /// 선택이 바뀌었을 수 있다 — 이름 줄을 다시 그리고 본문은 idle에 맡긴다(plan 확정 13).
+    fn previewChanged(self: *App) void {
+        self.pv_name.setNeedsDisplay();
+        self.pv_pending = true;
+    }
+
+    /// 포커스 열의 선택 항목(경로 · 이름 · 종류). 없으면 null.
+    fn selected(self: *App, buf: []u8) ?struct { path: []const u8, name: []const u8, kind: model.Kind } {
+        const i = self.cv.focus;
+        const c = &self.cols[i];
+        const items = c.entries();
+        const list = self.cv.list(i);
+        if (list.selected >= items.len) return null;
+        const it = items[list.selected];
+        const p = model.join(buf, c.path(), it.name) catch return null;
+        return .{ .path = p, .name = it.name, .kind = it.kind };
+    }
+
+    /// idle 한 조각(plan 확정 13): 지금 선택이 본문의 것과 다르면 읽고 판정해 본문을 바꾼다. 같으면 아무것도 안 한다.
+    fn loadPreview(self: *App) void {
+        self.pv_pending = false;
+        var pbuf: [4096]u8 = undefined;
+        const sel = self.selected(&pbuf);
+        const key = if (sel) |x| x.path else "";
+        if (self.pv_scale == self.scale and std.mem.eql(u8, key, self.pv_key[0..self.pv_key_len])) return;
+        @memcpy(self.pv_key[0..key.len], key);
+        self.pv_key_len = key.len;
+        self.pv_scale = self.scale;
+        self.pv.deinit(self.alloc);
+        self.pv = .none;
+        self.pv_body.setNeedsDisplay();
+        const x = sel orelse return tk.window.say("preview kind=none", .{});
+        const t0 = nowNs();
+        if (x.kind == .dir) {
+            self.setIcon(x.name, .dir, 0);
+            return tk.window.say("preview kind=icon reason=dir name={s} us={d}", .{ x.name, (nowNs() - t0) / std.time.ns_per_us });
+        }
+        var head = preview_mod.readHead(self.alloc, x.path, preview_mod.TEXT_HEAD) orelse {
+            self.setIcon(x.name, .unreadable, 0);
+            return tk.window.say("preview kind=icon reason=unreadable name={s}", .{x.name});
+        };
+        defer head.deinit(self.alloc);
+        const kind = preview_mod.classify(head.bytes(), head.size);
+        switch (kind) {
+            .icon => |r| {
+                self.setIcon(x.name, r, head.size);
+                tk.window.say("preview kind=icon reason={s} name={s} bytes={d} us={d}", .{ @tagName(r), x.name, head.size, (nowNs() - t0) / std.time.ns_per_us });
+            },
+            .text => {
+                const buf = self.alloc.alloc(u8, head.n * 4) catch return;
+                const t = preview_mod.textOf(head.bytes(), buf);
+                self.pv = .{ .text = .{ .buf = buf, .len = t.len } };
+                const lines = self.textLines(null, t, 255);
+                tk.window.say("preview kind=text name={s} lines={d} bytes={d} us={d}", .{ x.name, lines, head.size, (nowNs() - t0) / std.time.ns_per_us });
+            },
+            .png, .jpeg => {
+                var full = preview_mod.readHead(self.alloc, x.path, preview_mod.IMAGE_MAX) orelse {
+                    self.setIcon(x.name, .unreadable, head.size);
+                    return tk.window.say("preview kind=icon reason=unreadable name={s}", .{x.name});
+                };
+                defer full.deinit(self.alloc);
+                const fmt = @tagName(kind);
+                const hd = image.info(full.bytes()) catch |e| {
+                    self.setIcon(x.name, if (e == error.TooBig) .big else .unreadable, head.size);
+                    return tk.window.say("preview kind=icon reason={s} name={s} format={s}", .{ if (e == error.TooBig) "big" else "unreadable", x.name, fmt });
+                };
+                const t1 = nowNs();
+                const img = image.decodeFit(self.alloc, full.bytes(), PV_IMG_W, PV_BODY_H, self.scale) catch |e| {
+                    self.setIcon(x.name, if (e == error.TooBig) .big else .unreadable, head.size);
+                    return tk.window.say("preview kind=icon reason={s} name={s} format={s}", .{ if (e == error.TooBig) "big" else "unreadable", x.name, fmt });
+                };
+                self.pv = .{ .image = img };
+                const lw = img.w / self.scale;
+                const lh = img.h / self.scale;
+                tk.window.say("preview kind={s} name={s} w={d} h={d} shown={d}x{d} at={d},{d} bytes={d} decode_us={d} us={d}", .{
+                    fmt, x.name, hd.w, hd.h, lw, lh, imageX(lw), PV_NAME_H, full.n, (nowNs() - t1) / std.time.ns_per_us, (nowNs() - t0) / std.time.ns_per_us,
+                });
+            },
+        }
+    }
+
+    fn setIcon(self: *App, name: []const u8, reason: preview_mod.Reason, size: u64) void {
+        var ic: Icon = .{ .dir = reason == .dir };
+        const what = switch (reason) {
+            .dir => "폴더",
+            .binary => "이진 파일",
+            .big => "너무 큼",
+            .unreadable => "열 수 없음",
+        };
+        const line = if (reason == .dir)
+            std.fmt.bufPrint(&ic.info, "{s}", .{what}) catch ""
+        else
+            std.fmt.bufPrint(&ic.info, "{s} · {d} 바이트", .{ what, size }) catch "";
+        ic.info_len = line.len;
+        _ = name;
+        self.pv = .{ .icon = ic };
+    }
+
+    /// 텍스트를 판 폭에 줄 나누기(R-TXT-1 — `layout.wrap`)해 판 높이까지. `p`가 있으면 그리고, 없으면 줄 수만 센다.
+    fn textLines(self: *App, p: ?*tk.Painter, t: []const u8, alpha: u8) usize {
+        const f = if (self.small) |*x| x else return 0;
+        const s: f32 = @floatFromInt(self.scale);
+        const max_w = (tokens.size.preview - 2 * LABEL_X) * s;
+        const lh = f.line_height;
+        const max_lines: usize = @intFromFloat(@floor(PV_BODY_H * s / lh));
+        var n: usize = 0;
+        // 끝의 줄 바꿈 뒤 빈 조각은 줄이 아니다.
+        const body = if (t.len > 0 and t[t.len - 1] == '\n') t[0 .. t.len - 1] else t;
+        if (body.len == 0) return 0;
+        var it = std.mem.splitScalar(u8, body, '\n');
+        while (it.next()) |para| {
+            if (n >= max_lines) break;
+            const stops = self.alloc.alloc(tk.layout.Stop, para.len + 1) catch return n;
+            defer self.alloc.free(stops);
+            const lines = self.alloc.alloc(tk.layout.Line, para.len + 1) catch return n;
+            defer self.alloc.free(lines);
+            const got = tk.layout.wrap(f.metrics(), para, max_w, stops, lines) catch return n;
+            for (got) |ln| {
+                if (n >= max_lines) break;
+                if (p) |pp| {
+                    const base: i32 = @intFromFloat(@round(@as(f32, @floatFromInt(n)) * lh + f.ascent));
+                    _ = pp.drawGlyphs(f, LABEL_X * s, base, para[ln.start..ln.end], tokens.color.text, alpha) catch {};
+                }
+                n += 1;
+            }
+        }
+        return n;
+    }
+
+    /// 본문 그리기 — 글(위 왼쪽 16부터, 줄 높이 = 글꼴), 그림(가운데 · 위), 아이콘(z2d 도형 + 한 줄).
+    fn drawBody(ctx: *anyopaque, p: *tk.Painter, size: [2]f32, alpha: u8) anyerror!void {
+        _ = size;
+        const self = me(ctx);
+        const s: f32 = @floatFromInt(self.scale);
+        switch (self.pv) {
+            .none => {},
+            .text => |t| _ = self.textLines(p, t.buf[0..t.len], alpha),
+            .image => |*img| {
+                const lw = img.w / self.scale;
+                p.drawImage(img.view(), @intCast(imageX(lw) * self.scale), 0);
+            },
+            .icon => |*ic| {
+                if (ic.dir) {
+                    try p.fillRoundedRect(.{ .x = 76 * s, .y = 4 * s, .w = 20 * s, .h = 10 * s }, 2 * s, tokens.color.accent, alpha);
+                    try p.fillRoundedRect(.{ .x = 76 * s, .y = 10 * s, .w = 48 * s, .h = 36 * s }, 4 * s, tokens.color.accent, alpha);
+                } else {
+                    try p.fillRoundedRect(.{ .x = 80 * s, .y = 4 * s, .w = 40 * s, .h = 48 * s }, 4 * s, tokens.color.text_dim, alpha);
+                }
+                const f = if (self.small) |*x| x else return;
+                const base: i32 = @intFromFloat(@round(72 * s));
+                _ = try p.drawGlyphs(f, LABEL_X * s, base, ic.info[0..ic.info_len], tokens.color.text_dim, alpha);
+            },
+        }
+    }
+
     fn laidOut(ctx: *anyopaque, _: *kit.SplitView) void {
         const self = me(ctx);
         self.cv.sync();
@@ -619,6 +797,7 @@ const App = struct {
         self.tree.setScale(s);
         // 글꼴을 여기서도 맞춘다 — 그리기 전의 `tk> column` 줄(첫 로딩의 끝)이 생략한 이름(`shown=`)을 낼 수 있게. 실패하면 `draw`가 다시 해 본다.
         self.faces(s) catch {};
+        if (s != self.pv_scale) self.pv_pending = true;
         self.width = @floatFromInt(width / s);
         self.height = @floatFromInt(height / s);
         self.root.setFrame(.{ .x = 0, .y = 0, .w = self.width, .h = self.height });
@@ -742,7 +921,7 @@ const App = struct {
         list.restore(after.index orelse 0, after.offset);
         if (was_dir and after.gone and self.cv.n > i + 1) self.cv.truncate(i + 1);
         self.updateOverlay(c);
-        self.preview.setNeedsDisplay();
+        self.previewChanged();
         tk.window.say("filter text={s} n={d}", .{ c.filterText(), c.entries().len });
     }
 
@@ -879,7 +1058,7 @@ const App = struct {
         for (0..self.cv.n) |i| self.startLoad(i, false);
         self.ensureOverlays() catch {};
         self.cv.focusFirst();
-        self.preview.setNeedsDisplay();
+        self.previewChanged();
     }
 
     /// `Cmd+C`(필드가 아닐 때): 포커스 열의 선택 항목 경로(R-FM-8).
@@ -942,6 +1121,7 @@ const App = struct {
     fn togglePreview(self: *App) void {
         self.preview_on = !self.preview_on;
         self.split.second_w = if (self.preview_on) tokens.size.preview else 0;
+        self.preview.setHidden(!self.preview_on);
         self.relayout();
         tk.window.say("preview shown={d}", .{@intFromBool(self.preview_on)});
     }
@@ -984,6 +1164,42 @@ const App = struct {
 };
 
 const ROOT_VT: kit.VTable = .{ .perform = App.rootPerform, .validate = App.rootValidate };
+
+// ── 미리보기의 자리(논리 px, 판 왼쪽 위 기준 — TK-M6 plan 확정 12 · 13) ─────────────────────────
+// 이름 한 줄 0..40, 본문 40..360. 판정 15의 상자(판 y 380..680)에 닿지 않게 본문을 360에서 끊는다. 그림은 폭 168(좌우 16) · 높이 320 안에
+// 맞추고(확대 없음) 가로 가운데 · 본문 위에 놓는다.
+const PV_NAME_H: f32 = 40;
+const PV_BODY_H: f32 = 320;
+const PV_IMG_W: u32 = 168;
+
+/// 그림의 x(논리) — 판 폭 200의 가운데.
+fn imageX(w: u32) u32 {
+    const pw: u32 = @intFromFloat(tokens.size.preview);
+    return if (w >= pw) 0 else (pw - w) / 2;
+}
+
+const Icon = struct {
+    dir: bool,
+    info: [64]u8 = undefined,
+    info_len: usize = 0,
+};
+
+/// 미리보기 본문(plan 확정 12).
+const Preview = union(enum) {
+    none,
+    text: struct { buf: []u8, len: usize },
+    image: image.Image,
+    icon: Icon,
+
+    fn deinit(self: *Preview, alloc: std.mem.Allocator) void {
+        switch (self.*) {
+            .text => |t| alloc.free(t.buf),
+            .image => |*img| img.deinit(alloc),
+            else => {},
+        }
+        self.* = .none;
+    }
+};
 
 const menus = @import("menus.zig");
 const MENU = menus.MENU;

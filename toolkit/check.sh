@@ -46,6 +46,9 @@ cd "$(dirname "$0")" || exit 1
 #   → 리스트 포커스의 `Cmd+C`와 메뉴 Edit › 복사가 둘 다 경로 복사(`tk> copy path=/tmp/tkp/d` 둘, 28)
 #   → 비활성 Edit › 붙여넣기는 클릭해도 `menu> activate`가 없고, 키 `Cmd+V`는 앱이 먹는다(`tk> paste` · `action` 없음, 29). 앱의 모델 commit이 연 메뉴를
 #     닫은 일 없음(`why=model` 0)
+#   → 미리보기(TK-M6 단계 B, plan 확정 12~16 — 같은 앱, 시험 파일은 `tars-tk-demo --write-samples`가 26 앞에서 쓴다): `t.txt`의 글이 판 위쪽에 줄마다
+#     잉크(한글 줄 포함, 줄 수 = `tk> preview kind=text … lines=`, 30), `i.png` 16 × 16이 그 자리에 한 색(31), `j.jpg` 32 × 32의 가장 많은 색이 적은 색 ±4(32),
+#     `x.bin`은 문서 아이콘 · `d`는 폴더 아이콘(33), `Space`가 판과 구분선을 감추고 다시 보인다(34)
 #
 # 부팅 하나, NIC 없음, 디스크 없음 — 셸은 root(fish), 소켓은 `/run/user/0`. 키보드는 QEMU의 PS/2라 pc로 읽혀 Cmd가 Alt
 # 자리다(wayland 체인과 같다). USB 마우스 하나(TK-M2 — 판정 12의 클릭 · 휠). HMP `mouse_move` · `mouse_button`이 그 장치로 가고 포인터는
@@ -1004,6 +1007,9 @@ type_text 'mkdir -p /tmp/tkp/d'
 type_keys ret
 type_text 'touch /tmp/tkp/e.txt'
 type_keys ret
+type_text 'tars-tk-demo --write-samples /tmp/tkp'
+type_keys ret
+wait_for_screen 'samples dir=/tmp/tkp files=4' || report_failure "(30) tars-tk-demo --write-samples did not write the four sample files"
 type_text 'tars-files /tmp/tkp > /tmp/tk7.log &'
 type_keys ret
 wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' 7 || report_failure "(26) tars-files did not open a seventh column"
@@ -1114,6 +1120,98 @@ sleep 1
 MODELS="$(count_log "terminal: menu> close id=${ID7} why=model")"
 [ "$MODELS" -eq 0 ] || report_failure "(27-29) ${MODELS} open menu(s) closed because the app committed its model"
 echo "(29): the click on the disabled 붙여넣기 did not activate, Esc closed the menu; Cmd+V reached the app (its log below)"
+# ══ 미리보기(TK-M6 단계 B, plan 확정 12~16) — 다섯째 앱에 이어서 ═══════════════════════
+#
+# 첫 열: d · e.txt · i.png · j.jpg · t.txt · x.bin(디렉터리 먼저, 자연 순서). 포커스는 첫 열, 선택은 d(판정 28 · 29 그대로). 미리보기 판은 화면 x 1060..1259 ·
+# y 20..771(TK_SURFACE)이고 그 안: 이름 한 줄 y 20..59, 본문 y 60..379(판 논리 40..360 — 판정 15의 상자 y 400 위에서 끝난다). 글은 x 1076부터 줄 높이 16(13 px
+# Pretendard), 그림은 가로 가운데 · 본문 위(16 × 16 → x 1152, 32 × 32 → x 1144, y 60), 아이콘: 문서 TK_TEXT_DIM (1140, 64) 40 × 48 · 폴더 TK_ACCENT
+# (1136, 70) 48 × 36(탭 (1136, 64) 20 × 10), 그 아래 한 줄(baseline y 132).
+PNG_C=9b3d7a
+JPEG_C=3d8e9b
+pv_keys() {
+  local code="$1" n="$2" before
+  before="$(count_log "terminal: wl> key code=${code} state=1 to=${ID7}([^0-9]|$)")"
+  for _ in $(seq 1 "$n"); do type_keys "$3"; done
+  wait_for_count "terminal: wl> key code=${code} state=1 to=${ID7}([^0-9]|$)" $((before + n)) || report_failure "$4: the key(s) did not reach tars-files"
+  sleep 1.5
+}
+# 색 둘이 채널마다 4 안인가(RRGGBB).
+near4() {
+  local a="$1" b="$2" i x y
+  for i in 0 2 4; do
+    x=$((16#${a:i:2})); y=$((16#${b:i:2}))
+    [ $((x > y ? x - y : y - x)) -le 4 ] || return 1
+  done
+  return 0
+}
+
+echo "=== (30) a text file: its lines (Hangul too) in the upper preview, wrapped ==="
+pv_keys 108 4 down "(30)"
+SHOT30="${SCREENS_DIR}/files-preview-text.ppm"
+screendump "$SHOT30" || report_failure "(30) screendump did not write ${SHOT30}"
+INK_LINES=0
+for i in $(seq 0 19); do
+  got="$(ppm_ink "$SHOT30" 1076 $((60 + 16 * i)) 168 16)"
+  case "$got" in *" ink=0") break ;; esac
+  INK_LINES=$((INK_LINES + 1))
+done
+echo "(30) inked line bands from y 60: ${INK_LINES}"
+[ "$INK_LINES" -ge 4 ] || report_failure "(30) fewer than four inked lines in the text preview (${INK_LINES})"
+got="$(ppm_ink "$SHOT30" 1076 76 168 16)"
+case "$got" in "bg=${TK_SURF} "*) ;; *) report_failure "(30) the Hangul line (y 76) is not text on the surface (${got})" ;; esac
+want_box "(30) the preview below the text stays the surface" "$SHOT30" 1100 400 140 300 "$TK_SURF"
+
+echo "=== (31) a PNG: the 16x16 picture at 1:1 in its colour ==="
+pv_keys 103 2 up "(31)"
+SHOT31="${SCREENS_DIR}/files-preview-png.ppm"
+screendump "$SHOT31" || report_failure "(31) screendump did not write ${SHOT31}"
+want_box "(31) the PNG (1152, 60) 16x16" "$SHOT31" 1152 60 16 16 "$PNG_C"
+got="$(ppm_count "$SHOT31" 1140 50 40 40 "$PNG_C")"
+[ "$got" = "256" ] || report_failure "(31) the PNG colour is not exactly 16x16 = 256 px around its place (${got})"
+want_box "(31) the preview below the picture stays the surface" "$SHOT31" 1100 400 140 300 "$TK_SURF"
+
+echo "=== (32) a JPEG: the 32x32 picture, its main colour within 4 of the one written ==="
+pv_keys 108 1 down "(32)"
+SHOT32="${SCREENS_DIR}/files-preview-jpeg.ppm"
+screendump "$SHOT32" || report_failure "(32) screendump did not write ${SHOT32}"
+got="$(ppm_ink "$SHOT32" 1144 60 32 32)"
+JPEG_GOT="${got#bg=}"
+JPEG_GOT="${JPEG_GOT%% *}"
+echo "(32) the JPEG box (1144, 60) 32x32: ${got}"
+near4 "$JPEG_GOT" "$JPEG_C" || report_failure "(32) the JPEG's main colour ${JPEG_GOT} is not within 4 of ${JPEG_C}"
+got="$(ppm_ink "$SHOT32" 1144 60 32 32)"
+case "$got" in *" ink=0") ;; *)
+  n="${got##*ink=}"
+  [ "$n" -le 32 ] || report_failure "(32) the JPEG box is not one colour ±noise (${got})" ;;
+esac
+want_box "(32) left of the JPEG is the surface" "$SHOT32" 1120 60 20 32 "$TK_SURF"
+
+echo "=== (33) other files and directories: an icon (binary file, folder) ==="
+pv_keys 108 2 down "(33)"
+SHOT33="${SCREENS_DIR}/files-preview-binary.ppm"
+screendump "$SHOT33" || report_failure "(33) screendump did not write ${SHOT33}"
+want_box "(33) the document icon (TK_TEXT_DIM)" "$SHOT33" 1144 68 32 40 "$TK_DIM"
+got="$(ppm_ink "$SHOT33" 1076 118 168 20)"
+case "$got" in *" ink=0") report_failure "(33) no info line under the document icon (${got})" ;; esac
+pv_keys 102 1 home "(33)"
+SHOT33D="${SCREENS_DIR}/files-preview-dir.ppm"
+screendump "$SHOT33D" || report_failure "(33) screendump did not write ${SHOT33D}"
+want_box "(33) the folder icon (TK_ACCENT)" "$SHOT33D" 1140 74 40 28 "$TK_ACCENT"
+want_box "(33) the preview below the folder stays the surface" "$SHOT33D" 1100 400 140 300 "$TK_SURF"
+
+echo "=== (34) Space hides the preview pane and its separator, and shows them again ==="
+pv_keys 57 1 spc "(34)"
+SHOT34="${SCREENS_DIR}/files-preview-hidden.ppm"
+screendump "$SHOT34" || report_failure "(34) screendump did not write ${SHOT34}"
+want_box "(34) where the preview was is the columns' background" "$SHOT34" 1100 60 140 300 "$TK_BG"
+want_box "(34) the separator at x 1059 is gone" "$SHOT34" 1059 60 1 300 "$TK_BG"
+pv_keys 57 1 spc "(34)"
+SHOT34B="${SCREENS_DIR}/files-preview-shown.ppm"
+screendump "$SHOT34B" || report_failure "(34) screendump did not write ${SHOT34B}"
+want_box "(34) the preview is back" "$SHOT34B" 1100 400 140 300 "$TK_SURF"
+want_box "(34) the separator is back at x 1059" "$SHOT34B" 1059 60 1 300 "$TK_SEP"
+want_box "(34) the folder icon is back" "$SHOT34B" 1140 74 40 28 "$TK_ACCENT"
+echo "(30-34): text ${INK_LINES} lines, PNG 16x16 ${PNG_C}, JPEG main ${JPEG_GOT}, document and folder icons, Space hid and showed the pane"
 type_keys alt-q
 wait_for_log "terminal: wl> close id=${ID7}" || report_failure "Cmd+Q sent no 'wl> close id=${ID7}' to tars-files"
 wait_for_log "terminal: wl> unmap id=${ID7} ws=1 slot=1" || report_failure "tars-files' fifth slot was not removed"
@@ -1154,6 +1252,22 @@ D7="$(count7 '^tk> draw ')"
 C7="$(count7 '^tk> commit$')"
 [ "$D7" -eq "$C7" ] || report_failure "tars-files (menu) drew ${D7} times but committed ${C7}"
 echo "(26-29 log): menu sent ×${SENT7}, goto via key and menu, two bars, two path copies (key, menu), Cmd+V eaten; ${D7} draws = ${C7} commits"
+# 판정 30~34의 줄.
+PV_TEXT="$(printf '%s\n' "$TK7" | grep -aE '^tk> preview kind=text name=t[.]txt ' | tail -n 1)"
+[ -n "$PV_TEXT" ] || report_failure "(30) no 'tk> preview kind=text name=t.txt' in the fifth log"
+PV_LINES="$(sed -E 's/.* lines=([0-9]+) .*/\1/' <<<"$PV_TEXT")"
+[ "$PV_LINES" = "$INK_LINES" ] || report_failure "(30) the log says ${PV_LINES} lines but ${INK_LINES} line bands have ink"
+has7 "^tk> preview kind=text name=t[.]txt lines=${INK_LINES} bytes=[0-9]+ us=[0-9]+\$" "(30)"
+has7 '^tk> preview kind=png name=i[.]png w=16 h=16 shown=16x16 at=92,40 bytes=83 decode_us=[0-9]+ us=[0-9]+$' "(31)"
+has7 '^tk> preview kind=jpeg name=j[.]jpg w=32 h=32 shown=32x32 at=84,40 bytes=658 decode_us=[0-9]+ us=[0-9]+$' "(32)"
+has7 '^tk> preview kind=icon reason=binary name=x[.]bin bytes=4 us=[0-9]+$' "(33)"
+has7 '^tk> preview kind=icon reason=dir name=d us=[0-9]+$' "(33)"
+[ "$(count7 '^tk> action name=preview via=key$')" -eq 2 ] || report_failure "(34) not two 'tk> action name=preview via=key'"
+has7 '^tk> preview shown=0$' "(34)"
+has7 '^tk> preview shown=1$' "(34)"
+echo "(30-34 log): text ${PV_LINES} lines, png 16x16, jpeg 32x32, icons binary · dir, preview hidden and shown"
+echo "--- reference: tars-files previews (TK-M6 phase B) ---"
+printf '%s\n' "$TK7" | grep -aE '^tk> preview '
 echo "--- reference: tars-files with the menu model (TK-M6 phase A) ---"
 printf '%s\n' "$TK7" | grep -aE '^tk> (menu|action|bar|copy|focus|configure|draw .* age=0) '
 
@@ -1257,4 +1371,4 @@ printf '%s\n' "$TK3A" | grep -aE '^tk> (draw|columns|refresh) '
 MISMATCH="$(count_log 'terminal: verify> mismatch')"
 [ "$MISMATCH" -eq 0 ] || report_failure "render verify mismatch lines: ${MISMATCH}"
 
-echo "PASS: TK-M6 (phase A) — tars-tk-demo binds tars_menu_v1 (native), opens as a 616x752 column, draws a rounded rectangle (z2d) with antialiased corners and antialiased Pretendard text, redraws centred at 1240x752 on Cmd+R, animates a face's opacity (mid colour between, end colour after) with only the face's rectangle blitted, commits only when it draws (2 + ${N} draws and commits, none while idle), and ends by itself on Cmd+Q; tars-tk-demo --list 100000 moves list1's highlight to row 10 after ten downs, End shows the last row and the bar at the bottom, a click selects row 4 and the wheel scrolls three rows, Tab and Shift+Tab move the focus between the lists, and holding down repeats ${REPEATS} time(s) on the client; tars-files lists /tmp/tkf with directories first and hidden names out, -> -> <- leaves three columns with the focus on the second (scroll 201), re-reads on focus and keeps b selected after a/0 appears, and streams ${FILES_N} entries in ${CHUNKS18} chunks (painted at ${PAINT18} us of ${ALL18} us), elides a long directory and a long file name in the middle so they stop short of the › and the bar, copies the selected path to the shell's clipboard on Cmd+C, and opens the path bar on Cmd+L where a typed path, a Hangul path (preedit underlined, then committed) and a pasted path rebuild the columns, filters the focused column on Cmd+F and searches under the first column on Cmd+K; tars-files /tmp/tkp sends its menu model so the bar shows tars-files File Edit View Go, Cmd+L and Go > 경로로 가기 both open the path bar, Cmd+C and Edit > 복사 both copy the path, and the disabled 붙여넣기 does nothing from the menu or the key, with no open menu closed by the app's model"
+echo "PASS: TK-M6 — tars-tk-demo binds tars_menu_v1 (native), opens as a 616x752 column, draws a rounded rectangle (z2d) with antialiased corners and antialiased Pretendard text, redraws centred at 1240x752 on Cmd+R, animates a face's opacity (mid colour between, end colour after) with only the face's rectangle blitted, commits only when it draws (2 + ${N} draws and commits, none while idle), and ends by itself on Cmd+Q; tars-tk-demo --list 100000 moves list1's highlight to row 10 after ten downs, End shows the last row and the bar at the bottom, a click selects row 4 and the wheel scrolls three rows, Tab and Shift+Tab move the focus between the lists, and holding down repeats ${REPEATS} time(s) on the client; tars-files lists /tmp/tkf with directories first and hidden names out, -> -> <- leaves three columns with the focus on the second (scroll 201), re-reads on focus and keeps b selected after a/0 appears, and streams ${FILES_N} entries in ${CHUNKS18} chunks (painted at ${PAINT18} us of ${ALL18} us), elides a long directory and a long file name in the middle so they stop short of the › and the bar, copies the selected path to the shell's clipboard on Cmd+C, and opens the path bar on Cmd+L where a typed path, a Hangul path (preedit underlined, then committed) and a pasted path rebuild the columns, filters the focused column on Cmd+F and searches under the first column on Cmd+K; tars-files /tmp/tkp sends its menu model so the bar shows tars-files File Edit View Go, Cmd+L and Go > 경로로 가기 both open the path bar, Cmd+C and Edit > 복사 both copy the path, and the disabled 붙여넣기 does nothing from the menu or the key, with no open menu closed by the app's model; its preview shows a text file's wrapped lines (${PV_LINES}), a PNG at 1:1 in its colour, a JPEG within 4 of its colour, icons for a binary file and a directory, and Space hides and shows the pane"

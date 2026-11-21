@@ -61,7 +61,8 @@ pub const SplitView = struct {
             .axis = .horizontal,
             .items = &.{
                 .{ .layer = self.first, .flex = 1 },
-                .{ .layer = self.separator, .size = SEPARATOR_W },
+                // 뒤 칸을 접으면(폭 0 — `tars-files`의 `Space`, TK-M6) 구분선도 함께 접는다.
+                .{ .layer = self.separator, .size = if (self.second_w == 0) 0 else SEPARATOR_W },
                 .{ .layer = self.second, .size = self.second_w },
             },
         };

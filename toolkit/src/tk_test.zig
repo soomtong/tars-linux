@@ -33,6 +33,9 @@
 //! 18 메뉴 모델 · 단축키 표 하나(TK-M6 단계 A) — 모델 → 요청 열(순서 · 비트 · 비활성), 상한 넷의 경계, `match`(caps · Shift · 코드 0), mask 왕복,
 //!    chain(필드의 Cmd+C = 필드 · 리스트의 Cmd+C = 앱 · 비활성 단축키는 먹음 · 필드의 Space는 글자 · 리스트의 Space는 메뉴 · `Event.menu` · 비활성 id는
 //!    버림), 다시 셈(수정키 · ime에는 안 셈, 같으면 안 보냄), `tars-files`의 모델(상한 안 · 4 메뉴 13 항목 · 키가 서버의 이름 표 안 · 서버 chord와 안 겹침).
+//! 19 이미지 · 미리보기(TK-M6 단계 B) — 시험 그림(`samples.zig`)의 디코드(PNG 한 색 · baseline/progressive/CMYK JPEG · RGBA의 premultiplied ·
+//!    16비트 회색 · 인터레이스), 깨진 바이트(잘린 PNG/JPEG · 머리만 맞고 쓰레기 · 한 변 9000 · 넓이 5000 × 5000 · 16 MiB 넘는 입력)가 죽지 않고 에러,
+//!    맞춤 · 박스 평균 · 최근접 확대, `Painter.drawImage`의 clip · 합성, 미리보기 판정(PNG · JPEG · 텍스트 · NUL · 1 MiB · 16 MiB)과 글 정리.
 
 const std = @import("std");
 const theme = @import("theme");
@@ -49,6 +52,9 @@ const input = @import("tk_input");
 const menu = @import("tk_menu");
 const kit = @import("tk_kit");
 const files_menus = @import("files_menus");
+const files_preview = @import("files_preview");
+const sample = @import("samples.zig");
+const image = cg.image;
 
 const W: u32 = 200;
 const H: u32 = 120;
@@ -240,6 +246,7 @@ pub fn main(init: std.process.Init) !u8 {
     try filterTests(alloc);
     menuModelTests();
     try menuChainTests(alloc, font, &f13);
+    try imageTests(io, alloc, &lut1);
 
     if (failures != 0) {
         std.debug.print("tk_test: {d} failure(s)\n", .{failures});
@@ -3169,4 +3176,167 @@ fn menuChainTests(alloc: std.mem.Allocator, font: []const u8, face13: *text.Face
     env.key(input.KEY_RIGHT, .{ .shift = true });
     check(app_probe.sends == sends2 + 1 and !env.root.disabled.isSet(3), "the next key resends: copy now enabled", .{});
     _ = env.root.setFirstResponder(null);
+}
+
+// ── 19 이미지 · 미리보기(TK-M6 단계 B) ──────────────────────────────────────
+
+fn near4(a: u32, b: u32) bool {
+    inline for (.{ 16, 8, 0 }) |sh| {
+        const x: i32 = @intCast((a >> sh) & 0xFF);
+        const y: i32 = @intCast((b >> sh) & 0xFF);
+        if (@abs(x - y) > 4) return false;
+    }
+    return true;
+}
+
+fn allPixels(img: image.Image, want: u32) bool {
+    for (img.pixels) |p| if (p != want) return false;
+    return true;
+}
+
+fn decodeOutcome(alloc: std.mem.Allocator, bytes: []const u8) []const u8 {
+    var img = image.decode(alloc, bytes) catch |e| return @errorName(e);
+    img.deinit(alloc);
+    return "ok";
+}
+
+/// 머리만 그럴듯한 PNG(서명 + IHDR w × h, 8비트 RGB, CRC는 0)와 그 뒤 쓰레기.
+fn fakePng(buf: []u8, w: u32, h: u32) []const u8 {
+    const head = "\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR";
+    @memcpy(buf[0..head.len], head);
+    std.mem.writeInt(u32, buf[16..20], w, .big);
+    std.mem.writeInt(u32, buf[20..24], h, .big);
+    @memcpy(buf[24..29], "\x08\x02\x00\x00\x00");
+    @memset(buf[29..64], 0x5A);
+    return buf[0..64];
+}
+
+fn imageTests(io: std.Io, alloc: std.mem.Allocator, lut: *const [256]u8) !void {
+    // 시험 그림.
+    check(image.sniff(&sample.PNG) == .png and image.sniff(&sample.JPEG) == .jpeg and image.sniff("hello") == null, "sniff: PNG · JPEG by their first bytes, text is neither", .{});
+    {
+        var img = try image.decode(alloc, &sample.PNG);
+        defer img.deinit(alloc);
+        check(img.w == 16 and img.h == 16 and allPixels(img, 0xFF000000 | sample.PNG_COLOR), "the 16x16 PNG decodes to one colour {x} (premultiplied, opaque)", .{sample.PNG_COLOR});
+    }
+    var jpeg_px: u32 = 0;
+    {
+        var img = try image.decode(alloc, &sample.JPEG);
+        defer img.deinit(alloc);
+        jpeg_px = img.pixels[5 * 32 + 5];
+        var ok = img.w == 32 and img.h == 32;
+        for (img.pixels) |p| if (!near4(p, sample.JPEG_COLOR) or p >> 24 != 0xFF) {
+            ok = false;
+        };
+        check(ok, "the 32x32 baseline JPEG decodes within 4 of {x} everywhere (pixel 5,5 = {x})", .{ sample.JPEG_COLOR, jpeg_px & 0xFFFFFF });
+        std.debug.print("tk_test: reference JPEG decoded colour {x:0>6} (written {x:0>6})\n", .{ jpeg_px & 0xFFFFFF, sample.JPEG_COLOR });
+    }
+    {
+        var img = try image.decode(alloc, &sample.JPEG_PROGRESSIVE);
+        defer img.deinit(alloc);
+        check(img.w == 32 and near4(img.pixels[0], sample.JPEG_COLOR), "a progressive JPEG decodes ({x})", .{img.pixels[0] & 0xFFFFFF});
+    }
+    {
+        const r = decodeOutcome(alloc, &sample.JPEG_CMYK);
+        var px0: u32 = 0;
+        if (image.decode(alloc, &sample.JPEG_CMYK)) |img0| {
+            var img = img0;
+            px0 = img.pixels[0];
+            img.deinit(alloc);
+        } else |_| {}
+        check(r.len > 0, "a CMYK JPEG ends without a crash: {s} (pixel 0 = {x})", .{ r, px0 });
+    }
+    {
+        var img = try image.decode(alloc, &sample.PNG_RGBA);
+        defer img.deinit(alloc);
+        check(img.pixels[0] == 0xFFFF0000 and img.pixels[1] == 0xFF0000FF and img.pixels[4] == 0x80008000 and img.pixels[6] == 0, "RGBA PNG: opaque red · blue as is, green at alpha 128 premultiplied (80008000), transparent is 0", .{});
+    }
+    {
+        var img = try image.decode(alloc, &sample.PNG_GRAY16);
+        defer img.deinit(alloc);
+        const g = img.pixels[0] & 0xFF;
+        check(img.w == 8 and (img.pixels[0] >> 16) & 0xFF == g and g >= 150 and g <= 160, "a 16-bit grey PNG becomes 8-bit grey ({d} for 40000/65535)", .{g});
+    }
+    {
+        var img = try image.decode(alloc, &sample.PNG_INTERLACED);
+        defer img.deinit(alloc);
+        check(img.pixels[0] & 0xFFFFFF == sample.PNG_COLOR and img.pixels[1] & 0xFFFFFF == 0x204060 and img.pixels[63] & 0xFFFFFF == sample.PNG_COLOR, "an Adam7 interlaced PNG decodes in place (checkerboard)", .{});
+    }
+
+    // 깨진 바이트 — 죽지 않고 에러.
+    check(std.mem.eql(u8, decodeOutcome(alloc, sample.PNG[0..40]), "Invalid"), "a PNG cut at 40 bytes is Invalid", .{});
+    std.debug.print("tk_test: reference JPEG cut at 200 bytes: {s}, cut at 20: {s}\n", .{ decodeOutcome(alloc, sample.JPEG[0..200]), decodeOutcome(alloc, sample.JPEG[0..20]) });
+    check(!std.mem.eql(u8, decodeOutcome(alloc, sample.JPEG[0..20]), "ok"), "a JPEG cut at 20 bytes (no frame) is an error", .{});
+    var fb: [64]u8 = undefined;
+    check(std.mem.eql(u8, decodeOutcome(alloc, fakePng(&fb, 16, 16)), "Invalid"), "a right PNG header followed by junk is Invalid", .{});
+    check(std.mem.eql(u8, decodeOutcome(alloc, fakePng(&fb, 9000, 16)), "TooBig"), "a header claiming a side of 9000 is TooBig (not decoded)", .{});
+    check(isErrImg(image.info(fakePng(&fb, 5000, 5000)), error.TooBig), "a header claiming 5000x5000 (100 MB of RGBA > 64 MiB) is TooBig before decoding", .{});
+    check(isErrImg(image.info(fakePng(&fb, 4096, 4096)), error.Invalid), "4096x4096 (exactly 64 MiB) passes the size check, then the junk after IHDR is Invalid", .{});
+    {
+        const big = try alloc.alloc(u8, image.MAX_INPUT + 1);
+        defer alloc.free(big);
+        @memcpy(big[0..sample.PNG.len], &sample.PNG);
+        check(std.mem.eql(u8, decodeOutcome(alloc, big), "TooBig"), "an input over 16 MiB is TooBig (not read)", .{});
+    }
+    check(std.mem.eql(u8, decodeOutcome(alloc, ""), "Invalid"), "an empty input is Invalid", .{});
+
+    // 맞춤 · 축소 · 확대.
+    const f1 = image.fit(16, 16, 168, 320);
+    const f2 = image.fit(400, 200, 168, 320);
+    const f3 = image.fit(100, 1000, 168, 320);
+    check(f1.w == 16 and f1.h == 16 and f2.w == 168 and f2.h == 84 and f3.w == 32 and f3.h == 320, "fit: small stays (16x16), wide 400x200 -> 168x84, tall 100x1000 -> 32x320", .{});
+    {
+        // 4 × 2: 위 빨강 둘 · 파랑 둘, 아래 같은 것 — 2 × 1로 줄이면 빨강 하나 · 파랑 하나, 4 × 1이면 그대로 섞이지 않음.
+        const R: u32 = 0xFFFF0000;
+        const B: u32 = 0xFF0000FF;
+        const src = [_]u32{ R, R, B, B, R, R, B, B };
+        var dst: [2]u32 = undefined;
+        image.boxScale(&src, 4, 2, &dst, 2, 1);
+        var one: [1]u32 = undefined;
+        image.boxScale(&src, 4, 2, &one, 1, 1);
+        check(dst[0] == R and dst[1] == B and one[0] == 0xFF800080, "box: 4x2 -> 2x1 keeps red | blue, -> 1x1 is the average 800080 ({x})", .{one[0]});
+        var up: [32]u32 = undefined;
+        image.nearestScale(&src, 4, 2, &up, 2);
+        check(up[0] == R and up[1] == R and up[8] == R and up[4] == B and up[15] == B, "nearest x2: each pixel becomes a 2x2 block", .{});
+    }
+    {
+        var img = try image.decodeFit(alloc, &sample.PNG, 168, 320, 2);
+        defer img.deinit(alloc);
+        check(img.w == 32 and img.h == 32 and allPixels(img, 0xFF000000 | sample.PNG_COLOR), "decodeFit at scale 2: 16x16 fits, shown 1:1 logical = 32x32 physical", .{});
+    }
+
+    // drawImage: clip · translate · 반투명 합성.
+    {
+        var pixels: [W * H]u32 = undefined;
+        var scratch: [W * H]u32 = undefined;
+        var p = Painter.begin(io, alloc, &pixels, W, H, &scratch, WHOLE, lut);
+        p.fillRect(WHOLE, 0x000000, 255);
+        const half: u32 = 0x80800000; // 빨강 a 128(premultiplied)
+        const src = [_]u32{ 0xFF00FF00, 0xFF00FF00, half, half };
+        p.translate(10, 10);
+        p.pushClip(.{ .x = 0, .y = 0, .w = 1, .h = 2 });
+        p.drawImage(.{ .w = 2, .h = 2, .pixels = &src }, 0, 0);
+        p.popClip();
+        p.drawImage(.{ .w = 2, .h = 2, .pixels = &src }, 5, 0);
+        p.drawImage(.{ .w = 2, .h = 2, .pixels = &src }, -13, -13);
+        p.finish();
+        check(px(&pixels, 10, 10) == 0x00FF00 and px(&pixels, 11, 10) == 0 and px(&pixels, 10, 11) == 0x800000, "drawImage under translate and a 1-wide clip: column 0 only, the half red over black is 800000", .{});
+        check(px(&pixels, 15, 10) == 0x00FF00 and px(&pixels, 16, 11) == 0x800000 and px(&pixels, 0, 0) == 0, "a second draw at +5, and one fully outside the board draws nothing", .{});
+    }
+
+    // 미리보기 판정과 글 정리.
+    const P = files_preview;
+    check(P.classify(&sample.PNG, 83) == .png and P.classify(&sample.JPEG, 658) == .jpeg, "classify: PNG and JPEG by their heads", .{});
+    check(P.classify(sample.TEXT, sample.TEXT.len) == .text and P.classify("", 0) == .text, "classify: the sample text and an empty file are text", .{});
+    check(std.meta.eql(P.classify(sample.BINARY, 4), .{ .icon = .binary }), "classify: a NUL in the first 8 KiB is binary", .{});
+    check(std.meta.eql(P.classify("hello", P.TEXT_MAX + 1), .{ .icon = .big }) and P.classify("hello", P.TEXT_MAX) == .text, "classify: text over 1 MiB is big, exactly 1 MiB is text", .{});
+    check(std.meta.eql(P.classify(&sample.PNG, P.IMAGE_MAX + 1), .{ .icon = .big }), "classify: a PNG over 16 MiB is big", .{});
+    var tb: [64]u8 = undefined;
+    check(std.mem.eql(u8, P.textOf("a\tb\r\n", &tb), "a    b\n"), "textOf: a tab is four spaces, CR goes", .{});
+    check(std.mem.eql(u8, P.textOf("x한", &tb), "x한") and std.mem.eql(u8, P.textOf("x\xed\x95", &tb), "x"), "textOf: a whole 한 stays, a cut one at the end goes", .{});
+}
+
+fn isErrImg(r: image.Error!image.Info, want: ?image.Error) bool {
+    _ = r catch |e| return want != null and e == want.?;
+    return want == null;
 }

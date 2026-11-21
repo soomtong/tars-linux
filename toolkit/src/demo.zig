@@ -21,10 +21,14 @@
 //!
 //! 인자: `--font PATH`(기본 `/vendor/fonts/Pretendard-Regular.otf`) · `--gamma G`(기본 `tk.text.GAMMA` 1.8, 0.5..3.0) ·
 //! `--anim-ms N`(면 애니메이션 길이, 기본 250 — 리스트 화면에서는 강조의 이동 길이, 기본 120, 0..60000) · `--easing ease-out|linear`(기본
-//! ease-out — 체인은 linear 3000, 면에만) · `--list N`(리스트 화면, N 0..100,000,000).
+//! ease-out — 체인은 linear 3000, 면에만) · `--list N`(리스트 화면, N 0..100,000,000) · `--write-samples DIR`(TK-M6 plan 확정 16 — 창을 열지 않고
+//! 미리보기의 시험 파일 넷을 DIR에 쓰고 끝난다: `i.png`(16 × 16) · `j.jpg`(32 × 32) · `t.txt`(영문 · 한글 · 긴 줄) · `x.bin`(NUL이 든다),
+//! 바이트는 `samples.zig` — initrd에 시험 그림 파일을 넣지 않는 길, 줄 `tk> samples dir= files=4`).
 
 const std = @import("std");
 const tk = @import("tk");
+const linux = std.os.linux;
+const samples = @import("samples.zig");
 const tokens = tk.tokens;
 
 const SAMPLE = [_][]const u8{
@@ -244,8 +248,38 @@ const App = struct {
     }
 };
 
+/// `--write-samples DIR`: 시험 파일 넷을 쓴다(있으면 덮어쓴다). 하나라도 못 쓰면 1.
+fn writeSamples(dir: []const u8) u8 {
+    const files = [_]struct { name: []const u8, data: []const u8 }{
+        .{ .name = "i.png", .data = &samples.PNG },
+        .{ .name = "j.jpg", .data = &samples.JPEG },
+        .{ .name = "t.txt", .data = samples.TEXT },
+        .{ .name = "x.bin", .data = samples.BINARY },
+    };
+    for (files) |f| {
+        var buf: [4096]u8 = undefined;
+        const ps = std.fmt.bufPrint(&buf, "{s}/{s}\x00", .{ dir, f.name }) catch return 1;
+        const path: [*:0]const u8 = ps[0 .. ps.len - 1 :0];
+        const rc = linux.open(path, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true, .CLOEXEC = true }, 0o644);
+        if (linux.errno(rc) != .SUCCESS) {
+            tk.window.say("error samples path={s} errno={s}", .{ ps[0 .. ps.len - 1], @tagName(linux.errno(rc)) });
+            return 1;
+        }
+        const fd: i32 = @intCast(rc);
+        defer _ = linux.close(fd);
+        var off: usize = 0;
+        while (off < f.data.len) {
+            const n = linux.write(fd, f.data[off..].ptr, f.data.len - off);
+            if (linux.errno(n) != .SUCCESS or n == 0) return 1;
+            off += n;
+        }
+    }
+    tk.window.say("samples dir={s} files={d}", .{ dir, files.len });
+    return 0;
+}
+
 fn usage() u8 {
-    tk.window.say("usage: tars-tk-demo [--font PATH] [--gamma G] [--anim-ms N] [--easing ease-out|linear] [--list N]", .{});
+    tk.window.say("usage: tars-tk-demo [--font PATH] [--gamma G] [--anim-ms N] [--easing ease-out|linear] [--list N] | --write-samples DIR", .{});
     return 2;
 }
 
@@ -277,6 +311,8 @@ pub fn main(init: std.process.Init) !u8 {
             const v = std.fmt.parseInt(usize, argv[i], 10) catch return usage();
             if (v > MAX_ROWS) return usage();
             list_rows = v;
+        } else if (std.mem.eql(u8, a, "--write-samples") and i + 1 < argv.len) {
+            return writeSamples(argv[i + 1]);
         } else if (std.mem.eql(u8, a, "--easing") and i + 1 < argv.len) {
             i += 1;
             if (std.mem.eql(u8, argv[i], "linear")) {
@@ -332,7 +368,6 @@ pub fn main(init: std.process.Init) !u8 {
 
 /// `tk> rss vmrss_kb= vmhwm_kb=` — /proc/self/status의 두 줄(리스트 화면이 끝날 때, plan 실측 6).
 fn sayRss() void {
-    const linux = std.os.linux;
     const fd_rc = linux.open("/proc/self/status", .{ .ACCMODE = .RDONLY, .CLOEXEC = true }, 0);
     if (linux.errno(fd_rc) != .SUCCESS) return;
     const fd: i32 = @intCast(fd_rc);

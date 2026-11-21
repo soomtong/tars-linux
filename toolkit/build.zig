@@ -37,6 +37,7 @@ pub fn build(b: *std.Build) void {
 
     const terminal_vendor = b.path("../terminal/vendor");
     const stb_impl = b.path("../terminal/src/stb_truetype_impl.c");
+    const image_impl = b.path("src/cg/stb_image_impl.c");
 
     // ── shared/ ────────────────────────────────────────────────────
     const theme = b.createModule(.{ .root_source_file = b.path("../shared/theme.zig") });
@@ -118,6 +119,8 @@ pub fn build(b: *std.Build) void {
     tk.addImport("tk_tokens", layers.tokens);
     tk.addIncludePath(terminal_vendor);
     tk.addCSourceFile(.{ .file = stb_impl, .flags = &.{} });
+    // 이미지 디코더(TK-M6 plan 확정 10) — 헤더는 terminal의 vendor, 구현은 툴킷의 것(PNG · JPEG).
+    tk.addCSourceFile(.{ .file = image_impl, .flags = &.{} });
     tk.linkSystemLibrary("m", .{});
     tk.addLibraryPath(amd64_libdir);
     tk.linkSystemLibrary("wayland-client", .{ .use_pkg_config = .no });
@@ -169,11 +172,14 @@ pub fn build(b: *std.Build) void {
     files_menus.addImport("tk_menu", host_layers.menu);
     files_menus.addImport("tk_input", host_layers.input);
     test_mod.addImport("files_menus", files_menus);
+    // 미리보기의 판정(TK-M6 단계 B) — 순수 함수와 작은 읽기 하나.
+    test_mod.addImport("files_preview", b.createModule(.{ .root_source_file = b.path("src/files/preview.zig"), .target = host_target, .optimize = optimize }));
     test_mod.addImport("files_search", b.createModule(.{ .root_source_file = b.path("src/files/search.zig"), .target = host_target, .optimize = optimize }));
     // 서버 키맵(TK-M4 — 글자 키 표 `tk_input.charFor`를 이 파일과 대조한다, design 결정 13 · 15). 서버와 같은 파일이다(terminal/build.zig).
     test_mod.addAnonymousImport("keymap", .{ .root_source_file = b.path("../terminal/vendor/keymap-us.xkb") });
     test_mod.addIncludePath(terminal_vendor);
     test_mod.addCSourceFile(.{ .file = stb_impl, .flags = &.{} });
+    test_mod.addCSourceFile(.{ .file = image_impl, .flags = &.{} });
     test_mod.linkSystemLibrary("m", .{});
     const tk_test = b.addExecutable(.{ .name = "tk_test", .root_module = test_mod });
     b.installArtifact(tk_test);

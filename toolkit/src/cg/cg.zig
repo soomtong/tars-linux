@@ -5,6 +5,7 @@ pub const canvas = @import("canvas.zig");
 pub const painter = @import("painter.zig");
 pub const text = @import("text.zig");
 pub const layout = @import("layout.zig");
+pub const image = @import("image.zig");
 
 pub const Canvas = canvas.Canvas;
 pub const Painter = painter.Painter;
