@@ -3,7 +3,7 @@
 접두사: WY
 
 Date: 2026-11-19
-Status: 확인 · 결정 · milestone까지 썼다(2026-11-19). 사용자 위임으로 Claude가 정했다. 다음은 WY-M0 plan.
+Status: WY-M0~M6 끝(2026-11-20, 결정 1~47). 남은 것은 WY-M7(popup · 장식 — CR-M0이 Chromium의 요청을 잰 뒤). 사용자 위임으로 Claude가 정했다.
 브랜치 `app-layer-0-3`.
 
 계기: App Layer의 2단(`docs/plans/2026-11-18-tars-app-layer-roadmap.md`). 사용자(2026-11-18):

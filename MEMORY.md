@@ -147,6 +147,7 @@ terminal · 화면
 
 - [App layer vision](docs/decisions/project_app_layer_vision.md) — strip · Wayland 서버 · 툴킷 · Chromium의 요구사항과 로드맵, 결정은 위임(2026-11-18)
 - [Strip workspace](docs/decisions/project_strip_workspace.md) — 트리 → column strip, viewport · `Cmd+R` · 빈 칸의 이름, 함정 셋(SW-M0~M3, 2026-11-19)
+- [UI toolkit](docs/decisions/project_ui_toolkit.md) — `toolkit/`의 `tk` · 첫 앱 `tars-files` · 서버 메뉴 바, 함정 여섯과 남긴 것(TK-M0~M6, 2026-11-22)
 - [Input policy](docs/decisions/project_input_policy.md) — evdev 코드를 셸이 아는 바이트로 번역하는 세 단계
 - [Terminal rendering](docs/decisions/project_terminal_rendering.md) — 색 · 오프셋 · 스크롤은 `vt.zig`가 확정하고 렌더러는 숫자만 받는다
 - [Font selection](docs/decisions/project_font_selection.md) — 폰트를 고르는 기준과 현재 폰트 unifont 17.0.03, FR-M0(2026-10-31)부터 저장소에 커밋

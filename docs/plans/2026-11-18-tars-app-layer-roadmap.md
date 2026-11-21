@@ -24,7 +24,7 @@ Status: 3판(2판: SW design 결정에 맞춰 SW 표와 WY-M0의 전제. 3판: W
 SW-M0 ─ SW-M1 ─ SW-M2 ─ SW-M3
    └─ WY-M0 ─ WY-M1 ─ WY-M2 ─ WY-M3 ─ WY-M4 ─ WY-M5 ─ WY-M6
                (녹화 A)                  (녹화 B는 WY-M5 뒤)
-                                                              └─ TK-M0 ─ TK-M1 ─ TK-M2 ─ TK-M3 ─ TK-M4 ─ TK-M5 (녹화 C)
+                                                              └─ TK-M0 ─ TK-M1 ─ TK-M2 ─ TK-M3 ─ TK-M4 ─ TK-M5 ─ TK-M6 (녹화 C) — 끝(2026-11-22)
                                                               └─ CR-M0 ─ WY-M7 ─ CR-M1 ─ CR-M2 (녹화 D)
 ~~~
 
@@ -123,7 +123,7 @@ design doc: `docs/specs/2026-11-20-tars-ui-toolkit-design.md`(접두사 TK, 결�
 | TK-M3 | column view · 분할 뷰 · `tars-files` 뼈대(로딩 · 안정 선택) | `→` `→` `←` 뒤 열 셋과 포커스 |
 | TK-M4 | 비례폭 텍스트 · 텍스트 필드 · text-input · 검색. 표시 → 편집 둘로 가른다 | 한글 `sendkey` → preedit 밑줄 → commit |
 | TK-M5 | 서버 쪽: `tars_menu_v1` 판 2 · 메뉴 바 · title/app_id 저장(TK 결정 10) | 메뉴 바의 좌표 판정 |
-| TK-M6 | 툴킷 쪽: 메뉴 모델 · 단축키 · 미리보기 | 녹화 C |
+| TK-M6 | 툴킷 쪽: 메뉴 모델 · 단축키 · 미리보기 | 녹화 C — 체인 판정 26~34로 닫고 녹화 자체는 사람의 일로 남김(TK design 결정 17) |
 
 요구사항: R-ARCH · R-TKW · R-CG · R-TXT · R-CA · R-KIT · R-FM, 결정 4 · 9 · 13.
 

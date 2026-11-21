@@ -3,8 +3,10 @@
 접두사: TK
 
 Date: 2026-11-20
-Status: TK-M5 끝(2026-11-21, `08fb7fe`, 루트 게이트 36/36). 사용자 위임(2026-11-18 "주요 결정은 너의 의견에 따를 테니까")으로 Claude가 정했다.
-TK-M6 plan `docs/plans/2026-11-21-tars-ui-toolkit-tk-m6.md`(마지막). 브랜치 `app-layer-0-3`.
+Status: 끝(2026-11-22, TK-M0~M6, 마지막 `11346d5` · 루트 게이트 36/36). 사용자 위임(2026-11-18 "주요 결정은 너의 의견에 따를 테니까")으로 Claude가 정했다.
+남긴 것: 녹화 C(사람 녹화 — 장면은 toolkit 체인 판정 15~34가 돈다), R-KIT-3의 위젯 여덟 중 레이블 · 버튼 · 스크롤 뷰(첫 앱에 쓸 자리가 없어 위젯으로는 안 만들었다 —
+리스트 · column view · 분할 뷰 · 텍스트 필드 · 메뉴 모델은 있다), R-CG-1의 선 · 그림자, R-TKW-3의 앱 안 팝업 레이어, R-TXT-4의 `shape` 자리, R-FM-7의 격리 구현.
+이월은 `docs/guides/carryover.md`의 TK 절 여섯. 브랜치 `app-layer-0-3`.
 
 계기: App Layer의 3단(`docs/plans/2026-11-18-tars-app-layer-roadmap.md` "3단 — TK", 4판 — WY-M6 뒤). 요구사항
 `2026-11-18-tars-app-layer-requirements.md`의 결정 4 · 9 · 13, R-ARCH · R-TKW · R-CG · R-TXT · R-CA · R-KIT · R-FM.

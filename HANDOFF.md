@@ -1,4 +1,4 @@
-# HANDOFF: App Layer(0.3) — TK-M5 끝(`08fb7fe`, 루트 게이트 36/36). 다음 TK-M6(툴킷 쪽 메뉴 모델 · 단축키 표 · 미리보기 — TK의 마지막). tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) — TK 끝(TK-M0~M6, `11346d5`, 루트 게이트 36/36, 2026-11-22). 다음 CR-M0(Chromium이 무엇을 요청하는지 잰다) → WY-M7 → CR-M1. tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
 
 ## 목표
 
@@ -22,6 +22,12 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 실제 파일과 대조한다. 기억 `feedback_herdr_subagents`.
 
 ## 완료된 작업 (2026-11-19~20, WY-M0 단계 C · WY-M1 착수 — 이 세션)
+
+- [x] TK-M6(plan `docs/plans/2026-11-21-tars-ui-toolkit-tk-m6.md`, design 결정 17, 서브에이전트 `tk-m6` — 끝나고 pane 닫음) — TK 서브프로젝트 끝: A `5339440` 순수 모듈
+      `toolkit/src/menu.zig` · kit의 `perform` · `validate`(단축키의 정의가 메뉴 모델 하나 — `files/menus.zig`) · 창 층 판 2 · `tars-files`의 바 File · Edit · View · Go ·
+      판정 26~29, B `11346d5` 미리보기(`cg/image.zig` — stb_image PNG + JPEG, 상한 셋 · `files/preview.zig` · 텍스트 · 아이콘 · `Space`) · 판정 30~34 ·
+      `measurements.md` 114. 루트 게이트: A 뒤 36/36(`out/gate-logs/20261121-132443`), B 뒤 첫 판 35/36(install 부팅 7의 타이밍 — `delay_use` 4 → 5 `caa718d`) →
+      둘째 판 36/36(`out/gate-logs/20261121-154128`). 마감: design Status · `completed.md` · roadmap · 기억 `project_ui_toolkit` · carryover "TK-M6이 남긴 것"
 
 - [x] TK-M5(plan `docs/plans/2026-11-21-tars-ui-toolkit-tk-m5.md`, design 결정 16 — 결정 11을 닫음, 서브에이전트 `tk-m5` — 끝나고 pane 닫음): A `64e4ee5`
       `tars_menu_v1` 판 2(`get_menu` · 모델 요청 · `activated`) · 서버의 메뉴 객체 · title/app_id 저장 · 순수 모듈 `terminal/src/menubar.zig` · `tars-wl-test --menu`,
@@ -150,11 +156,13 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
       `devlayer/cache/<sha256>`에 손으로 두었다 — 캐시 없는 기계에서는 release 전까지 `make dev-layers`가 받기에서 멈춘다.
       release 방법 두 갈래: (가) 태그 push → Actions가 빌드 · 업로드(sha256이 바뀌어 manifest를 고치고 wayland 체인 한 번), (나) 로컬 tarball을
       `gh release create`로 올림(sha256 그대로). Actions workflow가 태그에서 함께 돌면 자산이 겹치니 (나)면 workflow를 고르게 손본다
-- [ ] TK-M6(툴킷 쪽: 메뉴 모델 · 단축키 표 하나(R-KIT-9) · 미리보기 — TK의 마지막 milestone, 끝나는 조건 "녹화 C"): 조사 `tk-m6`이 세션 scratchpad
-      `tk6/research.md`에 있다(읽기만 한 조사). 넘겨받은 것: 툴킷의 bind를 판 2로 · 모델은 첫 commit 전에 · 상한을 툴킷이 먼저 지킴 · 단축키는 구조(mods + evdev) ·
-      모델을 다시 commit하면 열린 메뉴가 닫힘. 끝나면 TK 서브프로젝트 마감(design Status · `completed.md` · 기억). 그 뒤 CR-M0 → WY-M7 → CR-M1
+- [ ] CR-M0(Chromium — 로드맵의 4단 첫 milestone: devlayer 묶음으로 얹고 무엇을 요청하는지 잰다 — popup · 장식 · 프로토콜 목록 · title/app_id). 아직 design 전 —
+      `docs/plans/2026-11-18-tars-app-layer-roadmap.md`의 CR 절과 요구사항의 Chromium 결정부터 읽는다. 그 결과로 WY-M7(popup · 장식)을 고르고 CR-M1로.
+      Chromium 묶음은 받기(수백 MB)와 라이선스 고지가 따르므로 design에서 출처 · 판 고정 · sha256을 먼저 정한다(밖에서 받는 일은 devlayer의 기존 절차)
+- [ ] 녹화 C(사람 녹화 — `tars-files`: column에 뜸 · 방향키 · `Cmd+L` 한글 경로 · `Cmd+K` · `Cmd+C` → 셸 `Cmd+V` · 메뉴 바 · 강조 애니메이션. 장면은 toolkit 체인
+      판정 15~34가 돈다). 녹화 A(둠)도 아직 안 찍었다
 - [ ] 녹화 B(사람 녹화 — strip + SDL3 column + 클립보드 + 한글, 조사 `wy-m5/research.md` 6절 끝에 보일 것)
-- [ ] 소개 페이지(`gh-pages`의 `data.js`)에 SW를 안 올렸다 — 사이트는 `main` 줄 기준(`commits`가 `rev-list --count main`)이고 SW는
+- [ ] 소개 페이지(`gh-pages`의 `data.js`)에 SW · WY · TK를 안 올렸다 — 사이트는 `main` 줄 기준(`commits`가 `rev-list --count main`)이고 SW는
       `app-layer-0-3`에만 있다. 0.3 줄이 `main`에 들어갈 때 올린다(사용자가 먼저 원하면 그때)
 - [ ] `app-layer-0-3`의 이 세션 commit들(`cac1858`부터)은 push하지 않았다 — 사용자가 원하면 push
 - [ ] 게이트 밖으로 남긴 것: 끄는 선택 중 키로 viewport가 옮기면 누른 pane이 화면 밖일 수 있다(기억 `project_strip_workspace`)

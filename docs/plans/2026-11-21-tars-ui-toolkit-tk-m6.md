@@ -2,7 +2,7 @@
 
 Date: 2026-11-21
 Design: `docs/specs/2026-11-20-tars-ui-toolkit-design.md`(결정 2 · 16 · 17, milestone 표 TK-M6), 요구사항 결정 9 · 13, R-KIT-7 · 8 · 9, R-FM-1 · 2 · 5 · 7, R-CG-3, R-TXT-1, 녹화 C
-Status: 진행 중. 브랜치 `app-layer-0-3`.
+Status: 끝(2026-11-22). 브랜치 `app-layer-0-3`.
 
 ## 확인(조사 `tk-m6`, 세션 scratchpad `tk6/research.md` — HEAD `08fb7fe`, 읽기만 한 조사)
 
@@ -131,3 +131,23 @@ toolkit 체인에서 `tars-files`가 바에 `File · Edit · View · Go`를 보�
    lead의 화면 판정: 4배 덤프 — 바 `tars-files  File  Edit  View  Go`, Edit 메뉴의 흐린 넷 · 밝은 복사 · 찾기.
    실측: 체인 한 판의 `tk> menu sent` 5줄(열 때 1 + 경로 바 여닫기 둘 × 2). `menu activated` 뒤의 `copyText`가 셸 클립보드에 닿는다. 체인 toolkit 단독 326 · 329초.
    루트 게이트 36/36 첫 판(`out/gate-logs/20261121-132443`, toolkit lane 182초), verify mismatch 0.
+2. 단계 B `11346d5`: `cg/image.zig`(extern 직접 선언 — `sniff` · `info`(상한 셋, PNG는 IHDR을 직접 읽음) · `decode` · `fit` · `boxScale` · `nearestScale` · `decodeFit`) ·
+   `cg/stb_image_impl.c`(PNG + JPEG) · `Painter.drawImage` · `files/preview.zig`(`classify` · `textOf` · `readHead`) · 미리보기 판의 레이어 셋(판 · 이름 · 본문) ·
+   idle 로딩(디렉터리 조각 뒤) · `samples.zig`와 데모 `--write-samples` · 분할 뷰의 구분선도 감춤 · `docs/help/desk.md` · 판정 30~34 · `measurements.md` 114.
+   체인 toolkit 두 번 · terminal PASS.
+   판정의 실제 값: 30 `tk> preview kind=text name=t.txt lines=6 bytes=131` · 잉크가 있는 줄 6(한글 줄 포함). 31 `kind=png w=16 h=16 shown=16x16` · 그 자리 256픽셀이
+   `9b3d7a` 한 색. 32 `kind=jpeg w=32 h=32` · 상자가 `3c8e9a`(기대 `3d8e9b` ±4). 33 이진 `kind=icon reason=binary`(문서 아이콘 `98a4b4`) · 디렉터리 `reason=dir`
+   (폴더 아이콘 `3c78d8`). 34 `Space`에 판과 구분선이 사라지고 다시 `Space`에 돌아옴. 판정 15의 미리보기 상자(y 400..)에는 새 미리보기가 닿지 않는다(본문은 y 60..379).
+   호스트 검사 덩어리 19(29개): PNG · baseline/progressive JPEG · RGBA premultiplied · 16비트 → 8비트 · Adam7, 깨진 바이트(잘린 PNG · 20바이트 JPEG · 머리만 맞고 쓰레기 ·
+   한 변 9000 · 5000 × 5000 · 16 MiB + 1)가 죽지 않고 에러, 박스 축소의 평균, `drawImage`의 clip · 합성.
+   plan과 달라진 것: (가) idle의 순서는 디렉터리 조각 → 미리보기 → 검색(미리보기가 먼저면 1만 항목 스트리밍 중 0행이 바뀔 때마다 읽기가 끼어 판정 18이 깨졌다).
+   (나) PNG의 크기는 IHDR에서 직접 읽는다(stb의 머리 읽기가 뒤 chunk까지 지나 "너무 큼"과 "깨짐"이 안 갈린다). (다) 시험 텍스트도 데모가 쓴다. (라) 아이콘의 한 줄은
+   종류 · 크기.
+   첫 체인 판은 FAIL이었다 — 위 (가)의 순서. 고친 뒤 두 판 PASS.
+   lead의 화면 판정: 텍스트 미리보기(한글 줄 포함 여섯 줄, 줄 나누기)와 바 `tars-files  File  Edit  View  Go`가 함께 보이는 전체 화면, JPEG 미리보기 2배.
+   실측: 게스트 디코드 PNG 16 × 16 0.38 ms · JPEG 32 × 32 0.50 ms(처음 2.7 · 3.7 ms). `↓` 한 번의 더티가 창 전체에서 0,0,616,360으로 · 1.7~2.4 ms(TK-M3 carryover가 닫힘).
+   `tars-files` +375 KiB. 체인 toolkit 단독 345~388초.
+3. 루트 게이트: 첫 판(`out/gate-logs/20261121-145058`)은 35/36 — install 체인(DC-M2)의 부팅 7 "init이 늦은 USB 디스크를 기다리지 않았다"가 빨갰다. 툴킷과 무관하다:
+   initramfs 풀기가 게이트의 동시 부하로 5.1초가 되어 `/init`(5.569초)이 `sda2`(5.635초)보다 66 ms 늦게 시작했다. carryover(PD)에 적어 둔 그 흔들림의 두 번째라
+   거기 적은 대로 `usb-storage.delay_use`를 4 → 5로 올렸다(`caa718d`, 오늘 여덟 판의 여유는 600~800 ms였다 — initrd가 커지며 얇아졌다). install 체인 단독 두 번 PASS
+   (기다림 2000 · 1900 ms). 둘째 판 36/36 PASS(`out/gate-logs/20261121-154128`, 기다림 1700 ms, toolkit lane 198초), verify mismatch 0.
