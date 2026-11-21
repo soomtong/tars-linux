@@ -1,4 +1,4 @@
-# HANDOFF: App Layer(0.3) — TK-M1 끝(`c270732`, 루트 게이트 36/36). 다음 TK-M2(responder · 포커스 · 리스트 · 스크롤). tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) — TK-M2 끝(`2619e10`, 루트 게이트 36/36). 다음 TK-M3(column view · 분할 뷰 · `tars-files` 뼈대). tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
 
 ## 목표
 
@@ -22,6 +22,11 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 실제 파일과 대조한다. 기억 `feedback_herdr_subagents`.
 
 ## 완료된 작업 (2026-11-19~20, WY-M0 단계 C · WY-M1 착수 — 이 세션)
+
+- [x] TK-M2(plan `docs/plans/2026-11-21-tars-ui-toolkit-tk-m2.md`, design 결정 13, 서브에이전트 `tk-m2` — 끝나고 pane 닫음): A `f31b239` 입력 이벤트(`input.zig`,
+      xkb 없이 evdev 표) · 키 반복(창 층 poll + timerfd, `repeat.zig`) · 포인터 · CA `hitTest` · AppKit 층 `kit/`(View · Root · responder · Tab), B `2619e10` 가상화 리스트
+      (`kit/list.zig`) · 스크롤 · 막대 · 데모 `--list N`(리스트 둘) · 판정 10~14 · `measurements.md` 109. 루트 게이트 36/36 첫 판(`out/gate-logs/20261121-023618`).
+      남은 것: TCG에서 스크롤 한 프레임이 16 ms를 자주 넘는다(carryover "TK-M2가 남긴 것")
 
 - [x] TK-M1(plan `…-tk-m1.md`, 서브에이전트 `tk-m1` — 끝나고 pane 닫음): A `d3eaa34` 층을 모듈로(window → cg → ca), CG `Painter`(더티 크기 임시 판 clip —
       design 결정 4를 측정으로 닫음), CA 레이어 트리, 버퍼 나이, B `c270732` 애니메이션 · 스택 · 토큰 · 판정 7~9 · `measurements.md` 108. 루트 게이트 36/36
@@ -128,8 +133,9 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
       `devlayer/cache/<sha256>`에 손으로 두었다 — 캐시 없는 기계에서는 release 전까지 `make dev-layers`가 받기에서 멈춘다.
       release 방법 두 갈래: (가) 태그 push → Actions가 빌드 · 업로드(sha256이 바뀌어 manifest를 고치고 wayland 체인 한 번), (나) 로컬 tarball을
       `gh release create`로 올림(sha256 그대로). Actions workflow가 태그에서 함께 돌면 자산이 겹치니 (나)면 workflow를 고르게 손본다
-- [ ] TK-M2(responder · 포커스 · 가상화 리스트 · 스크롤, 키는 원래 모드의 Super — design milestone 표): 아직 조사 전. 끝나는 조건 "`↓` 열 번 뒤 강조 위치,
-      10만 행 호스트 검사". hit-test(R-CA-6)도 여기. 그 뒤 TK-M3~M6(녹화 C), CR-M0 → WY-M7 → CR-M1
+- [ ] TK-M3(column view · 분할 뷰 · `tars-files` 뼈대(로딩 · 안정 선택) — design milestone 표): 아직 조사 전. 끝나는 조건 "`→` `→` `←` 뒤 열 셋과 포커스".
+      column view는 `kit.List` 여럿의 가로 스택이고 `→` `←`는 리스트가 안 받으므로 부모 뷰가 `keyDown`에서 받아 `root.setFirstResponder`로 옮긴다.
+      리스트 데이터가 바뀔 때 `selected` · `offset`을 자르는 자리가 필요하다(지금은 count 고정). 그 뒤 TK-M4~M6(녹화 C), CR-M0 → WY-M7 → CR-M1
 - [ ] 녹화 B(사람 녹화 — strip + SDL3 column + 클립보드 + 한글, 조사 `wy-m5/research.md` 6절 끝에 보일 것)
 - [ ] 소개 페이지(`gh-pages`의 `data.js`)에 SW를 안 올렸다 — 사이트는 `main` 줄 기준(`commits`가 `rev-list --count main`)이고 SW는
       `app-layer-0-3`에만 있다. 0.3 줄이 `main`에 들어갈 때 올린다(사용자가 먼저 원하면 그때)

@@ -3,7 +3,7 @@
 Date: 2026-11-21
 Design: `docs/specs/2026-11-20-tars-ui-toolkit-design.md`(결정 8 · 9 · 13, milestone 표 TK-M2), 요구사항 R-ARCH-1 · 4, R-CA-6, R-KIT-1 · 2 · 4, R-KEY-2 · 3 · 7,
 요구사항 결정 3 · 11
-Status: 진행 중. 브랜치 `app-layer-0-3`.
+Status: 끝(2026-11-21). 브랜치 `app-layer-0-3`.
 
 ## 확인(조사 `tk-m2`, 세션 scratchpad `tk2/research.md` — HEAD `b0c70f3`, 개발 컨테이너 aarch64 벤치)
 
@@ -123,3 +123,16 @@ Status: 진행 중. 브랜치 `app-layer-0-3`.
    `tk.connectRoot`는 포커스 줄 훅만. (나) 키 뗌은 뷰에 안 간다, 클릭은 왼쪽 누름만. (다) 반복은 `dispatchPending` 뒤에 낸다(같은 깨움에 온 뗌이 먼저 멈추게).
    (라) keyboard `leave`에 수정키도 비운다. (마) 불투명도 0은 하위 트리째 hit-test에서 빠진다. (바) `size.row` 토큰은 단계 B로.
    배운 것: 같은 작업 트리에서 체인 둘을 겹쳐 돌리면 `terminal/.zig-cache` 빌드가 경합한다(`libhighway.a`를 못 엶).
+2. 단계 B `2619e10`: `kit/list.zig`(뷰 하나 · 레이어 넷, 셈은 `first` · `visibleEnd` · `maxOffset` · `page`뿐) · 토큰 `size.row` · 데모 `--list N` · 체인 판정 10~14 ·
+   `measurements.md` 109. 체인 toolkit 두 번 · terminal · wayland PASS. 판정의 실제 값: `↓` 열 번 → `wl> key code=108` 10줄 · 행 10(화면 y 260..283)이 `3c78d8` ·
+   `tk> list view=list1 sel=10 first=0 offset=0`, End → `sel=99999 first=99968 offset=2399248`(= 100,000 × 24 − 752) · 막대 바닥, 클릭 → 행 4 · 휠 한 칸 →
+   `offset=72`, Tab → list1 강조 `465a78` · list2 `3c78d8`, 1초 누름 → 반복 21~22번(하한 3).
+   호스트 검사 덩어리 11(28줄): 행 수 100 · 10만 · 1,000만의 같은 조작열이 같은 표, 통째 `drawRow` ≤ 33 · 선택 이동은 0번, 부분 = 통째 300단계, 끝 경계.
+   plan과 달라진 것: (가) `tokens.zig`가 모듈 `tk_tokens`(kit의 위젯과 앱이 같은 것을 부른다). (나) CA `Tree.cancel`(강조를 바로 옮기기 전에 도는 애니메이션을
+   멈춤). (다) `tk> hit` 줄은 `kit.Root`의 훅이 낸다. (라) 막대 반지름 3(폭의 반). (마) 강조는 뷰 밖이면 숨긴다. (바) Super · Ctrl · Alt가 섞인 이동 키는 리스트가
+   안 받는다. (사) 데모 리스트 화면이 close 뒤 `tk> rss` 줄을 낸다.
+3. lead의 화면 판정: `list-tab-down` · `list-end` 덤프를 직접 봤다 — 흐린 강조와 활성 강조가 한눈에 갈리고, 10만 번째 행과 바닥의 막대, 13 px 한글 레이블이 읽힌다.
+4. 실측: `↓` 한 번의 프레임 draw 중앙 0.71 ms · 서버 부분 blit 38~103 µs. 스크롤 한 프레임(리스트 통째 416 × 752)은 TCG에서 4.7~27.7 ms로 고르지 않고
+   1240 폭은 중앙 26 ms — 16 ms 하한 안에 늘 들지는 않는다(네이티브 0.45 ms). R-KIT-4는 TCG의 스크롤에서 아직 닿지 않았고 carryover에 후보 셋을 적었다.
+   10만 행 데모 VmRSS 10 MB(행 수와 무관). usb-mouse를 더한 부팅에서 판정 1~9는 그대로.
+5. 루트 게이트 36/36 첫 판(`out/gate-logs/20261121-023618`), verify mismatch 0.
