@@ -16,7 +16,7 @@ cd "$(dirname "$0")" || exit 1
 #   4b NVMe만, old 고름    Limine 메뉴에서 시리얼로 old를 골랐다 · 같은 p2를 본다
 #   5  ISO + 설치된 NVMe   boot/bzImage를 지워도 TARS installed · --wipe로 통째로 다시 설치
 #   6  NVMe만              마커가 사라졌고 설정이 첫 부팅처럼 새로 깔린다
-#   7  같은 디스크를 USB로  -kernel · delay_use=4. init이 늦은 p2를 기다려 잡는다(DC-M1)
+#   7  같은 디스크를 USB로  -kernel · delay_use=5. init이 늦은 p2를 기다려 잡는다(DC-M1)
 #
 # 왜 sendkey가 아니라 시리얼 FIFO인가. 다른 체인들은 terminal의 화면
 # 줄(`terminal: screen>`)로 판정하는데 이 체인이 볼 것은 tars-install이
@@ -667,6 +667,12 @@ stop_guest
 # 코드의 자리에 달려 있어서 뒤의 커널 변경이 또 움직일 수 있다 — 그래서 1초를 더
 # 벌린다. 4초도 init의 상한(storage.zig의 CONFIG_WAIT_MS 5000)과는 2초 넘게 떨어져 있다.
 #
+# TK-M6이 5초로 올렸다(2026-11-22). initrd가 커지며(128 MB — 풀기 약 4.5초) 4초의 기다림이 900ms에서 600~800ms로 줄어
+# 있었고, 루트 게이트의 동시 부하로 풀기가 5.1초가 된 판에 `/init`이 `sda2`보다 66ms 늦게 시작해 창이 닫혔다(HC-M0에 이어
+# 두 번째 — carryover가 "한 번 더 겪으면 5로"라고 적어 두었다). 5초면 sda2는 커널 시각 6.6초쯤에 생기고, init이 가장 일찍
+# (4.8초) 시작해도 기다림은 2초 안이라 상한 5000ms와 3초 떨어져 있다. initrd가 더 커지면 이 수도 다시 본다 — 풀기 시간이
+# 지연과 같아지는 크기는 약 145 MB다(1 MB에 약 35ms).
+#
 # 왜 -kernel인가. cmdline에 delay_use를 넣을 자리가 필요하고, tars.installed도
 # ESP의 limine.conf가 아니라 여기서 준다. init이 보는 것은 /proc/cmdline의
 # 토큰뿐이라 어디서 왔는지는 모른다. 디스크는 부팅 6이 --wipe로 막 만든 그것이다.
@@ -706,8 +712,8 @@ boot_kernel_usb() {
   echo "boot ${name}: console shell up after ${waited}s"
 }
 
-echo "=== boot 7: the installed disk over USB, four seconds late ==="
-boot_kernel_usb 7 "console=ttyS0 tars.installed usb-storage.delay_use=4"
+echo "=== boot 7: the installed disk over USB, five seconds late ==="
+boot_kernel_usb 7 "console=ttyS0 tars.installed usb-storage.delay_use=5"
 
 # 판정 17. 이 milestone의 심장이다. init이 처음 훑었을 때 sda2는 없었고, 기다려서
 # 잡았다. appeared after가 없으면 기다림 없이 잡은 것이라 틈이 안 벌어진
