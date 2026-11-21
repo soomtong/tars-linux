@@ -68,6 +68,18 @@ Status: 진행 중. 브랜치 `app-layer-0-3`.
     - 22(B, design의 끝나는 조건) 한글: `Cmd+L` → `/` → 한/영 → `m f s` → `wl> ime to=ID commit=(none) preedit=한` → 덤프의 밑줄 띠 → 한/영 → `commit=한` → 띠 없음 ·
       글자 잉크 → Enter → `/tmp/tkf/한`의 열. 먹은 키의 `wl> key … to=ID` 0. 끝에 한글을 끈다.
     - 23(B) 필드 클립보드: 셸에서 복사한 글을 필드에 `Cmd+V` → `tk> paste len=`.
+18. 단계 C(단계 B 뒤에 확정, 2026-11-21): 바를 세 모드가 같이 쓴다 — `Cmd+L` 경로 · `Cmd+F` 필터 · `Cmd+K` 검색(이름표 글만 다르다). 열린 바에서 다른 모드 키는 모드를
+    바꾸고 필드를 비운다. 필드에 `Delegate.changed`(글이 바뀔 때 — 타이핑 · IME 확정 · 붙여넣기 · 지움, 조합 중은 아님).
+19. 필터(`Cmd+F`): 포커스 열의 항목을 이름 부분 일치(ASCII 대소문자 무시, 그 밖은 바이트)로 거른 색인 배열 — 열의 `count` · `drawRow`가 그것을 본다. 선택은 이름으로
+    `follow`. Enter는 바만 닫고 필터는 남긴다, Esc는 필터를 풀고 닫는다. 다시 `Cmd+F`면 남은 글로 연다. 그 열이 다른 경로로 다시 쓰이거나 버려지면 필터도 사라진다.
+    갱신(창 포커스)은 필터를 지킨다. 줄 `tk> filter text= n=`. 순수 부분(일치 · 색인)은 `files/model.zig`.
+20. 검색(`Cmd+K`, R-FM-4): 뿌리 = 열 0의 경로(`/`면 `/proc` · `/sys` · `/dev` · `/run` 제외), 너비 우선, idle 한 조각 = getdents 한 번(`DirSource` 그대로 — 호스트 검사는
+    가짜 소스와 주입한 시계), 숨김 · 링크 따라가기 없음, 상한 20만 항목 · 10초(`tk> search walked= ms= capped= results=`). 후보 = 질의가 뿌리 기준 상대 경로의 부분열
+    (ASCII 대소문자 무시, 한글은 음절 그대로). 점수 = 연속 · 성분 처음 · 이름 안 일치 가산, 짧은 경로 우대, 상위 100(같은 점수는 경로 바이트 순 — 전순서). 질의가 앞을
+    이으면 지난 후보만 다시 매긴다(걷기가 안 끝났으면 새 항목도). 결과는 열 자리를 덮는 `kit.List` 하나(행 = 상대 경로, 가운데 생략), `↑` `↓`는 필드에서 리스트로 넘긴다.
+    Enter = 고른 결과를 경로 바의 Enter와 같은 길로(파일이면 부모까지 열고 선택), Esc = 닫고 열로 돌아감. 초성 검색 · 결과 미리보기 · 필터의 fuzzy는 뒤로.
+21. 판정 24 · 25(같은 부팅, 넷째 앱에 이어서): 24 `Cmd+F` · `m` → 첫 열에 `m.txt` 한 행 · `tk> filter text=m n=1` → Esc로 넷. 25 `Cmd+K` · `xtxt` →
+    `tk> search … results=`와 결과 행에 `a/b/x.txt` · `한/x.txt` → Enter → 열 셋 · 선택 `x.txt`. PASS 이름표 `TK-M4`.
 
 ## 할 일
 
@@ -111,3 +123,17 @@ Status: 진행 중. 브랜치 `app-layer-0-3`.
    plan과 달라진 것: (가) 생략의 꼬리 기울기는 개수로만 — 넓은 클러스터가 꼬리를 막으면 머리가 한두 개 더 채운다. (나) 판정 19는 셋째 `tars-files`(`/tmp/tkl`)로
    (`/tmp/tkf`에 더하면 판정 15의 행 수가 바뀐다). (다) 잘못된 바이트가 이제 `?`로 보인다(옛 그림은 소리 없이 뺐다). (라) 판정 15 · 18의 `tk> column` 패턴에 ` shown=`.
    lead의 화면 판정: 4배 덤프에서 `long-directo…bcdefghij-end ›`가 `›` 앞에서 멈추고 꼬리가 남는다.
+2. 단계 B `b7feb42`(design의 끝나는 조건): `kit/textfield.zig`(순수 `Model` + 뷰) · `window/ime.zig` · `window/clip.zig` · 창 층의 text-input · data device · serial · SIGPIPE 무시 ·
+   `Event.ime` · `VTable.textInput` · `Root`의 ime 훅 · `ColumnView.setColumns` · `files/model.zig`의 `resolvePath` · `columnPaths` · `tars-files`의 바 · `Cmd+L` · `Cmd+C` ·
+   `docs/help/desk.md` · 판정 20~23 · `measurements.md` 111. 서버는 고치지 않았다. 체인 toolkit 두 번 · terminal · wayland PASS.
+   판정의 실제 값: 20 `clip> len=10 text=/tmp/tkf/a` → 셸 `Cmd+V`로 화면에 찍힘. 21 `/a/b`의 키 넷이 `wl> key … to=6`(영문은 키로 온다) · `columns n=3 focus=2 scroll=201`.
+   22 `wl> ime to=6 commit=(none) preedit=한` → 덤프의 밑줄(화면 y 43, x 767..778 전부 `f4f6f8`) → `commit=한 preedit=(none)` → 그 행에 띠 없음 · 글자 잉크 →
+   Enter → `tk> field text=/tmp/tkf/한 action=enter` · `한/`의 열. 한글을 켠 뒤 먹은 키의 `wl> key` 0, 앱의 `match=0` 줄 0. 23 `tk> paste len=12` → 열 셋.
+   호스트 검사 덩어리 16(필드 편집 표 · IME 적용 · ime 상태 기계 100번 왕복 · mime · 경로 해석 · 필드 픽셀 — 밑줄 행 · 링 · 캐럿 · 부분 = 통째).
+   plan과 달라진 것: (가) 판정 22에 `Cmd+A`(21 뒤 채워진 글을 덮어쓴다). (나) 23은 붙인 뒤 Enter까지. (다) 줄 `tk> bar open|close` · `tk> copy path=`, `send` · `paste`에
+   `us=`. (라) 크기 토큰은 `tokens.zig`에 직접(`shared/theme.zig` 그대로). (마) 낱말 경계는 `/` · `-` · `.`. (바) 시작 경로 비교는 지금의 열 0.
+   첫 체인 판은 FAIL이었다 — 판정 22의 "먹은 키 0"을 한글을 켜기 전의 영문 `m` `f`까지 센 판정 쪽 잘못, 켠 뒤부터 세게 고쳤다(코드는 그대로).
+   lead의 화면 판정: 4배 덤프 둘 — 조합 중 `한` 아래 밑줄과 포커스 링, 확정 뒤 밑줄 없음.
+   실측: 필드 편집 한 번의 더티는 필드 사각형(536 × 24) · draw 중앙 1.1 ms · 서버 blit 30~39 µs. 바를 여는 프레임 2.9~17.3 ms(통째). `send` 225~266 µs,
+   동기 붙여넣기 1.2 ms. enable/disable 왕복 뒤 모두 `match=1`.
+   루트 게이트 36/36 첫 판(`out/gate-logs/20261121-064938`, toolkit lane 148초), verify mismatch 0.
