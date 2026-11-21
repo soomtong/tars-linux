@@ -99,4 +99,15 @@ Status: 진행 중. 브랜치 `app-layer-0-3`.
 
 ## 결과
 
-(단계마다 채운다.)
+구현은 `tk-m4`(Herdr, Opus — 조사도 같은 에이전트), lead는 대조 · 게이트 · commit.
+
+1. 단계 A `ca95301`: `cg/layout.zig`(`Metrics`만 받는 놓기 층 — `Clusters` · `resolve` · `stops` · `caretXs` · `indexAt` · `spanWidth` · `elideMiddle` · `wrap`),
+   `Painter.drawGlyphs`가 같은 `Placer`를 지남(옛 `Utf8` 반복자 지움), `glyph.hasGlyph`, `input.charFor` · `US_CHARS` · `Key.backspace` · `delete`, `tars-files` 이름 칸 ·
+   미리보기 줄의 생략과 `shown=`, 판정 19. 체인 toolkit 두 번 · terminal PASS(공유 `glyph.zig`는 함수 하나 더하기 — terminal 그대로).
+   판정 19의 실제 값: `shown=long-directo…bcdefghij-end` · `shown=long-file-name…efghij-tail.txt`, `›` 왼쪽 틈(화면 x 826..829)에 잉크 0.
+   호스트 검사 덩어리 15: 클러스터 표(NFD 한 9바이트 → 음절 하나, 홀로 선 자모 → 호환 자모), `measure` = 그리기 끝 펜, 캐럿 x 왕복, 생략(결과 ≤ 폭 · 경계가 NFD를
+   안 가름), 줄 나누기 표 열둘, `charFor` = `keymap-us.xkb` 대조(글자 키 48개).
+   실측: 13 px advance `…` 9.902 · `›` 4.367 · `□` 11.324 · U+0301 0(앞 글자에 겹침). 생략 셈은 그림 시간에서 안 보인다(부분 0.80~1.37 ms).
+   plan과 달라진 것: (가) 생략의 꼬리 기울기는 개수로만 — 넓은 클러스터가 꼬리를 막으면 머리가 한두 개 더 채운다. (나) 판정 19는 셋째 `tars-files`(`/tmp/tkl`)로
+   (`/tmp/tkf`에 더하면 판정 15의 행 수가 바뀐다). (다) 잘못된 바이트가 이제 `?`로 보인다(옛 그림은 소리 없이 뺐다). (라) 판정 15 · 18의 `tk> column` 패턴에 ` shown=`.
+   lead의 화면 판정: 4배 덤프에서 `long-directo…bcdefghij-end ›`가 `›` 앞에서 멈추고 꼬리가 남는다.
