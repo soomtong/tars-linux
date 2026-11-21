@@ -98,6 +98,12 @@ pub const Face = struct {
         return @as(f32, @floatFromInt(adv)) * self.scale;
     }
 
+    /// 글꼴이 이 글자의 글리프를 가지는가(cmap에 있는가). 없으면 stb는 글리프 0(`.notdef`)을 그린다 — 대체 글자를 고르는 것은 부르는
+    /// 쪽이다(툴킷 `cg/layout.zig`, TK design 결정 15). terminal은 부르지 않는다.
+    pub fn hasGlyph(self: *const Face, codepoint: u32) bool {
+        return stb.stbtt_FindGlyphIndex(&self.info, @intCast(codepoint)) != 0;
+    }
+
     /// 두 글자 사이의 kern(픽셀, 소수). stb는 GPOS의 pair kerning을 먼저, 없으면 `kern` 표를 본다(1.19 · 1.22). 셰이핑은
     /// 없다(R-TXT-4).
     pub fn kern(self: *const Face, left: u32, right: u32) f32 {

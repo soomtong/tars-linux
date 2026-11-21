@@ -29,6 +29,28 @@ const LABEL_X: f32 = 16;
 const CHEVRON_GAP: f32 = 4;
 const ANIM_MS: u32 = 120;
 
+/// 생략한 이름을 담는 칸 — 이름(리눅스 255바이트) + `…`(3바이트)이 든다. 경계 칸은 클러스터 수 + 1(255 + 1).
+const NAME_BUF = 260;
+const NAME_STOPS = 257;
+
+/// 행 안에서 `›`의 펜 x(물리 px, 행 왼쪽 기준) — 막대(`BAR_W`)와 4 앞에 오른쪽 끝을 맞춘다(TK-M3 확정 13).
+fn chevronX(f: *tk.Face, s: f32, row_w: f32) f32 {
+    const right = row_w - (kit.list.BAR_W + CHEVRON_GAP) * s;
+    return @round(right - f.measure("›"));
+}
+
+/// 이름 칸의 폭(물리 px, TK-M4 plan 확정 5): 행 왼쪽 16부터 — 디렉터리는 `›` 왼쪽 − 4까지, 파일은 막대 왼쪽 − 4까지.
+fn nameWidth(f: *tk.Face, s: f32, row_w: f32, dir: bool) f32 {
+    const limit = if (dir) chevronX(f, s, row_w) - CHEVRON_GAP * s else row_w - (kit.list.BAR_W + CHEVRON_GAP) * s;
+    return @max(0, limit - LABEL_X * s);
+}
+
+/// 폭 `max_w`에 맞춘 이름 — 넘치면 가운데 생략(R-TXT-1). 칸이 모자라는 이름(일어나지 않는다)은 그대로.
+fn shownName(f: *tk.Face, name: []const u8, max_w: f32, buf: *[NAME_BUF]u8) []const u8 {
+    var scratch: [NAME_STOPS]tk.layout.Stop = undefined;
+    return tk.layout.elideMiddle(f.metrics(), name, max_w, &scratch, buf) catch name;
+}
+
 fn nowNs() u64 {
     var ts: linux.timespec = undefined;
     _ = linux.clock_gettime(.MONOTONIC, &ts);
@@ -83,11 +105,12 @@ const Col = struct {
         const e = self.entries()[index];
         const base: i32 = rect.y + @as(i32, @intFromFloat(@round((@as(f32, @floatFromInt(rect.h)) + f.ascent - f.descent) / 2)));
         const x0: f32 = @floatFromInt(rect.x);
-        _ = try p.drawGlyphs(f, x0 + LABEL_X * s, base, e.name, tokens.color.text, state.alpha);
+        const row_w: f32 = @floatFromInt(rect.w);
+        var buf: [NAME_BUF]u8 = undefined;
+        const shown = shownName(f, e.name, nameWidth(f, s, row_w, e.kind == .dir), &buf);
+        _ = try p.drawGlyphs(f, x0 + LABEL_X * s, base, shown, tokens.color.text, state.alpha);
         if (e.kind == .dir) {
-            const cw = f.measure("›");
-            const right = x0 + @as(f32, @floatFromInt(rect.w)) - (kit.list.BAR_W + CHEVRON_GAP) * s;
-            _ = try p.drawGlyphs(f, @round(right - cw), base, "›", tokens.color.text_dim, state.alpha);
+            _ = try p.drawGlyphs(f, x0 + chevronX(f, s, row_w), base, "›", tokens.color.text_dim, state.alpha);
         }
     }
 
@@ -370,7 +393,14 @@ const App = struct {
         const list = self.cv.list(i);
         const items = c.entries();
         const name = if (list.selected < items.len) items[list.selected].name else "-";
-        tk.window.say("column i={d} path={s} count={d} sel={d} name={s}", .{ i, c.path(), items.len, list.selected, name });
+        // 행에 그려지는 이름(가운데 생략 — TK-M4 plan 확정 5). 글꼴이 아직 없으면(첫 configure 전) 이름 그대로다.
+        var buf: [NAME_BUF]u8 = undefined;
+        var shown = name;
+        if (self.small) |*f| if (list.selected < items.len) {
+            const s: f32 = @floatFromInt(self.scale);
+            shown = shownName(f, name, nameWidth(f, s, tokens.size.column * s, items[list.selected].kind == .dir), &buf);
+        };
+        tk.window.say("column i={d} path={s} count={d} sel={d} name={s} shown={s}", .{ i, c.path(), items.len, list.selected, name, shown });
     }
 
     /// 창이 포커스를 다시 얻었다 — 보이는 열(읽는 중이 아닌 것)을 다시 읽는다.
@@ -454,7 +484,6 @@ const App = struct {
     }
 
     fn drawPreview(ctx: *anyopaque, p: *tk.Painter, size: [2]f32, alpha: u8) anyerror!void {
-        _ = size;
         const self = me(ctx);
         const i = self.cv.focus;
         const c = &self.cols[i];
@@ -465,7 +494,9 @@ const App = struct {
         const s: f32 = @floatFromInt(self.scale);
         const rh = tokens.size.row * s;
         const base: i32 = @intFromFloat(@round((rh + f.ascent - f.descent) / 2));
-        _ = try p.drawGlyphs(f, LABEL_X * s, base, items[list.selected].name, tokens.color.text_dim, alpha);
+        var buf: [NAME_BUF]u8 = undefined;
+        const shown = shownName(f, items[list.selected].name, @max(0, size[0] - 2 * LABEL_X * s), &buf);
+        _ = try p.drawGlyphs(f, LABEL_X * s, base, shown, tokens.color.text_dim, alpha);
     }
 
     fn laidOut(ctx: *anyopaque, _: *kit.SplitView) void {
@@ -479,6 +510,8 @@ const App = struct {
     fn resize(ctx: *anyopaque, width: u32, height: u32, s: u32) void {
         const self = me(ctx);
         self.tree.setScale(s);
+        // 글꼴을 여기서도 맞춘다 — 그리기 전의 `tk> column` 줄(첫 로딩의 끝)이 생략한 이름(`shown=`)을 낼 수 있게. 실패하면 `draw`가 다시 해 본다.
+        self.faces(s) catch {};
         const W: f32 = @floatFromInt(width / s);
         const H: f32 = @floatFromInt(height / s);
         self.root.setFrame(.{ .x = 0, .y = 0, .w = W, .h = H });

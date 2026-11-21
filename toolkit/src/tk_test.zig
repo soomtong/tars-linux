@@ -22,6 +22,8 @@
 //! 13 분할 뷰 — 폭 616 · 1240 · 201 · 100의 배치 표와 알림.
 //! 14 `tars-files` 모델(TK-M3 단계 B) — 자연 순서 · 디렉터리 먼저, 조각 크기 1 · 7 · 전부의 같은 결과 · 숨김 빠짐, 취소 뒤 새로 읽기, 10만 항목
 //!    조각 병합 = 한 번 정렬, 안정 선택 표 · 스크롤, 첫 로딩의 선택(확정 10).
+//! 15 텍스트 놓기(TK-M4 단계 A) — 클러스터(잘못된 바이트 · 결합 표시 · L V T · 홀로 선 자모 · 4바이트), 대체의 폭이 측정 = 그리기, 캐럿 x 왕복,
+//!    부분 폭 = 따로 잰 폭, 실제 글꼴에서 `measure` = 끝 펜 · NFD = NFC의 픽셀, 가운데 생략, 줄 나누기, 글자 키 표 = 서버 키맵, 긴 이름 행의 부분 = 통째.
 
 const std = @import("std");
 const theme = @import("theme");
@@ -215,6 +217,8 @@ pub fn main(init: std.process.Init) !u8 {
     try listTests(io, alloc, &f13, &lut1);
     try columnTests(io, alloc, &f13, &lut1);
     try modelTests(alloc);
+    try layoutTests(io, alloc, &f13, &lut1);
+    keyCharTests();
 
     if (failures != 0) {
         std.debug.print("tk_test: {d} failure(s)\n", .{failures});
@@ -1810,4 +1814,368 @@ fn nowMs() u64 {
     var ts: std.os.linux.timespec = undefined;
     _ = std.os.linux.clock_gettime(.MONOTONIC, &ts);
     return @as(u64, @intCast(ts.sec)) * 1000 + @as(u64, @intCast(ts.nsec)) / 1_000_000;
+}
+
+// ── 15 텍스트 놓기 · 글자 키 표(TK-M4 단계 A) ────────────────────────────
+
+const layout = cg.layout;
+
+/// 결정적인 가짜 글꼴: ASCII 10 · 그 밖 20 · 결합 표시 0 · `…` 10, kern은 (A, V) −2 하나. U+1100대 · 漢 · U+FFFD는 글리프가 없다(Pretendard처럼).
+const FakeFont = struct {
+    fallback: bool = true,
+
+    fn adv(_: *anyopaque, cp: u21) f32 {
+        if (layout.isMark(cp)) return 0;
+        if (cp == layout.ELLIPSIS_CP) return 10;
+        return if (cp < 0x80) 10 else 20;
+    }
+    fn kern(_: *anyopaque, l: u21, r: u21) f32 {
+        return if (l == 'A' and r == 'V') -2 else 0;
+    }
+    fn has(ctx: *anyopaque, cp: u21) bool {
+        const self: *FakeFont = @ptrCast(@alignCast(ctx));
+        if (cp >= 0x1100 and cp <= 0x11FF) return false;
+        if (cp == 0x6F22 or cp == 0xFFFD) return false;
+        if (cp == layout.FALLBACK) return self.fallback;
+        return true;
+    }
+    fn metrics(self: *FakeFont) layout.Metrics {
+        return .{ .ctx = self, .advance_fn = adv, .kern_fn = kern, .has_fn = has };
+    }
+};
+
+fn clusterCount(s: []const u8) usize {
+    var it = layout.Clusters.init(s);
+    var n: usize = 0;
+    while (it.next()) |_| n += 1;
+    return n;
+}
+
+fn placerEnd(m: layout.Metrics, s: []const u8) f32 {
+    var pl = layout.Placer.init(m, s, 0);
+    while (pl.next()) |_| {}
+    return pl.pen;
+}
+
+fn displayed(m: layout.Metrics, s: []const u8, out: []u21) []u21 {
+    var pl = layout.Placer.init(m, s, 0);
+    var n: usize = 0;
+    while (pl.next()) |g| {
+        if (n < out.len) out[n] = g.cp;
+        n += 1;
+    }
+    return out[0..@min(n, out.len)];
+}
+
+fn layoutTests(io: std.Io, alloc: std.mem.Allocator, face: *text.Face, lut: *const [256]u8) !void {
+    var fake: FakeFont = .{};
+    const m = fake.metrics();
+
+    // 클러스터: a · 잘못된 바이트 · e+U+0301 · NFD 한(1112 1161 11AB) · 홀로 선 ㄱ(1100) · 4바이트 😀 · 홀로 선 중성 ㅏ(1161).
+    const mixed = "a\xffe\u{301}\u{1112}\u{1161}\u{11AB}\u{1100}\u{1F600}\u{1161}";
+    {
+        var it = layout.Clusters.init(mixed);
+        var got: [10]layout.Cluster = undefined;
+        var n: usize = 0;
+        while (it.next()) |cl| : (n += 1) got[n] = cl;
+        check(n == 7, "clusters of a·FF·e+0301·NFD 한·ᄀ·😀·ᅡ: {d} (want 7)", .{n});
+        check(got[0].start == 0 and got[0].end == 1 and got[0].cps[0] == 'a', "cluster 0: a [0,1)", .{});
+        check(got[1].start == 1 and got[1].end == 2 and got[1].cps[0] == '?' and got[1].n == 1, "cluster 1: an invalid byte is one byte shown as ?", .{});
+        check(got[2].start == 2 and got[2].end == 5 and got[2].n == 2 and got[2].cps[0] == 'e' and got[2].cps[1] == 0x301, "cluster 2: e + U+0301 is one cluster [2,5)", .{});
+        check(got[3].start == 5 and got[3].end == 14 and got[3].n == 1 and got[3].cps[0] == 0xD55C, "cluster 3: NFD L V T (9 bytes) shows as the syllable 한 U+D55C", .{});
+        check(got[4].end - got[4].start == 3 and got[4].cps[0] == 0x3131, "cluster 4: a lone choseong ᄀ shows as compatibility ㄱ U+3131", .{});
+        check(got[5].end - got[5].start == 4 and got[5].cps[0] == 0x1F600, "cluster 5: a 4-byte code point is one cluster", .{});
+        check(got[6].cps[0] == 0x314F and got[6].end == mixed.len, "cluster 6: a lone jungseong ᅡ shows as ㅏ U+314F", .{});
+        check(layout.compatJamo(0x11A8) == 0x3131 and layout.compatJamo(0x11C2) == 0x314E and layout.compatJamo(0x1112) == 0x314E and layout.compatJamo(0x1175) == 0x3163 and layout.compatJamo(0x1113) == null, "compatibility jamo: T ᆨ→ㄱ, T ᇂ→ㅎ, L ᄒ→ㅎ, V ᅵ→ㅣ, old jamo none", .{});
+        // NFD 가(L V, T 없음)와 L V 다음의 L(다음 음절)
+        var it2 = layout.Clusters.init("\u{1100}\u{1161}\u{1102}\u{1161}");
+        const c0 = it2.next().?;
+        const c1 = it2.next().?;
+        check(c0.cps[0] == 0xAC00 and c1.cps[0] == 0xB098 and it2.next() == null, "NFD 가나 (L V L V) is two syllables 가 나", .{});
+    }
+
+    // 대체와 측정 = 그리기.
+    {
+        var buf: [8]u21 = undefined;
+        const d = displayed(m, "\u{6F22}x\u{301}", &buf);
+        check(d.len == 3 and d[0] == layout.FALLBACK and d[1] == 'x' and d[2] == 0x301, "a missing glyph shows as □, marks stay", .{});
+        check(layout.measure(m, "\u{6F22}") == 20 and placerEnd(m, "\u{6F22}") == 20, "□'s width is measured as it is drawn (20)", .{});
+        var nofb: FakeFont = .{ .fallback = false };
+        const m2 = nofb.metrics();
+        const d2 = displayed(m2, "\u{6F22}", &buf);
+        check(d2.len == 1 and d2[0] == 0x6F22, "without □ in the font the missing glyph is kept (.notdef)", .{});
+        const samples = [_][]const u8{ "", "AV", "hello", mixed, "\u{6F22}\u{6F22}a", "AVAV\xff\xfe", "\u{1100}\u{1161}\u{11A8}\u{1100}" };
+        var all = true;
+        for (samples) |sm| all = all and layout.measure(m, sm) == placerEnd(m, sm);
+        check(all, "fake metrics: measure = placer's end pen for {d} samples", .{samples.len});
+        check(layout.measure(m, "AV") == 18 and layout.measure(m, "VA") == 20, "kern AV -2: AV 18, VA 20", .{});
+        check(layout.measure(m, "a\xffb") == 30, "an invalid byte has the width of ? (a?b = 30)", .{});
+        check(layout.measure(m, "\u{1112}\u{1161}\u{11AB}") == layout.measure(m, "한"), "NFD 한 measures as NFC 한", .{});
+    }
+
+    // 경계 · 캐럿 x 왕복 · 부분 폭.
+    {
+        const sx = "xAV\u{1112}\u{1161}e\u{301}\xffz";
+        var st_buf: [32]layout.Stop = undefined;
+        const st = try layout.stops(m, sx, &st_buf);
+        var xs_buf: [32]f32 = undefined;
+        const xs = try layout.caretXs(m, sx, &xs_buf);
+        check(st.len == 8 and xs.len == 8 and st[7].byte == sx.len and st[7].x == layout.measure(m, sx), "stops: 7 clusters + the end, the last x = the width {d:.1}", .{st[7].x});
+        var round = true;
+        var spans = true;
+        var carets = true;
+        for (st, 0..) |a, i| {
+            round = round and layout.indexAt(m, sx, a.x) == a.byte;
+            carets = carets and layout.caretX(m, sx, a.byte) == a.x and xs[i] == a.x;
+            if (i + 1 < st.len) {
+                const mid = (a.x + st[i + 1].x) / 2;
+                round = round and layout.indexAt(m, sx, mid - 0.01) == a.byte and layout.indexAt(m, sx, mid + 0.01) == st[i + 1].byte;
+            }
+            var j = i + 1;
+            while (j < st.len) : (j += 1) spans = spans and layout.spanWidth(st, i, j) == layout.measure(m, sx[a.byte..st[j].byte]);
+        }
+        check(round, "indexAt(caret x) = the boundary, and past a cluster's middle it is the right boundary", .{});
+        check(carets, "caretX = caretXs = stops x at every boundary", .{});
+        check(spans, "spanWidth(a, b) = measure(s[a..b]) for every pair (kern AV inside)", .{});
+        check(layout.indexAt(m, sx, -5) == 0 and layout.indexAt(m, sx, 1e6) == sx.len, "indexAt clamps: left of the text 0, right of it the end", .{});
+        var small: [3]layout.Stop = undefined;
+        check(if (layout.stops(m, sx, &small)) |_| false else |_| true, "stops into too few slots is error.NoSpace", .{});
+    }
+
+    // 가운데 생략.
+    {
+        var sc: [64]layout.Stop = undefined;
+        var buf: [128]u8 = undefined;
+        const s10 = "abcdefghij";
+        const same = try layout.elideMiddle(m, s10, 100, &sc, &buf);
+        check(same.ptr == s10.ptr and same.len == s10.len, "elide: a text that fits comes back as itself", .{});
+        const e60 = try layout.elideMiddle(m, s10, 60, &sc, &buf);
+        check(std.mem.eql(u8, e60, "ab\u{2026}hij"), "elide 10 x 10 px into 60: ab…hij (tail leaning) got {s}", .{e60});
+        const e59 = try layout.elideMiddle(m, s10, 59, &sc, &buf);
+        check(std.mem.eql(u8, e59, "ab\u{2026}ij"), "elide into 59: ab…ij got {s}", .{e59});
+        const e9 = try layout.elideMiddle(m, s10, 9, &sc, &buf);
+        const e10 = try layout.elideMiddle(m, s10, 10, &sc, &buf);
+        check(e9.len == 0 and std.mem.eql(u8, e10, "\u{2026}"), "elide: under the width of … is empty, exactly … is …", .{});
+        const name = "long-directory-name-0123456789-\u{1112}\u{1161}\u{11AB}\u{1100}\u{1161}\u{11A8}-end.txt";
+        var ok = true;
+        var w: f32 = 0;
+        while (w < layout.measure(m, name) + 20) : (w += 3) {
+            const e = try layout.elideMiddle(m, name, w, &sc, &buf);
+            if (layout.measure(m, e) > w) ok = false;
+            if (e.len == 0 or e.ptr == name.ptr) continue;
+            const k = std.mem.indexOf(u8, e, layout.ELLIPSIS) orelse {
+                ok = false;
+                continue;
+            };
+            const head = e[0..k];
+            const tail = e[k + layout.ELLIPSIS.len ..];
+            if (!std.mem.startsWith(u8, name, head) or !std.mem.endsWith(u8, name, tail)) ok = false;
+            // 머리 끝 · 꼬리 처음이 클러스터 경계다(NFD 음절을 가르지 않는다).
+            const st = try layout.stops(m, name, &sc);
+            var hb = false;
+            var tb = false;
+            for (st) |x| {
+                if (x.byte == head.len) hb = true;
+                if (x.byte == name.len - tail.len) tb = true;
+            }
+            ok = ok and hb and tb;
+            // 꼬리 기울기: 수는 꼬리가 먼저 는다. 넓은 클러스터(20)가 꼬리를 막으면 남은 폭을 머리가 한두 개 더 채운다.
+            if (clusterCount(head) > clusterCount(tail) + 2) ok = false;
+        }
+        check(ok, "elide over every width: result <= width, head/tail are a prefix/suffix cut at cluster boundaries (NFD kept whole), the head is at most 2 clusters longer than the tail", .{});
+        // 실제 글꼴(13 px): 판정 19의 긴 이름.
+        const fm2 = face.metrics();
+        const long = "long-directory-name-0123456789-abcdefghij-end";
+        const e = try layout.elideMiddle(fm2, long, 150, &sc, &buf);
+        check(layout.measure(fm2, e) <= 150 and std.mem.indexOf(u8, e, layout.ELLIPSIS) != null and std.mem.endsWith(u8, e, "-end"), "13 px {s} in 150 px -> {s} ({d:.2} px)", .{ long, e, layout.measure(fm2, e) });
+    }
+
+    // 줄 나누기.
+    {
+        var sc: [64]layout.Stop = undefined;
+        var ln: [16]layout.Line = undefined;
+        const Case = struct { s: []const u8, w: f32, want: []const []const u8, label: ?[]const u8 = null };
+        const cases = [_]Case{
+            .{ .s = "hello world foo", .w = 60, .want = &.{ "hello", "world", "foo" } },
+            .{ .s = "hello world foo", .w = 115, .want = &.{ "hello world", "foo" } },
+            .{ .s = "가나다라마", .w = 50, .want = &.{ "가나", "다라", "마" } },
+            .{ .s = "abcdefghij", .w = 35, .want = &.{ "abc", "def", "ghi", "j" } },
+            .{ .s = "가나다.", .w = 60, .want = &.{ "가나", "다." } },
+            .{ .s = "가(나다", .w = 40, .want = &.{ "가", "(나", "다" } },
+            .{ .s = "ab  cd", .w = 30, .want = &.{ "ab", "cd" } },
+            .{ .s = "a\nb", .w = 100, .want = &.{ "a", "b" }, .label = "a<LF>b" },
+            .{ .s = "a\n", .w = 100, .want = &.{ "a", "" }, .label = "a<LF>" },
+            .{ .s = "", .w = 100, .want = &.{""} },
+            .{ .s = "한글 text", .w = 60, .want = &.{ "한글", "text" } },
+            .{ .s = "x", .w = 1, .want = &.{"x"} },
+        };
+        for (cases) |cs| {
+            const lines = try layout.wrap(m, cs.s, cs.w, &sc, &ln);
+            var ok = lines.len == cs.want.len;
+            if (ok) for (lines, cs.want) |l, wnt| {
+                ok = ok and std.mem.eql(u8, cs.s[l.start..l.end], wnt);
+            };
+            check(ok, "wrap \"{s}\" in {d}: {d} line(s)", .{ cs.label orelse cs.s, cs.w, lines.len });
+        }
+    }
+
+    // 실제 글꼴: measure = 그리기의 끝 펜, NFD = NFC의 픽셀, 대체 □, 생략한 긴 이름 행의 부분 = 통째.
+    {
+        const samples = [_][]const u8{ "안녕", "long-directory-name", "AVAWAY", "\u{1112}\u{1161}\u{11AB}\u{1100}\u{1173}\u{11AF}", "\u{6F22}\xffé", "e\u{301}" };
+        var pixels: [W * H]u32 = undefined;
+        var scratch: [W * H]u32 = undefined;
+        var all = true;
+        for (samples) |sm| {
+            var p = Painter.begin(io, alloc, &pixels, W, H, &scratch, WHOLE, lut);
+            p.fillRect(WHOLE, theme.TK_BG, 255);
+            const end = try p.drawGlyphs(face, 3.25, 40, sm, theme.TK_TEXT, 255);
+            p.finish();
+            all = all and @abs(end - 3.25 - face.measure(sm)) < 0.001;
+        }
+        check(all, "Pretendard 13 px: drawGlyphs' end pen = x + measure for {d} samples", .{samples.len});
+        // 참고(판정 아님 — plan 실측 1, 판정 19의 좌표): 13 px advance와 tars-files 열(200)의 이름 칸.
+        {
+            const chev = @round(200 - (kit.list.BAR_W + 4) - face.measure("\u{203A}"));
+            const dir_w = chev - 4 - 16;
+            const file_w: f32 = 200 - (kit.list.BAR_W + 4) - 16;
+            var sc2: [64]layout.Stop = undefined;
+            var b1: [128]u8 = undefined;
+            var b2: [128]u8 = undefined;
+            const dn = try layout.elideMiddle(face.metrics(), "long-directory-name-0123456789-abcdefghij-end", dir_w, &sc2, &b1);
+            const fnm = try layout.elideMiddle(face.metrics(), "long-file-name-0123456789-abcdefghij-tail.txt", file_w, &sc2, &b2);
+            std.debug.print("tk_test: reference 13 px advance … {d:.3} › {d:.3} □ {d:.3} ? {d:.3} U+0301 {d:.3} .notdef(漢) {d:.3}\n", .{ face.advance(0x2026), face.advance(0x203A), face.advance(0x25A1), face.advance('?'), face.advance(0x301), face.advance(0x6F22) });
+            std.debug.print("tk_test: reference files column 200: › pen x {d} · dir name width {d} -> {s} ({d:.2}) · file name width {d} -> {s} ({d:.2})\n", .{ chev, dir_w, dn, face.measure(dn), file_w, fnm, face.measure(fnm) });
+            const nd = try face.get(0x6F22, 0);
+            var nd_ink: u32 = 0;
+            for (nd.pixels) |v| nd_ink += @intFromBool(v != 0);
+            std.debug.print("tk_test: reference .notdef bitmap {d}x{d} inked {d} (drawn only when □ is missing too)\n", .{ nd.width, nd.height, nd_ink });
+        }
+        check(face.hasGlyph(0x2026) and face.hasGlyph(0x203A) and face.hasGlyph(0x25A1) and !face.hasGlyph(0x1100) and !face.hasGlyph(0xFFFD) and !face.hasGlyph(0x6F22), "Pretendard has … › □, not U+1100 U+FFFD 漢", .{});
+        var a: [W * H]u32 = undefined;
+        var b: [W * H]u32 = undefined;
+        {
+            var p = Painter.begin(io, alloc, &a, W, H, &scratch, WHOLE, lut);
+            p.fillRect(WHOLE, theme.TK_BG, 255);
+            _ = try p.drawGlyphs(face, 10, 40, "한글", theme.TK_TEXT, 255);
+            p.finish();
+        }
+        {
+            var p = Painter.begin(io, alloc, &b, W, H, &scratch, WHOLE, lut);
+            p.fillRect(WHOLE, theme.TK_BG, 255);
+            _ = try p.drawGlyphs(face, 10, 40, "\u{1112}\u{1161}\u{11AB}\u{1100}\u{1173}\u{11AF}", theme.TK_TEXT, 255);
+            p.finish();
+        }
+        check(std.mem.eql(u32, &a, &b), "NFD 한글 draws the same pixels as NFC 한글", .{});
+        // 생략한 긴 이름: 통째 그림과, 가운데를 가로지르는 부분 clip 그림이 clip 안에서 바이트까지 같다.
+        var sc: [64]layout.Stop = undefined;
+        var buf: [128]u8 = undefined;
+        const shown = try layout.elideMiddle(face.metrics(), "long-directory-name-0123456789-abcdefghij-end", 150, &sc, &buf);
+        {
+            var p = Painter.begin(io, alloc, &a, W, H, &scratch, WHOLE, lut);
+            p.fillRect(WHOLE, theme.TK_BG, 255);
+            _ = try p.drawGlyphs(face, 16, 40, shown, theme.TK_TEXT, 255);
+            p.finish();
+        }
+        const clip: Rect = .{ .x = 60, .y = 25, .w = 47, .h = 21 };
+        @memset(&b, 0xFF000000);
+        {
+            var p = Painter.begin(io, alloc, &b, W, H, &scratch, clip, lut);
+            p.fillRect(WHOLE, theme.TK_BG, 255);
+            _ = try p.drawGlyphs(face, 16, 40, shown, theme.TK_TEXT, 255);
+            p.finish();
+        }
+        var same = true;
+        var inked = false;
+        var yy: u32 = 25;
+        while (yy < 46) : (yy += 1) {
+            var xx: u32 = 60;
+            while (xx < 107) : (xx += 1) {
+                same = same and a[yy * W + xx] == b[yy * W + xx];
+                inked = inked or (a[yy * W + xx] & 0xFFFFFF) != theme.TK_BG;
+            }
+        }
+        check(same and inked, "elided long name: a partial clip 47x21 across its middle = the whole drawing (inked {})", .{inked});
+    }
+}
+
+/// 서버 키맵의 keysym 이름 → 문자(글자 키 표에 나오는 것만). 나머지 이름은 글자가 아니다(0).
+fn keysymChar(name: []const u8) u8 {
+    if (name.len == 1) return name[0];
+    const T = struct { n: []const u8, c: u8 };
+    const table = [_]T{
+        .{ .n = "exclam", .c = '!' },       .{ .n = "at", .c = '@' },          .{ .n = "numbersign", .c = '#' },  .{ .n = "dollar", .c = '$' },
+        .{ .n = "percent", .c = '%' },      .{ .n = "asciicircum", .c = '^' }, .{ .n = "ampersand", .c = '&' },   .{ .n = "asterisk", .c = '*' },
+        .{ .n = "parenleft", .c = '(' },    .{ .n = "parenright", .c = ')' },  .{ .n = "minus", .c = '-' },       .{ .n = "underscore", .c = '_' },
+        .{ .n = "equal", .c = '=' },        .{ .n = "plus", .c = '+' },        .{ .n = "bracketleft", .c = '[' }, .{ .n = "braceleft", .c = '{' },
+        .{ .n = "bracketright", .c = ']' }, .{ .n = "braceright", .c = '}' },  .{ .n = "semicolon", .c = ';' },   .{ .n = "colon", .c = ':' },
+        .{ .n = "apostrophe", .c = '\'' },  .{ .n = "quotedbl", .c = '"' },    .{ .n = "grave", .c = '`' },       .{ .n = "asciitilde", .c = '~' },
+        .{ .n = "backslash", .c = '\\' },   .{ .n = "bar", .c = '|' },         .{ .n = "comma", .c = ',' },       .{ .n = "less", .c = '<' },
+        .{ .n = "period", .c = '.' },       .{ .n = "greater", .c = '>' },     .{ .n = "slash", .c = '/' },       .{ .n = "question", .c = '?' },
+        .{ .n = "space", .c = ' ' },
+    };
+    for (table) |t| if (std.mem.eql(u8, t.n, name)) return t.c;
+    return 0;
+}
+
+/// 서버 키맵(`terminal/vendor/keymap-us.xkb`)을 읽어 evdev 2..57의 (Shift 없음, Shift) 문자 표를 짓는다. keycodes 절의 `<NAME> = N;`(xkb 코드 =
+/// evdev + 8)와 symbols 절의 `key <NAME> { [ a, b ] };`. 키패드(`<KP…>`)는 표에서 뺐다(NumLock 비트가 없다).
+fn keymapTable() [58][2]u8 {
+    const km = @embedFile("keymap");
+    var codes: [58]?[]const u8 = @splat(null);
+    var out: [58][2]u8 = @splat(.{ 0, 0 });
+    const sym_at = std.mem.indexOf(u8, km, "xkb_symbols") orelse return out;
+    var lines = std.mem.splitScalar(u8, km[0..sym_at], '\n');
+    while (lines.next()) |raw| {
+        const l = std.mem.trim(u8, raw, " \t");
+        if (l.len < 3 or l[0] != '<') continue;
+        const gt = std.mem.indexOfScalar(u8, l, '>') orelse continue;
+        const eq = std.mem.indexOfScalar(u8, l, '=') orelse continue;
+        const semi = std.mem.indexOfScalar(u8, l, ';') orelse continue;
+        const v = std.fmt.parseInt(u32, std.mem.trim(u8, l[eq + 1 .. semi], " \t"), 10) catch continue;
+        if (v < 8 or v - 8 >= 58) continue;
+        if (codes[v - 8] == null) codes[v - 8] = l[1..gt];
+    }
+    var sl = std.mem.splitScalar(u8, km[sym_at..], '\n');
+    while (sl.next()) |raw| {
+        const l = std.mem.trim(u8, raw, " \t");
+        if (!std.mem.startsWith(u8, l, "key <")) continue;
+        const gt = std.mem.indexOfScalar(u8, l, '>') orelse continue;
+        const name = l[5..gt];
+        if (std.mem.startsWith(u8, name, "KP")) continue;
+        const ob = std.mem.indexOfScalar(u8, l, '[') orelse continue;
+        const cb = std.mem.indexOfScalar(u8, l, ']') orelse continue;
+        for (codes, 0..) |cn, code| {
+            const n = cn orelse continue;
+            if (!std.mem.eql(u8, n, name)) continue;
+            var parts = std.mem.splitScalar(u8, l[ob + 1 .. cb], ',');
+            const a = keysymChar(std.mem.trim(u8, parts.next() orelse "", " \t"));
+            const b = keysymChar(std.mem.trim(u8, parts.next() orelse "", " \t"));
+            out[code] = .{ a, if (b == 0) a else b };
+        }
+    }
+    return out;
+}
+
+fn keyCharTests() void {
+    const km = keymapTable();
+    var same = true;
+    var letters: u32 = 0;
+    for (km, 0..) |pair, code| {
+        if (!std.mem.eql(u8, &pair, &input.US_CHARS[code])) {
+            same = false;
+            std.debug.print("tk_test: keymap code {d}: server {any} vs table {any}\n", .{ code, pair, input.US_CHARS[code] });
+        }
+        if (pair[0] != 0) letters += 1;
+    }
+    check(same and letters == 48, "the glyph key table = the server keymap (keymap-us.xkb) for evdev 2..57: {d} printing keys", .{letters});
+    const none: input.Mods = .{};
+    const sh: input.Mods = .{ .shift = true };
+    const cp: input.Mods = .{ .caps = true };
+    const shcp: input.Mods = .{ .shift = true, .caps = true };
+    check(input.charFor(30, none) == 'a' and input.charFor(30, sh) == 'A' and input.charFor(30, cp) == 'A' and input.charFor(30, shcp) == 'a', "a: none a, Shift A, Caps A, Shift+Caps a (ALPHABETIC)", .{});
+    check(input.charFor(2, none) == '1' and input.charFor(2, sh) == '!' and input.charFor(2, cp) == '1' and input.charFor(2, shcp) == '!', "1: Caps does not touch digits (1 ! 1 !)", .{});
+    check(input.charFor(53, sh) == '?' and input.charFor(57, sh) == ' ' and input.charFor(40, none) == '\'', "/ with Shift is ?, Space is space, ' is '", .{});
+    check(input.charFor(30, .{ .ctrl = true }) == null and input.charFor(30, .{ .alt = true }) == null and input.charFor(30, .{ .super = true }) == null, "Ctrl/Alt/Super+a are commands, not text", .{});
+    check(input.charFor(14, none) == null and input.charFor(28, none) == null and input.charFor(15, none) == null and input.charFor(1, none) == null and input.charFor(55, none) == null and input.charFor(103, none) == null, "Backspace Enter Tab Esc KP* Up give no text", .{});
+    check(input.keyFromCode(14) == .backspace and input.keyFromCode(111) == .delete and input.repeats(14) and input.repeats(111), "evdev 14 backspace, 111 delete, both repeat", .{});
 }

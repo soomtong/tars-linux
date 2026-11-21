@@ -22,6 +22,7 @@ pub const Window = window.Window;
 pub const Painter = cg.Painter;
 pub const Face = cg.Face;
 pub const text = cg.text;
+pub const layout = cg.layout;
 pub const tokens = @import("tk_tokens");
 pub const Tree = ca.Tree;
 pub const Layer = ca.Layer;

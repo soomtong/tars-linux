@@ -6,7 +6,8 @@ cd "$(dirname "$0")" || exit 1
 # TK 체인 — TARS 툴킷(`toolkit/`, TK design)과 그 시험 앱 `tars-tk-demo`. 서른여섯번째 체인.
 #
 # 이 게이트가 증명하는 사슬(TK-M0 plan 확정 6의 판정 1~6, TK-M1 plan 확정 10의 판정 7~9 — 7~9는 5와 6 사이에 돈다, TK-M2 plan 확정 15의
-# 판정 10~14 — 9 뒤 같은 부팅에서 둘째 데모 `--list 100000`, TK-M3 plan 확정 15의 판정 15~18 — 14 뒤 같은 부팅에서 `tars-files`):
+# 판정 10~14 — 9 뒤 같은 부팅에서 둘째 데모 `--list 100000`, TK-M3 plan 확정 15의 판정 15~18 — 14 뒤 같은 부팅에서 `tars-files`,
+# TK-M4 plan 확정 17의 판정 19 — 18 뒤 같은 부팅에서 `tars-files /tmp/tkl`):
 #   셸에서 띄운 tars-tk-demo가 tars_menu_manager_v1을 bind하고(원래 모드) 셸 오른쪽 column이 되어 pane 크기(616 × 752)의
 #   configure를 받는다
 #   → 그 크기로 버퍼를 만들어 바탕 · 둥근 사각형(z2d) · 글자(stb_truetype, Pretendard 13 · 14 px)를 그린다 — screendump의
@@ -30,6 +31,7 @@ cd "$(dirname "$0")" || exit 1
 #   → `→ → ←`: 열 셋, 포커스는 둘째 열(TK_SELECTION), 셋째 열의 선택은 흐린 색, 가로 스크롤 한 열(16 — design의 끝나는 조건)
 #   → 셸에서 `mkdir /tmp/tkf/a/0` 뒤 돌아오면 다시 읽고 선택 b가 행 1로 따라간다, 셋째 열은 남는다(17)
 #   → `touch (seq 1 N)`의 큰 디렉터리가 조각 여럿으로 들어오고 끝나기 전에 항목이 그려진다(18)
+#   → 긴 이름(디렉터리 · 파일)이 가운데 생략되어 `›` · 막대 앞 틈에 글자가 없고 꼬리는 그려진다, `tk> column … shown=`에 머리 · `…` · 꼬리(19)
 #   → tars-files 로그: `files` · `load` · `column` · `columns` · `focus` · `refresh` 줄이 위와 맞고, 그린 수 = commit 수
 #
 # 부팅 하나, NIC 없음, 디스크 없음 — 셸은 root(fish), 소켓은 `/run/user/0`. 키보드는 QEMU의 PS/2라 pc로 읽혀 Cmd가 Alt
@@ -731,26 +733,62 @@ wait_for_log "terminal: wl> close id=${ID4}" || report_failure "Cmd+Q sent no 'w
 wait_for_log "terminal: wl> unmap id=${ID4} ws=1 slot=1" || report_failure "tars-files' second slot was not removed"
 sleep 2
 
+echo "=== (19) a long name is elided in the middle and stops short of the › ==="
+# TK-M4 단계 A(plan 확정 5 · 17). 열 200의 이름 칸: 행 왼쪽 16부터 — 디렉터리는 `›`(펜 x 186, 13 px advance 4.37) 왼쪽 − 4 = 182까지(폭 166),
+# 파일은 막대 왼쪽 − 4 = 190까지(폭 174). 호스트 검사의 참고 줄이 같은 셈이다: 디렉터리 `long-directo…bcdefghij-end`(163.45 px) ·
+# 파일 `long-file-name…efghij-tail.txt`(169.10 px). 첫 열 x 644..843이라 디렉터리 행(0, 선택)의 틈은 화면 x 826..829, 파일 행(1)은 834..837
+# (막대는 행이 둘이라 숨어 있다). 생략이 없으면 이름이 그 틈을 지나 `›`와 겹친다(TK-M3 단계 B 보고).
+type_text 'mkdir -p /tmp/tkl/long-directory-name-0123456789-abcdefghij-end'
+type_keys ret
+type_text 'touch /tmp/tkl/long-file-name-0123456789-abcdefghij-tail.txt'
+type_keys ret
+type_text 'tars-files /tmp/tkl > /tmp/tk5.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' 5 || report_failure "(19) tars-files did not open a fifth column"
+ID5="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+' | tail -n 1 | sed 's/.*id=//')"
+wait_for_log "terminal: wl> commit id=${ID5} buf=616x752 " || report_failure "(19) tars-files never committed a 616x752 buffer"
+sleep 1.5
+SHOT19="${SCREENS_DIR}/files-elide.ppm"
+screendump "$SHOT19" || report_failure "(19) screendump did not write ${SHOT19}"
+want_box "(19) the gap left of the › on the long directory (row 0, selected)" "$SHOT19" 826 22 3 20 "$TK_ACCENT"
+want_box "(19) the gap left of the bar on the long file (row 1)" "$SHOT19" 834 46 4 20 "$TK_BG"
+for r in 0 1; do
+  y=$((22 + 24 * r))
+  got="$(ppm_ink "$SHOT19" 810 "$y" 14 20)"
+  case "$got" in *" ink=0") report_failure "(19) row ${r}'s tail box (810,${y} 14x20) has no ink — the tail of the name is not drawn (${got})" ;; esac
+done
+got="$(ppm_ink "$SHOT19" 830 22 6 20)"
+case "$got" in *" ink=0") report_failure "(19) no › on the long directory (830,22 6x20) (${got})" ;; esac
+type_keys down
+wait_for_count "terminal: wl> key code=108 state=1 to=${ID5}" 1 || report_failure "(19) the down did not reach tars-files"
+sleep 1
+type_keys alt-q
+wait_for_log "terminal: wl> close id=${ID5}" || report_failure "Cmd+Q sent no 'wl> close id=${ID5}' to tars-files"
+wait_for_log "terminal: wl> unmap id=${ID5} ws=1 slot=1" || report_failure "tars-files' third slot was not removed"
+sleep 2
+echo "(19): both long names stop short of their gap (the › and the bar), and their tails are drawn"
+
 # ── tars-files의 로그를 꺼낸다 ───────────────────────────────────────────
 type_text 'echo tk3begin > /dev/console'
 type_keys ret
-type_text 'cat /tmp/tk3.log /tmp/tk4.log > /dev/console'
+type_text 'cat /tmp/tk3.log /tmp/tk4.log /tmp/tk5.log > /dev/console'
 type_keys ret
 got_rss=0
 for _ in $(seq 1 150); do
-  if [ "$(tr -d '\r' < "$LOG" | sed -n '/^tk3begin$/,$p' | grep -acE '^tk> rss vmrss_kb=[0-9]+ ')" -ge 2 ]; then got_rss=1; break; fi
+  if [ "$(tr -d '\r' < "$LOG" | sed -n '/^tk3begin$/,$p' | grep -acE '^tk> rss vmrss_kb=[0-9]+ ')" -ge 3 ]; then got_rss=1; break; fi
   sleep 0.1
 done
-[ "$got_rss" = 1 ] || report_failure "tars-files' logs did not come out on the serial (fewer than two 'tk> rss' after 'tk3begin')"
+[ "$got_rss" = 1 ] || report_failure "tars-files' logs did not come out on the serial (fewer than three 'tk> rss' after 'tk3begin')"
 TK3="$(tr -d '\r' < "$LOG" | sed -n '/^tk3begin$/,$p' | grep -a '^tk> ')"
 TK3A="$(printf '%s\n' "$TK3" | awk '/^tk> files path=\/tmp\/tkb$/ {exit} {print}')"
-TK3B="$(printf '%s\n' "$TK3" | sed -n '/^tk> files path=\/tmp\/tkb$/,$p')"
+TK3B="$(printf '%s\n' "$TK3" | sed -n '/^tk> files path=\/tmp\/tkb$/,$p' | awk '/^tk> files path=\/tmp\/tkl$/ {exit} {print}')"
+TK5="$(printf '%s\n' "$TK3" | sed -n '/^tk> files path=\/tmp\/tkl$/,$p')"
 has3() {
   printf '%s\n' "$TK3A" | grep -aE -- "$1" > /dev/null || report_failure "$2: no '$1' in tars-files' log"
 }
 has3 '^tk> files path=/tmp/tkf$' "(15)"
 has3 '^tk> load path=/tmp/tkf n=3 chunks=1 .* state=done$' "(15)"
-has3 '^tk> column i=0 path=/tmp/tkf count=3 sel=0 name=a$' "(15)"
+has3 '^tk> column i=0 path=/tmp/tkf count=3 sel=0 name=a shown=a$' "(15)"
 has3 '^tk> focus view=col0$' "(15)"
 has3 '^tk> columns n=2 focus=1 scroll=0$' "(16)"
 has3 '^tk> load path=/tmp/tkf/a n=1 chunks=1 .* state=done$' "(16)"
@@ -773,18 +811,26 @@ ALL18="$(sed -E 's/.* all_us=([0-9]+) .*/\1/' <<<"$LOAD18")"
 [ "$CHUNKS18" -gt 1 ] || report_failure "(18) ${FILES_N} entries came in ${CHUNKS18} chunk(s) — not streamed"
 [ "$PAINT18" -gt 0 ] && [ "$PAINT18" -lt "$ALL18" ] ||
   report_failure "(18) no frame showed entries before the load ended (paint_us=${PAINT18} all_us=${ALL18})"
-printf '%s\n' "$TK3B" | grep -aE "^tk> column i=0 path=/tmp/tkb count=${FILES_N} sel=0 name=1\$" > /dev/null ||
+printf '%s\n' "$TK3B" | grep -aE "^tk> column i=0 path=/tmp/tkb count=${FILES_N} sel=0 name=1 shown=1\$" > /dev/null ||
   report_failure "(18) the first column did not end at count=${FILES_N} with row 0 = 1"
+# 판정 19의 줄: 첫 로딩 끝의 디렉터리 행, `↓`의 파일 행 — 이름 전부와 생략한 것(머리 · `…` · 꼬리).
+printf '%s\n' "$TK5" | grep -aE '^tk> column i=0 path=/tmp/tkl count=2 sel=0 name=long-directory-name-0123456789-abcdefghij-end shown=long-[a-z0-9-]*…[a-z0-9-]*-end$' > /dev/null ||
+  report_failure "(19) no 'tk> column … sel=0 name=long-directory-… shown=long-…-end' (head … tail)"
+printf '%s\n' "$TK5" | grep -aE '^tk> column i=0 path=/tmp/tkl count=2 sel=1 name=long-file-name-0123456789-abcdefghij-tail[.]txt shown=long-[a-z0-9-]*…[a-z0-9-]*-tail[.]txt$' > /dev/null ||
+  report_failure "(19) no 'tk> column … sel=1 name=long-file-… shown=long-…-tail.txt' (head … tail)"
 echo "(15-17 log): files · load · column · columns · focus · refresh lines match; ${D3} draws = ${C3} commits"
+echo "(19 log): $(printf '%s\n' "$TK5" | grep -aE '^tk> column ' | sed 's/.* shown=/shown=/' | tr '\n' ' ')"
 echo "(18): ${FILES_N} entries in ${CHUNKS18} chunks, first chunk at ${FIRST18} us, first painted at ${PAINT18} us, all at ${ALL18} us"
 # 측정(참고 — 판정 아님, measurements 110).
 echo "--- reference: tars-files ---"
 printf '%s\n' "$TK3" | grep -aE '^tk> (load |rss |columns )'
 echo "reference: tars-files draws $(printf '%s\n' "$TK3A" | grep -aE '^tk> draw ' | us_summary)"
+echo "reference: tars-files /tmp/tkl (elided names) draws $(printf '%s\n' "$TK5" | grep -aE '^tk> draw ' | us_summary)"
+printf '%s\n' "$TK5" | grep -aE '^tk> draw '
 printf '%s\n' "$TK3A" | grep -aE '^tk> (draw|columns|refresh) '
 
 # ── render verify ─────────────────────────────────────────────────────
 MISMATCH="$(count_log 'terminal: verify> mismatch')"
 [ "$MISMATCH" -eq 0 ] || report_failure "render verify mismatch lines: ${MISMATCH}"
 
-echo "PASS: TK-M3 — tars-tk-demo binds tars_menu_v1 (native), opens as a 616x752 column, draws a rounded rectangle (z2d) with antialiased corners and antialiased Pretendard text, redraws centred at 1240x752 on Cmd+R, animates a face's opacity (mid colour between, end colour after) with only the face's rectangle blitted, commits only when it draws (2 + ${N} draws and commits, none while idle), and ends by itself on Cmd+Q; tars-tk-demo --list 100000 moves list1's highlight to row 10 after ten downs, End shows the last row and the bar at the bottom, a click selects row 4 and the wheel scrolls three rows, Tab and Shift+Tab move the focus between the lists, and holding down repeats ${REPEATS} time(s) on the client; tars-files lists /tmp/tkf with directories first and hidden names out, -> -> <- leaves three columns with the focus on the second (scroll 201), re-reads on focus and keeps b selected after a/0 appears, and streams ${FILES_N} entries in ${CHUNKS18} chunks (painted at ${PAINT18} us of ${ALL18} us)"
+echo "PASS: TK-M4 (phase A) — tars-tk-demo binds tars_menu_v1 (native), opens as a 616x752 column, draws a rounded rectangle (z2d) with antialiased corners and antialiased Pretendard text, redraws centred at 1240x752 on Cmd+R, animates a face's opacity (mid colour between, end colour after) with only the face's rectangle blitted, commits only when it draws (2 + ${N} draws and commits, none while idle), and ends by itself on Cmd+Q; tars-tk-demo --list 100000 moves list1's highlight to row 10 after ten downs, End shows the last row and the bar at the bottom, a click selects row 4 and the wheel scrolls three rows, Tab and Shift+Tab move the focus between the lists, and holding down repeats ${REPEATS} time(s) on the client; tars-files lists /tmp/tkf with directories first and hidden names out, -> -> <- leaves three columns with the focus on the second (scroll 201), re-reads on focus and keeps b selected after a/0 appears, and streams ${FILES_N} entries in ${CHUNKS18} chunks (painted at ${PAINT18} us of ${ALL18} us), and elides a long directory and a long file name in the middle so they stop short of the › and the bar"

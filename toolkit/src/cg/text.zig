@@ -1,10 +1,12 @@
 //! 글자(TK design 결정 5). `shared/glyph.zig`(stb 한 겹) 위에 툴킷이 쓰는 모양을 얹는다 — em 기준 크기, 서브픽셀 x 위치(한 픽셀을
 //! 넷으로 나눈 칸), f32 advance, kern, 굽고 나서 복사해 두는 캐시. 그리는 것은 `painter.zig`(`drawGlyphs`) · `canvas.zig`이고 여기는 픽셀을 모른다.
 //!
-//! 셰이핑은 없다(R-TXT-4) — 코드포인트 하나가 글리프 하나다. 줄 나누기 · 커서 위치는 TK-M4(비례폭 텍스트)의 것이다.
+//! 셰이핑은 없다(R-TXT-4) — 코드포인트 하나가 글리프 하나다. 클러스터 · 대체 · 캐럿 · 생략 · 줄 나누기는 `layout.zig`(TK-M4)이고, 이 파일의
+//! `Face`가 그것에 `metrics()`로 폭을 준다.
 
 const std = @import("std");
 const glyph = @import("glyph");
+const layout = @import("layout.zig");
 
 /// 서브픽셀 x 위치의 칸 수. 펜의 소수 부분을 이 칸으로 반올림해 굽는다 — 넷이면 0.25 px 단위라 글자 사이가 고르고(조사:
 /// 정수 반올림은 `0123456789`가 `01234 56789`처럼 벌어졌다), 캐시는 글자마다 많아야 넷이다.
@@ -34,6 +36,8 @@ pub const Face = struct {
     line_height: f32,
     glyphs: std.AutoHashMapUnmanaged(Key, Glyph) = .empty,
     advances: std.AutoHashMapUnmanaged(u32, f32) = .empty,
+    /// 글리프 유무(TK-M4 — 대체 글자를 고르는 데). 처음 물을 때 cmap을 보고 들고 있는다.
+    present: std.AutoHashMapUnmanaged(u32, bool) = .empty,
 
     pub fn init(alloc: std.mem.Allocator, data: []const u8, em_px: f32) glyph.Face.InitError!Face {
         const f = try glyph.Face.init(data, .{ .em = em_px });
@@ -56,6 +60,7 @@ pub const Face = struct {
         while (it.next()) |g| self.alloc.free(g.pixels);
         self.glyphs.deinit(self.alloc);
         self.advances.deinit(self.alloc);
+        self.present.deinit(self.alloc);
     }
 
     /// 글자 하나를 서브픽셀 칸 `sub`(0..SUBPIXELS-1)로 구운 것. 처음이면 굽고 복사해 캐시에 넣는다.
@@ -92,17 +97,35 @@ pub const Face = struct {
         return self.face.kern(left, right);
     }
 
-    /// UTF-8 한 줄의 폭(픽셀, 소수). 그리는 `Painter.drawGlyphs`와 같은 펜 규칙(advance + kern)이다. 잘못된 바이트는 건너뛴다.
+    /// 이 글꼴이 글자를 가지는가(cmap). 대체(`layout.resolve`)가 묻는다.
+    pub fn hasGlyph(self: *Face, cp: u32) bool {
+        if (self.present.get(cp)) |v| return v;
+        const v = self.face.hasGlyph(cp);
+        self.present.put(self.alloc, cp, v) catch {};
+        return v;
+    }
+
+    /// 놓기 층(`layout.zig`)이 폭을 재는 길. `self`는 돌려준 값이 쓰이는 동안 살아 있어야 한다.
+    pub fn metrics(self: *Face) layout.Metrics {
+        return .{ .ctx = self, .advance_fn = mAdvance, .kern_fn = mKern, .has_fn = mHas };
+    }
+
+    fn mAdvance(ctx: *anyopaque, cp: u21) f32 {
+        const self: *Face = @ptrCast(@alignCast(ctx));
+        return self.advance(cp);
+    }
+    fn mKern(ctx: *anyopaque, left: u21, right: u21) f32 {
+        const self: *Face = @ptrCast(@alignCast(ctx));
+        return self.kern(left, right);
+    }
+    fn mHas(ctx: *anyopaque, cp: u21) bool {
+        const self: *Face = @ptrCast(@alignCast(ctx));
+        return self.hasGlyph(cp);
+    }
+
+    /// UTF-8 한 줄의 폭(픽셀, 소수). 그리는 `Painter.drawGlyphs`와 같은 펜 규칙(advance + kern)과 같은 클러스터 · 대체다(`layout.measure`).
     pub fn measure(self: *Face, str: []const u8) f32 {
-        var pen: f32 = 0;
-        var prev: ?u32 = null;
-        var it = Utf8.init(str);
-        while (it.next()) |cp| {
-            if (prev) |p| pen += self.kern(p, cp);
-            pen += self.advance(cp);
-            prev = cp;
-        }
-        return pen;
+        return layout.measure(self.metrics(), str);
     }
 };
 
@@ -131,33 +154,3 @@ pub fn gammaLut(gamma: f32) [256]u8 {
     }
     return lut;
 }
-
-/// UTF-8 코드포인트를 차례로. 잘못된 바이트는 하나씩 건너뛴다(그릴 것이 없다).
-pub const Utf8 = struct {
-    s: []const u8,
-    i: usize = 0,
-
-    pub fn init(s: []const u8) Utf8 {
-        return .{ .s = s };
-    }
-
-    pub fn next(self: *Utf8) ?u32 {
-        while (self.i < self.s.len) {
-            const n = std.unicode.utf8ByteSequenceLength(self.s[self.i]) catch {
-                self.i += 1;
-                continue;
-            };
-            if (self.i + n > self.s.len) {
-                self.i = self.s.len;
-                return null;
-            }
-            const cp = std.unicode.utf8Decode(self.s[self.i .. self.i + n]) catch {
-                self.i += 1;
-                continue;
-            };
-            self.i += n;
-            return cp;
-        }
-        return null;
-    }
-};

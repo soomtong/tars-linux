@@ -14,6 +14,7 @@ const Rect = @import("tk_geom").Rect;
 const RectF = @import("tk_geom").RectF;
 const Canvas = @import("canvas.zig").Canvas;
 const text = @import("text.zig");
+const layout = @import("layout.zig");
 
 pub const MAX_CLIPS = 16;
 
@@ -149,24 +150,20 @@ pub const Painter = struct {
     }
 
     /// UTF-8 한 줄을 baseline `baseline`, 펜 시작 `x`(소수, 사용자 좌표)에서 그린다(`draw_glyphs`). 돌려주는 것은 끝난 펜 x. clip 밖은
-    /// 자른다. 서브픽셀 칸은 펜의 소수 부분으로 정해지고 이동은 정수라 clip · 임시 판과 상관없이 같은 글자다.
+    /// 자른다. 서브픽셀 칸은 펜의 소수 부분으로 정해지고 이동은 정수라 clip · 임시 판과 상관없이 같은 글자다. 글자는 `layout.Placer`가 놓는다 —
+    /// 클러스터 · 대체(잘못된 바이트 `?`, 없는 글리프 `□`, 조합형 자모는 음절로)가 `Face.measure`와 같다(TK-M4).
     pub fn drawGlyphs(self: *Painter, face: *text.Face, x: f32, baseline: i32, str: []const u8, color: u32, alpha: u8) !f32 {
-        var pen = x;
-        var prev: ?u32 = null;
         const c_opt = self.clips[self.depth];
-        var it = text.Utf8.init(str);
-        while (it.next()) |cp| {
-            if (prev) |p| pen += face.kern(p, cp);
-            if (alpha != 0) if (c_opt) |c| {
-                const at = text.splitPen(pen);
-                const g = try face.get(cp, at.sub);
-                const gx = at.ix + g.x_offset + self.tx - self.base_x;
-                const gy = baseline + g.y_offset + self.ty - self.base_y;
-                self.canvas.blendGlyph(g, gx, gy, color, self.lut, alpha, c.x - self.base_x, c.y - self.base_y, c.x + c.w - self.base_x, c.y + c.h - self.base_y);
-            };
-            pen += face.advance(cp);
-            prev = cp;
+        var pl = layout.Placer.init(face.metrics(), str, x);
+        while (pl.next()) |g| {
+            if (alpha == 0) continue;
+            const c = c_opt orelse continue;
+            const at = text.splitPen(g.x);
+            const gl = try face.get(g.cp, at.sub);
+            const gx = at.ix + gl.x_offset + self.tx - self.base_x;
+            const gy = baseline + gl.y_offset + self.ty - self.base_y;
+            self.canvas.blendGlyph(gl, gx, gy, color, self.lut, alpha, c.x - self.base_x, c.y - self.base_y, c.x + c.w - self.base_x, c.y + c.h - self.base_y);
         }
-        return pen;
+        return pl.pen;
     }
 };

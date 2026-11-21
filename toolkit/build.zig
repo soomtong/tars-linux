@@ -155,6 +155,8 @@ pub fn build(b: *std.Build) void {
     test_mod.addImport("tk_kit", host_layers.kit);
     test_mod.addImport("tk_tokens", host_layers.tokens);
     test_mod.addImport("files_model", b.createModule(.{ .root_source_file = b.path("src/files/model.zig"), .target = host_target, .optimize = optimize }));
+    // 서버 키맵(TK-M4 — 글자 키 표 `tk_input.charFor`를 이 파일과 대조한다, design 결정 13 · 15). 서버와 같은 파일이다(terminal/build.zig).
+    test_mod.addAnonymousImport("keymap", .{ .root_source_file = b.path("../terminal/vendor/keymap-us.xkb") });
     test_mod.addIncludePath(terminal_vendor);
     test_mod.addCSourceFile(.{ .file = stb_impl, .flags = &.{} });
     test_mod.linkSystemLibrary("m", .{});
