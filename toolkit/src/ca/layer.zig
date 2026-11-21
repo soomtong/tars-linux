@@ -12,6 +12,9 @@
 //!
 //! content: 레이어가 앱의 그리기 콜백을 들 수 있다. 콜백은 레이어 왼쪽 위가 (0, 0)인 물리 좌표로 그리고(트리가 `translate`한다 — 정수로
 //! 반올림한 자리), 레이어 사각형 밖에 그리면 안 된다(clip 검사가 레이어 사각형으로 건너뛰므로 밖의 잉크는 부분 그리기에서 빠진다).
+//!
+//! hit-test(R-CA-6, TK-M2 plan 확정 5): `Tree.hitTest(x, y)`가 논리 좌표의 점 아래 가장 깊은 레이어를 돌려준다. 레이어는 위 층(AppKit의
+//! 뷰)을 모르고 꼬리표 `owner` 하나만 든다 — 뷰는 맞은 레이어에서 조상으로 올라가며 처음 만나는 `owner`로 찾는다.
 
 const std = @import("std");
 const geom = @import("tk_geom");
@@ -43,6 +46,8 @@ pub const Layer = struct {
     masks: bool = false,
     hidden: bool = false,
     content: ?Content = null,
+    /// 이 레이어를 가진 것(AppKit 층의 뷰). CA는 뜻을 모르고 hit-test가 돌려준 레이어에서 위 층이 읽는다. 더티와 상관없다.
+    owner: ?*anyopaque = null,
 
     // ── setter(더티를 낸다) ───────────────────────────────────────────
 
@@ -249,6 +254,7 @@ pub const Tree = struct {
         masks: bool = false,
         hidden: bool = false,
         content: ?Content = null,
+        owner: ?*anyopaque = null,
     }) !*Layer {
         try self.all.ensureUnusedCapacity(self.alloc, 1);
         const l = try self.alloc.create(Layer);
@@ -261,6 +267,7 @@ pub const Tree = struct {
             .masks = init_.masks,
             .hidden = init_.hidden,
             .content = init_.content,
+            .owner = init_.owner,
         };
         self.all.appendAssumeCapacity(l);
         return l;
@@ -295,6 +302,15 @@ pub const Tree = struct {
         return d;
     }
 
+    /// 점 (x, y)(논리, 루트 기준) 아래 가장 깊은 레이어(R-CA-6). 그리는 순서의 거꾸로 본다 — 자식은 뒤에서 앞으로(위에 그려진 것이
+    /// 먼저), 자식이 안 맞으면 그 레이어 자신. hidden과 불투명도 0은 하위 트리째 건너뛰고(보이지 않는 것은 누르지 않는다), masks
+    /// 레이어는 자기 사각형 밖이면 하위 트리째 건너뛴다(잘려 안 보이는 자식). masks가 아니면 자식은 부모 사각형 밖에서도 맞는다
+    /// (그리기와 같다). 사각형은 왼쪽 · 위를 넣고 오른쪽 · 아래를 뺀다.
+    pub fn hitTest(self: *const Tree, x: f32, y: f32) ?*Layer {
+        const r = self.root orelse return null;
+        return hitLayer(r, x, y, 0, 0);
+    }
+
     /// 루트부터 깊이 우선으로 그린다. painter의 clip과 안 겹치는 레이어는 건너뛴다(masks면 그 하위 트리까지). 그린 레이어 수를 돌려준다.
     pub fn draw(self: *Tree, p: *Painter) !u32 {
         const r = self.root orelse return 0;
@@ -303,6 +319,19 @@ pub const Tree = struct {
         return n;
     }
 };
+
+fn hitLayer(l: *Layer, x: f32, y: f32, ox: f32, oy: f32) ?*Layer {
+    if (l.hidden or l.opacity <= 0) return null;
+    const f = l.frame.offset(ox, oy);
+    const inside = x >= f.x and x < f.x + f.w and y >= f.y and y < f.y + f.h;
+    if (l.masks and !inside) return null;
+    var i = l.children.items.len;
+    while (i > 0) {
+        i -= 1;
+        if (hitLayer(l.children.items[i], x, y, f.x, f.y)) |h| return h;
+    }
+    return if (inside) l else null;
+}
 
 fn drawLayer(tree: *Tree, p: *Painter, l: *Layer, ox: f32, oy: f32, acc: f32, n: *u32) !void {
     if (l.hidden) return;

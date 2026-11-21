@@ -10,6 +10,8 @@ pub const color = struct {
     pub const surface = theme.TK_SURFACE;
     pub const accent = theme.TK_ACCENT;
     pub const selection = theme.TK_SELECTION;
+    /// 포커스가 아닌 리스트의 선택(또는 창이 키보드 포커스를 잃었을 때) — TK-M2 plan 확정 8.
+    pub const selection_inactive = theme.TK_SELECTION_INACTIVE;
     pub const text = theme.TK_TEXT;
     pub const text_dim = theme.TK_TEXT_DIM;
     pub const separator = theme.TK_SEPARATOR;

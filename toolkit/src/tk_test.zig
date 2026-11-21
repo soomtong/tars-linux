@@ -11,6 +11,9 @@
 //! 5 애니메이션 — 지어낸 시각으로 tick: 값 · 이징 · 끝 · 프레임 수 · 더티 · 알림, 목록이 비면 아무것도 안 함(TK-M1 단계 B).
 //! 6 스택 — 세로 · 가로, 간격 · 여백 · 정렬 · 고정/신축의 프레임 표.
 //! 7 토큰 — 앱 색과 셸 색이 겹치지 않는다(comptime).
+//! 8 입력 · 키 반복 — evdev 표 · 수정키 비트, 반복 상태 기계를 지어낸 시각으로(TK-M2 단계 A).
+//! 9 hit-test — 겹침(뒤 자식이 위) · 넘친 자식 · masks · hidden · 불투명도 0 · 경계.
+//! 10 kit — responder chain(받음 · 부모로 · unhandled), Tab · Shift+Tab 순환(숨은 뷰 건너뜀), 클릭 포커스 · 휠 라우팅 · 창 포커스.
 
 const std = @import("std");
 const theme = @import("theme");
@@ -22,6 +25,9 @@ const Painter = cg.Painter;
 const text = cg.text;
 const ca = @import("tk_ca");
 const Age = @import("window/age.zig").Age;
+const Repeat = @import("window/repeat.zig").Repeat;
+const input = @import("tk_input");
+const kit = @import("tk_kit");
 
 const W: u32 = 200;
 const H: u32 = 120;
@@ -195,6 +201,9 @@ pub fn main(init: std.process.Init) !u8 {
     try animations(alloc);
     try stacks(alloc);
     tokenColours();
+    inputAndRepeat();
+    try hitTests(alloc);
+    try kitTests(alloc);
 
     if (failures != 0) {
         std.debug.print("tk_test: {d} failure(s)\n", .{failures});
@@ -527,5 +536,303 @@ fn tokenColours() void {
             if (!std.mem.startsWith(u8, b, "TK_")) shell += 1;
         }
     }
-    check(app == 7 and shell >= 18, "tokens: {d} app colours share no value with {d} shell colours (comptime)", .{ app, shell });
+    comptime {
+        for (decls) |a| {
+            if (!std.mem.startsWith(u8, a, "TK_") or isSizeName(a) or std.mem.eql(u8, a, "TK_SELECTION_INACTIVE")) continue;
+            if (@field(theme, a) == theme.TK_SELECTION_INACTIVE) @compileError("theme: TK_SELECTION_INACTIVE equals app colour " ++ a);
+        }
+    }
+    check(app == 8 and shell >= 18, "tokens: {d} app colours share no value with {d} shell colours (comptime)", .{ app, shell });
+}
+
+// ── 8 입력 · 키 반복 ────────────────────────────────────────────────
+
+fn inputAndRepeat() void {
+    check(input.keyFromCode(108) == .down and input.keyFromCode(15) == .tab and input.keyFromCode(107) == .end and input.keyFromCode(30) == .other, "evdev table: 108 down, 15 tab, 107 end, 30 other", .{});
+    const m = input.modsFromMask(0x41, 0x2);
+    check(m.shift and m.super and m.caps and !m.ctrl and !m.alt, "mask 0x41 locked 0x2 -> shift super caps", .{});
+    check(input.repeats(input.KEY_DOWN) and input.repeats(30) and !input.repeats(input.KEY_TAB) and !input.repeats(input.KEY_LEFTSHIFT) and !input.repeats(input.KEY_ENTER), "repeating keys: arrows and letters, not Tab Enter modifiers", .{});
+
+    const ms = std.time.ns_per_ms;
+    const t0: u64 = 1_000 * ms;
+    var r: Repeat = .{};
+    r.press(108, true, t0);
+    check(r.deadline() == null, "no repeat before repeat_info (rate 0)", .{});
+    r.setInfo(30, 250);
+    r.press(108, true, t0);
+    check(r.deadline().? == t0 + 250 * ms and r.fire(t0 + 249 * ms) == null, "first repeat after the 250 ms delay, not before", .{});
+    const f1 = r.fire(t0 + 250 * ms);
+    check(f1 == 108 and r.fire(t0 + 283 * ms) == null and r.fire(t0 + 284 * ms) == 108, "then every 1/30 s (33.3 ms)", .{});
+    // 늦게 깬 타이머: 1초 늦어도 하나만, 다음은 그때부터 한 간격 뒤.
+    const late = t0 + 1_300 * ms;
+    const one = r.fire(late);
+    const again = r.fire(late);
+    check(one == 108 and again == null and r.deadline().? == late + std.time.ns_per_s / 30, "a late timer gives one repeat, not a burst; the next is one interval later", .{});
+    r.release(30);
+    check(r.deadline() != null, "releasing another key keeps the repeat", .{});
+    r.release(108);
+    check(r.deadline() == null and r.fire(late + 100 * ms) == null, "releasing the key stops it", .{});
+    r.press(108, true, t0);
+    r.press(30, true, t0 + 10 * ms);
+    check(r.code == 30 and r.deadline().? == t0 + 260 * ms, "another key's press takes over the repeat", .{});
+    r.press(input.KEY_TAB, false, t0 + 20 * ms);
+    check(r.deadline() == null, "a non-repeating key's press stops the repeat", .{});
+    r.press(108, true, t0);
+    r.stop();
+    check(r.deadline() == null, "keyboard leave stops the repeat", .{});
+    r.press(108, true, t0);
+    r.setInfo(0, 250);
+    check(r.deadline() == null, "rate 0 turns repeat off", .{});
+
+    // 1초 누르고 있기(타이머가 제때 깬다): 1 + floor((1000 − 250) / 33.3) = 23.
+    r.setInfo(30, 250);
+    r.press(108, true, 0);
+    var n: u32 = 0;
+    while (r.deadline()) |d| {
+        if (d >= 1_000 * ms) break;
+        if (r.fire(d) != null) n += 1;
+    }
+    check(n == 23, "held for 1 s at 30/s after 250 ms: {d} repeats (want 23)", .{n});
+}
+
+// ── 9 hit-test ──────────────────────────────────────────────────────
+
+fn hitTests(alloc: std.mem.Allocator) !void {
+    var t = ca.Tree.init(alloc);
+    defer t.deinit();
+    const root = try t.create(.{ .frame = .{ .x = 0, .y = 0, .w = 200, .h = 120 } });
+    const a = try t.create(.{ .frame = .{ .x = 10, .y = 10, .w = 100, .h = 60 } });
+    const a1 = try t.create(.{ .frame = .{ .x = 20, .y = 20, .w = 30, .h = 20 } });
+    const ao = try t.create(.{ .frame = .{ .x = -5, .y = -5, .w = 10, .h = 10 } }); // a 밖으로 넘친 자식
+    const b = try t.create(.{ .frame = .{ .x = 60, .y = 40, .w = 100, .h = 60 } }); // a 위에 겹친다(뒤에 붙음)
+    const hid = try t.create(.{ .frame = .{ .x = 0, .y = 100, .w = 50, .h = 20 }, .hidden = true });
+    const zero = try t.create(.{ .frame = .{ .x = 100, .y = 100, .w = 50, .h = 20 }, .opacity = 0 });
+    const m = try t.create(.{ .frame = .{ .x = 160, .y = 0, .w = 30, .h = 40 }, .masks = true });
+    const mc = try t.create(.{ .frame = .{ .x = 20, .y = 30, .w = 40, .h = 40 } }); // 화면 (180,30)..(220,70), m이 y 40까지 자른다
+    try root.addChild(a);
+    try a.addChild(a1);
+    try a.addChild(ao);
+    try root.addChild(b);
+    try root.addChild(hid);
+    try root.addChild(zero);
+    try root.addChild(m);
+    try m.addChild(mc);
+    t.setRoot(root);
+
+    check(t.hitTest(35, 35) == a1, "hit (35,35) is the grandchild a1", .{});
+    check(t.hitTest(15, 15) == a, "hit (15,15) is a", .{});
+    check(t.hitTest(70, 50) == b, "hit (70,50) where a and b overlap is b (added later, drawn on top)", .{});
+    check(t.hitTest(7, 7) == ao, "hit (7,7) is a's child overflowing a (a does not mask)", .{});
+    check(t.hitTest(5, 110) == root, "a hidden layer is not hit (root)", .{});
+    check(t.hitTest(120, 110) == root, "an opacity-0 layer is not hit (root under it)", .{});
+    check(t.hitTest(185, 35) == mc, "inside a masking layer its child is hit", .{});
+    check(t.hitTest(185, 50) == root, "a child clipped away by masks is not hit", .{});
+    check(t.hitTest(200, 60) == null and t.hitTest(-1, 5) == null, "outside the root: nothing (right edge excluded)", .{});
+    check(t.hitTest(16, 10) == a and t.hitTest(110, 30) == root, "left/top edges included, right edge excluded", .{});
+    b.setFrame(.{ .x = 60, .y = 80, .w = 100, .h = 30 });
+    check(t.hitTest(70, 50) == a, "after b moves away (70,50) is a", .{});
+    zero.setOpacity(1);
+    check(t.hitTest(120, 110) == zero, "the layer is hit once it is visible", .{});
+}
+
+// ── 10 kit ──────────────────────────────────────────────────────────
+
+const TV = struct {
+    view: kit.View = undefined,
+    accepts: bool = false,
+    handles: []const input.Key = &.{},
+    scrolls_ok: bool = false,
+    mouse_ok: bool = false,
+    keys: u32 = 0,
+    scrolls: u32 = 0,
+    mouses: u32 = 0,
+    lx: f32 = 0,
+    ly: f32 = 0,
+    focus_on: u32 = 0,
+    focus_off: u32 = 0,
+    wfocus: ?bool = null,
+
+    const vt: kit.VTable = .{
+        .keyDown = keyDown,
+        .scroll = scroll,
+        .mouseDown = mouseDown,
+        .acceptsFocus = acceptsFocus,
+        .focusChanged = focusChanged,
+        .windowFocusChanged = windowFocusChanged,
+    };
+
+    fn init(self: *TV, layer: *ca.Layer, name: []const u8) void {
+        self.view = .{ .layer = layer, .vtable = &vt, .ctx = self, .name = name };
+    }
+    fn me(ctx: *anyopaque) *TV {
+        return @ptrCast(@alignCast(ctx));
+    }
+    fn keyDown(ctx: *anyopaque, ev: input.KeyEvent) bool {
+        const self = me(ctx);
+        for (self.handles) |k| if (k == ev.key) {
+            self.keys += 1;
+            return true;
+        };
+        return false;
+    }
+    fn scroll(ctx: *anyopaque, ev: input.ScrollEvent) bool {
+        _ = ev;
+        const self = me(ctx);
+        if (!self.scrolls_ok) return false;
+        self.scrolls += 1;
+        return true;
+    }
+    fn mouseDown(ctx: *anyopaque, ev: input.ButtonEvent, lx: f32, ly: f32) bool {
+        _ = ev;
+        const self = me(ctx);
+        if (!self.mouse_ok) return false;
+        self.mouses += 1;
+        self.lx = lx;
+        self.ly = ly;
+        return true;
+    }
+    fn acceptsFocus(ctx: *anyopaque) bool {
+        return me(ctx).accepts;
+    }
+    fn focusChanged(ctx: *anyopaque, on: bool) void {
+        const self = me(ctx);
+        if (on) self.focus_on += 1 else self.focus_off += 1;
+    }
+    fn windowFocusChanged(ctx: *anyopaque, on: bool) void {
+        me(ctx).wfocus = on;
+    }
+};
+
+const KitLog = struct {
+    unhandled: u32 = 0,
+    last_code: u32 = 0,
+    last_super: bool = false,
+    focus_names: [16][]const u8 = undefined,
+    focus_n: usize = 0,
+
+    fn onUnhandled(ctx: *anyopaque, ev: input.KeyEvent) void {
+        const self: *KitLog = @ptrCast(@alignCast(ctx));
+        self.unhandled += 1;
+        self.last_code = ev.code;
+        self.last_super = ev.mods.super;
+    }
+    fn onFocus(ctx: *anyopaque, v: ?*kit.View) void {
+        const self: *KitLog = @ptrCast(@alignCast(ctx));
+        if (self.focus_n < self.focus_names.len) self.focus_names[self.focus_n] = if (v) |x| x.name else "-";
+        self.focus_n += 1;
+    }
+};
+
+fn keyEv(code: u32, mods: input.Mods) input.Event {
+    return .{ .key = .{ .code = code, .key = input.keyFromCode(code), .pressed = true, .mods = mods } };
+}
+
+fn kitTests(alloc: std.mem.Allocator) !void {
+    var t = ca.Tree.init(alloc);
+    defer t.deinit();
+    // 뷰 트리: root ─ panel ─ listA, listB(+ 장식 레이어) / hiddenV(숨김) / listC
+    const lroot = try t.create(.{ .frame = .{ .x = 0, .y = 0, .w = 300, .h = 200 } });
+    const lpanel = try t.create(.{ .frame = .{ .x = 0, .y = 0, .w = 200, .h = 200 } });
+    const la = try t.create(.{ .frame = .{ .x = 0, .y = 0, .w = 100, .h = 100 } });
+    const lb = try t.create(.{ .frame = .{ .x = 100, .y = 0, .w = 100, .h = 100 } });
+    const lbdeco = try t.create(.{ .frame = .{ .x = 10, .y = 10, .w = 20, .h = 20 } }); // owner 없는 레이어
+    const lh = try t.create(.{ .frame = .{ .x = 0, .y = 100, .w = 100, .h = 100 }, .hidden = true });
+    const lc = try t.create(.{ .frame = .{ .x = 200, .y = 0, .w = 100, .h = 200 } });
+    try lroot.addChild(lpanel);
+    try lpanel.addChild(la);
+    try lpanel.addChild(lb);
+    try lb.addChild(lbdeco);
+    try lpanel.addChild(lh);
+    try lroot.addChild(lc);
+    t.setRoot(lroot);
+
+    var vroot: TV = .{ .scrolls_ok = true, .mouse_ok = true };
+    var panel: TV = .{ .handles = &.{.left} };
+    var la_v: TV = .{ .accepts = true, .handles = &.{ .down, .up }, .scrolls_ok = true, .mouse_ok = true };
+    var lb_v: TV = .{ .accepts = true, .handles = &.{.down}, .mouse_ok = true };
+    var lh_v: TV = .{ .accepts = true };
+    var lc_v: TV = .{ .accepts = true };
+    vroot.init(lroot, "root");
+    panel.init(lpanel, "panel");
+    la_v.init(la, "listA");
+    lb_v.init(lb, "listB");
+    lh_v.init(lh, "hidden");
+    lc_v.init(lc, "listC");
+    defer inline for (.{ &vroot, &panel, &la_v, &lb_v, &lh_v, &lc_v }) |x| x.view.deinit(alloc);
+    try vroot.view.addChild(alloc, &panel.view);
+    try panel.view.addChild(alloc, &la_v.view);
+    try panel.view.addChild(alloc, &lb_v.view);
+    try panel.view.addChild(alloc, &lh_v.view);
+    try vroot.view.addChild(alloc, &lc_v.view);
+
+    var log: KitLog = .{};
+    var root = kit.Root.init(&t);
+    root.setView(&vroot.view);
+    root.hook = .{ .ctx = &log, .on = KitLog.onFocus };
+    root.unhandled = .{ .ctx = &log, .on = KitLog.onUnhandled };
+
+    // Tab 순환: 아무도 아님 → listA → listB → listC(숨은 것 건너뜀) → listA, Shift+Tab → listC.
+    root.handle(keyEv(input.KEY_TAB, .{}));
+    const s1 = root.first == &la_v.view;
+    root.handle(keyEv(input.KEY_TAB, .{}));
+    const s2 = root.first == &lb_v.view;
+    root.handle(keyEv(input.KEY_TAB, .{}));
+    const s3 = root.first == &lc_v.view;
+    root.handle(keyEv(input.KEY_TAB, .{}));
+    const s4 = root.first == &la_v.view;
+    root.handle(keyEv(input.KEY_TAB, .{ .shift = true }));
+    const s5 = root.first == &lc_v.view;
+    check(s1 and s2 and s3 and s4 and s5, "Tab: none -> listA -> listB -> listC (hidden skipped) -> listA; Shift+Tab -> listC", .{});
+    check(log.focus_n == 5 and std.mem.eql(u8, log.focus_names[2], "listC") and std.mem.eql(u8, log.focus_names[4], "listC"), "focus hook fired on every change ({d})", .{log.focus_n});
+    check(la_v.focus_on == 2 and la_v.focus_off == 2 and lc_v.focus_on == 2 and lc_v.focus_off == 1, "focusChanged: listA on 2 off 2, listC on 2 off 1", .{});
+    root.handle(keyEv(input.KEY_TAB, .{ .ctrl = true }));
+    check(root.first == &lc_v.view and log.unhandled == 1, "Ctrl+Tab does not move focus (unhandled)", .{});
+    root.handle(keyEv(input.KEY_TAB, .{ .shift = true }));
+    check(root.first == &lb_v.view, "Shift+Tab from listC -> listB", .{});
+    // 숨김을 풀면 순서에 든다.
+    lh.setHidden(false);
+    root.handle(keyEv(input.KEY_TAB, .{}));
+    check(root.first == &lh_v.view, "an unhidden view joins the order (listB -> hidden)", .{});
+    lh.setHidden(true);
+
+    // responder chain
+    _ = root.setFirstResponder(&la_v.view);
+    root.handle(keyEv(input.KEY_DOWN, .{}));
+    check(la_v.keys == 1 and panel.keys == 0, "down goes to the first responder listA and stops there", .{});
+    root.handle(keyEv(input.KEY_LEFT, .{}));
+    check(panel.keys == 1 and la_v.keys == 1, "left (not listA's) goes up to the parent panel", .{});
+    const unh0 = log.unhandled;
+    root.handle(keyEv(30, .{ .super = true }));
+    check(log.unhandled == unh0 + 1 and log.last_code == 30 and log.last_super, "Super+A nobody takes reaches unhandled with super", .{});
+    var rel = keyEv(input.KEY_DOWN, .{});
+    rel.key.pressed = false;
+    root.handle(rel);
+    check(la_v.keys == 1 and log.unhandled == unh0 + 1, "a release goes nowhere", .{});
+    check(!root.setFirstResponder(&panel.view) and root.first == &la_v.view, "a view that does not accept focus cannot become first responder", .{});
+    _ = root.setFirstResponder(null);
+    root.handle(keyEv(input.KEY_LEFT, .{}));
+    check(panel.keys == 1 and log.unhandled == unh0 + 2, "with no first responder keys start at the root view", .{});
+
+    // 클릭: listB의 장식 레이어(owner 없음)를 누르면 listB가 포커스, mouseDown은 listB 기준 좌표.
+    root.handle(.{ .button = .{ .code = input.BTN_LEFT, .pressed = true, .x = 115, .y = 15 } });
+    check(root.first == &lb_v.view and lb_v.mouses == 1 and lb_v.lx == 15 and lb_v.ly == 15, "click on listB's undecorated child focuses listB, local (15,15)", .{});
+    root.handle(.{ .button = .{ .code = input.BTN_LEFT, .pressed = false, .x = 115, .y = 15 } });
+    check(lb_v.mouses == 1, "the release is not a mouseDown", .{});
+    root.handle(.{ .button = .{ .code = input.BTN_LEFT, .pressed = true, .x = 50, .y = 150 } });
+    check(root.first == &lb_v.view and vroot.mouses == 1, "click on the panel (not focusable, no mouseDown) keeps focus; root gets the mouseDown", .{});
+    root.handle(.{ .button = .{ .code = 273, .pressed = true, .x = 50, .y = 50 } });
+    check(root.first == &lb_v.view and la_v.mouses == 0, "the right button does nothing", .{});
+
+    // 휠: 포인터 아래 뷰(포커스와 무관). listA는 받고, listC는 안 받아 루트로.
+    root.handle(.{ .scroll = .{ .dy = 10, .discrete = 1, .x = 50, .y = 50 } });
+    check(la_v.scrolls == 1 and root.first == &lb_v.view, "wheel over listA goes to listA while listB has focus", .{});
+    root.handle(.{ .scroll = .{ .dy = 10, .discrete = 1, .x = 250, .y = 50 } });
+    check(vroot.scrolls == 1, "wheel over listC (no scroll) goes up to the root view", .{});
+    check(root.viewAt(15 + 100, 15) == &lb_v.view and root.viewAt(250, 199) == &lc_v.view, "viewAt finds the owner through undecorated layers", .{});
+
+    // 창 포커스
+    root.handle(.{ .focus = false });
+    check(vroot.wfocus == false and la_v.wfocus == false and lh_v.wfocus == false and !root.window_focused, "window focus out reaches every view", .{});
+    root.handle(.{ .focus = true });
+    check(lc_v.wfocus == true and root.window_focused, "window focus in reaches every view", .{});
 }

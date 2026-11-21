@@ -16,12 +16,15 @@
 //!   사각형 하나로 보낸다 — 서버의 화면에는 지난 프레임이 이미 있다.
 //! - 그리기는 이벤트 처리가 끝난 뒤 `run`의 루프에서만 일어난다. 그래서 `invalidate`는 적기만 하고, 앱이 콜백(키 · resize) 안에서
 //!   레이어를 여러 번 바꿔도 한 프레임이 된다(그리는 중에 다시 그리기로 들어가는 일도 없다).
+//! - 입력(TK-M2 plan 확정 1~3): Wayland의 키 · 포인터를 `tk_input.Event`로 바꿔 `Handler.input` 하나로 올린다. 키는 evdev 코드 표와
+//!   서버가 채운 수정키 비트로 읽는다(xkb 없음 — input.zig 머리). 키 반복은 이 층의 몫이다(R-KEY-2, `repeat.zig`) — 그래서 대기는
+//!   `display.dispatch()`가 아니라 연결 fd와 timerfd 둘의 `poll`이다. 포인터는 `wl_pointer.frame` 하나에 이벤트 하나.
 //!
 //! 이 층은 창 층이다(R-ARCH-1의 맨 아래) — 그리는 법(CG)을 모른다. 넘기는 것은 픽셀 판 · 임시 판 · clip이고 판을 z2d로 감싸는
 //! 것은 위 층의 일이다.
 //!
 //! 줄(design 결정 12): `tk> configure w= h= scale=` · `tk> draw w= h= dirty=x,y,w,h us= age=` (+ damage가 dirty와 다르면 ` damage=x,y,w,h`) ·
-//! `tk> commit` · `tk> key code= state=` · `tk> native` · `tk> close`. `dirty=`는 이 버퍼에 다시 그린 사각형(`us`가 잰 것), `age=`는 이 버퍼가
+//! `tk> commit` · `tk> key code= state=`(반복이면 끝에 ` repeat=1`) · `tk> native` · `tk> close`. `dirty=`는 이 버퍼에 다시 그린 사각형(`us`가 잰 것), `age=`는 이 버퍼가
 //! 마지막으로 그려진 뒤 지난 프레임 수(새 버퍼면 0 — 통째). 표준 출력에 버퍼 없이 쓴다(게이트가 `> 파일`로 받는다 — tars-wl-test와 같다).
 
 const std = @import("std");
@@ -32,6 +35,8 @@ const xdg = wayland.client.xdg;
 const tars = wayland.client.tars;
 pub const Rect = @import("tk_geom").Rect;
 const Age = @import("age.zig").Age;
+const Repeat = @import("repeat.zig").Repeat;
+pub const input = @import("tk_input");
 
 /// 서버가 내는 판(WY design 결정 5 · 27 · 46)을 넘지 않는다.
 const COMPOSITOR_VERSION: u32 = 6;
@@ -86,7 +91,7 @@ pub const Frame = struct {
 };
 
 /// 앱의 콜백. `draw`는 `Frame.clip` 안을 그린다. `resize`는 버퍼 크기(물리)나 배율이 바뀔 때 그리기 전에 한 번 — 앱이 루트 레이어의
-/// 크기를 맞추는 자리다(R-TKW-2). `key`는 받은 키(evdev 코드). 둘 다 없어도 된다.
+/// 크기를 맞추는 자리다(R-TKW-2). `input`은 키 · 키보드 포커스 · 포인터 · 휠(`tk_input.Event`). 없어도 된다.
 pub const Handler = struct {
     ctx: *anyopaque,
     draw: *const fn (ctx: *anyopaque, frame: Frame) anyerror!void,
@@ -95,10 +100,20 @@ pub const Handler = struct {
     /// monotonic 시각(ns)으로 부른다 — 그래서 값을 바꾼 tick 하나 뒤에는 늘 그림 하나가 따르고, 그 그림의 frame 콜백이 다음 tick을
     /// 부른다. 앱은 바뀐 것이 없으면 아무것도 안 하면 된다(idle commit 0).
     tick: ?*const fn (ctx: *anyopaque, now_ns: u64) void = null,
-    key: ?*const fn (ctx: *anyopaque, code: u32, pressed: bool) void = null,
+    input: ?*const fn (ctx: *anyopaque, ev: input.Event) void = null,
 };
 
 // ── 버퍼 ───────────────────────────────────────────────────────────
+
+/// `wl_pointer.frame` 하나에 모은 것(TK-M2 plan 확정 3). frame에서 차례로 올린다: 움직임 · 버튼 · 휠 · 나감.
+const PointerPending = struct {
+    motion: bool = false,
+    button: ?struct { code: u32, pressed: bool } = null,
+    dy: f32 = 0,
+    discrete: i32 = 0,
+    axis: bool = false,
+    leave: bool = false,
+};
 
 const Buffer = struct {
     buffer: ?*wl.Buffer = null,
@@ -129,6 +144,7 @@ pub const Window = struct {
     wm_base: ?*xdg.WmBase = null,
     menu_global: ?struct { name: u32, version: u32 } = null,
     keyboard: ?*wl.Keyboard = null,
+    pointer: ?*wl.Pointer = null,
     surface: *wl.Surface = undefined,
     xdg_surface: *xdg.Surface = undefined,
     toplevel: *xdg.Toplevel = undefined,
@@ -155,6 +171,15 @@ pub const Window = struct {
     failed: bool = false,
     commits: u64 = 0,
 
+    /// 지금 수정키(`modifiers`가 바꾼다)와 키 반복, 반복의 타이머.
+    mods: input.Mods = .{},
+    repeat: Repeat = .{},
+    timer_fd: i32 = -1,
+    /// 포인터: 마지막 자리(surface 논리 좌표)와 이번 `frame`까지 모은 것.
+    ptr_x: f32 = 0,
+    ptr_y: f32 = 0,
+    ptr_pending: PointerPending = .{},
+
     const Slot = struct { win: *Window, index: usize };
 
     /// 붙고 창을 연다. 첫 commit(버퍼 없음)까지 보낸다 — 첫 configure가 오면 `run`이 그린다. `title`은 app id로도 쓴다.
@@ -165,6 +190,11 @@ pub const Window = struct {
         const win = try alloc.create(Window);
         win.* = .{ .alloc = alloc, .handler = handler, .display = display, .registry = registry };
         for (&win.slots, 0..) |*s, i| s.* = .{ .win = win, .index = i };
+        errdefer alloc.destroy(win);
+        const tfd = linux.timerfd_create(.MONOTONIC, .{ .CLOEXEC = true, .NONBLOCK = true });
+        if (linux.errno(tfd) != .SUCCESS) return error.TimerfdFailed;
+        win.timer_fd = @intCast(tfd);
+        errdefer _ = linux.close(win.timer_fd);
         registry.setListener(*Window, registryListener, win);
         if (display.roundtrip() != .SUCCESS) return error.RoundtripFailed;
 
@@ -200,19 +230,79 @@ pub const Window = struct {
     pub fn deinit(self: *Window) void {
         for (&self.bufs) |*b| b.destroy();
         if (self.scratch.len != 0) self.alloc.free(self.scratch);
+        if (self.timer_fd >= 0) _ = linux.close(self.timer_fd);
         self.display.disconnect();
         self.alloc.destroy(self);
     }
 
     /// close를 받을 때까지 이벤트를 돈다. 그리기는 이벤트 묶음(configure · done · release · 키)을 처리한 뒤 여기서만 일어난다.
-    /// 그린 요청은 다음 `dispatch`가 보낸다(libwayland의 dispatch는 기다리기 전에 flush한다).
+    ///
+    /// 한 바퀴(TK-M2 plan 확정 2): 그릴 것을 그리고 → `prepareRead`(큐에 이미 있으면 그것부터 처리하고 다시) → `flush`(그린 요청을
+    /// 보낸다) → 반복의 시각으로 timerfd를 맞추고 → 연결 fd와 timerfd를 `poll` → 읽을 것이 있으면 `readEvents`, 아니면 `cancelRead`
+    /// → `dispatchPending` → 반복 하나. libwayland의 `dispatch()`가 하던 일(flush · 기다림 · 읽기 · 처리)에 타이머를 끼운 모양이다.
     pub fn run(self: *Window) !void {
+        const fd = self.display.getFd();
         while (self.running) {
             self.maybeDraw();
             if (!self.running) break;
-            if (self.display.dispatch() != .SUCCESS) return error.DispatchFailed;
+            if (!self.display.prepareRead()) {
+                if (self.display.dispatchPending() != .SUCCESS) return error.DispatchFailed;
+                continue;
+            }
+            // 보낼 것이 소켓에 다 안 들어갔으면(AGAIN) 쓸 수 있을 때도 깬다.
+            const fl = self.display.flush();
+            const want_out = fl == .AGAIN;
+            if (fl != .SUCCESS and !want_out) {
+                self.display.cancelRead();
+                return error.DispatchFailed;
+            }
+            self.armTimer();
+            var fds = [2]linux.pollfd{
+                .{ .fd = fd, .events = linux.POLL.IN | (if (want_out) @as(i16, linux.POLL.OUT) else 0) },
+                .{ .fd = self.timer_fd, .events = linux.POLL.IN },
+            };
+            const rc = linux.poll(&fds, fds.len, -1);
+            if (linux.errno(rc) != .SUCCESS) {
+                self.display.cancelRead();
+                if (linux.errno(rc) == .INTR) continue;
+                return error.PollFailed;
+            }
+            if (fds[0].revents & (linux.POLL.IN | linux.POLL.ERR | linux.POLL.HUP) != 0) {
+                if (self.display.readEvents() != .SUCCESS) return error.DispatchFailed;
+            } else {
+                self.display.cancelRead();
+            }
+            if (fds[1].revents & linux.POLL.IN != 0) {
+                var n: u64 = 0;
+                _ = linux.read(self.timer_fd, @ptrCast(&n), 8);
+            }
+            if (self.display.dispatchPending() != .SUCCESS) return error.DispatchFailed;
+            // 읽은 이벤트를 먼저 처리한다 — 같은 깨움에 뗌이 함께 왔으면 반복은 이미 멈췄다(뗀 키를 한 번 더 내지 않는다).
+            self.fireRepeat();
         }
         if (self.failed) return error.DrawFailed;
+    }
+
+    /// timerfd를 반복의 다음 시각(monotonic 절대 시각)에 맞춘다. 반복이 없으면 끈다(0).
+    fn armTimer(self: *Window) void {
+        var spec: linux.itimerspec = .{ .it_interval = .{ .sec = 0, .nsec = 0 }, .it_value = .{ .sec = 0, .nsec = 0 } };
+        if (self.repeat.deadline()) |d| {
+            // 0은 "끈다"라 이미 지난 시각도 1 ns 뒤로.
+            const t = @max(d, 1);
+            spec.it_value = .{ .sec = @intCast(t / std.time.ns_per_s), .nsec = @intCast(t % std.time.ns_per_s) };
+        }
+        _ = linux.timerfd_settime(self.timer_fd, .{ .ABSTIME = true }, &spec, null);
+    }
+
+    /// 반복할 때가 됐으면 키 하나(`repeat = true`)를 올린다 — 많아야 하나(repeat.zig).
+    fn fireRepeat(self: *Window) void {
+        const code = self.repeat.fire(nowNs()) orelse return;
+        say("key code={d} state=1 repeat=1", .{code});
+        self.emit(.{ .key = .{ .code = code, .key = input.keyFromCode(code), .pressed = true, .repeat = true, .mods = self.mods } });
+    }
+
+    fn emit(self: *Window, ev: input.Event) void {
+        if (self.handler.input) |f| f(self.handler.ctx, ev);
     }
 
     /// 사각형 `r`(물리, 버퍼 좌표)이 바뀌었다. 적기만 한다 — 그리기는 `run`의 다음 바퀴(frame을 기다리는 중이면 그 `done` 뒤).
@@ -434,20 +524,79 @@ fn seatListener(seat: *wl.Seat, event: wl.Seat.Event, win: *Window) void {
             } else if (!c.capabilities.keyboard and win.keyboard != null) {
                 win.keyboard.?.release();
                 win.keyboard = null;
+                win.repeat.stop();
+            }
+            // 포인터(TK-M2, 요구사항 결정 11 — 클릭 선택과 휠 스크롤). `set_cursor`는 보내지 않는다 — 서버가 terminal의 화살표를 그린다.
+            if (c.capabilities.pointer and win.pointer == null) {
+                const p = seat.getPointer() catch return;
+                p.setListener(*Window, pointerListener, win);
+                win.pointer = p;
+            } else if (!c.capabilities.pointer and win.pointer != null) {
+                win.pointer.?.release();
+                win.pointer = null;
             }
         },
         .name => {},
     }
 }
 
-/// 키는 줄 하나와 앱의 콜백(TK-M2의 responder 전까지). 키맵 fd는 닫는다 — TK-M0은 evdev 코드만 본다.
+/// 키는 줄 하나와 `Handler.input`. 키맵 fd는 닫는다 — 서버의 키맵은 고정 us · pc105 텍스트이고 수정키 비트를 서버가 직접 채우므로
+/// (R-WY-7) evdev 코드 표(`tk_input`)로 읽으면 서버가 뜻한 그대로다(TK design 결정 13 — xkb 없음, initrd에 libxkbcommon도 없다).
 fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, win: *Window) void {
     switch (event) {
         .keymap => |k| _ = linux.close(k.fd),
         .key => |k| {
             const pressed = k.state == .pressed;
             say("key code={d} state={d}", .{ k.key, @intFromBool(pressed) });
-            if (win.handler.key) |f| f(win.handler.ctx, k.key, pressed);
+            if (pressed) win.repeat.press(k.key, input.repeats(k.key), nowNs()) else win.repeat.release(k.key);
+            win.emit(.{ .key = .{ .code = k.key, .key = input.keyFromCode(k.key), .pressed = pressed, .mods = win.mods } });
+        },
+        .modifiers => |m| win.mods = input.modsFromMask(m.mods_depressed | m.mods_latched, m.mods_locked),
+        .repeat_info => |r| win.repeat.setInfo(r.rate, r.delay),
+        // 서버는 enter의 눌린 키 목록을 비워 보낸다(R-KEY-7). 떠나면 반복을 멈춘다.
+        .enter => win.emit(.{ .focus = true }),
+        .leave => {
+            win.repeat.stop();
+            win.mods = .{};
+            win.emit(.{ .focus = false });
+        },
+    }
+}
+
+/// 포인터. 이벤트를 모았다가 `frame`에서 올린다(TK-M2 plan 확정 3). 좌표는 surface 논리 좌표(wl_fixed) — 레이어 frame과 같은 단위다.
+/// 서버는 seat 판 5 이상에 늘 `frame`을 보낸다(terminal `server.zig`의 pointer 함수들).
+fn pointerListener(_: *wl.Pointer, event: wl.Pointer.Event, win: *Window) void {
+    const pp = &win.ptr_pending;
+    switch (event) {
+        .enter => |e| {
+            win.ptr_x = @floatCast(e.surface_x.toDouble());
+            win.ptr_y = @floatCast(e.surface_y.toDouble());
+            pp.motion = true;
+            pp.leave = false;
+        },
+        .motion => |m| {
+            win.ptr_x = @floatCast(m.surface_x.toDouble());
+            win.ptr_y = @floatCast(m.surface_y.toDouble());
+            pp.motion = true;
+        },
+        .leave => pp.leave = true,
+        .button => |b| pp.button = .{ .code = b.button, .pressed = b.state == .pressed },
+        .axis => |a| if (a.axis == .vertical_scroll) {
+            pp.dy += @floatCast(a.value.toDouble());
+            pp.axis = true;
+        },
+        .axis_discrete => |d| if (d.axis == .vertical_scroll) {
+            pp.discrete += d.discrete;
+        },
+        .frame => {
+            const x = win.ptr_x;
+            const y = win.ptr_y;
+            const p = pp.*;
+            pp.* = .{};
+            if (p.motion) win.emit(.{ .pointer_motion = .{ .x = x, .y = y } });
+            if (p.button) |b| win.emit(.{ .button = .{ .code = b.code, .pressed = b.pressed, .x = x, .y = y } });
+            if (p.axis) win.emit(.{ .scroll = .{ .dy = p.dy, .discrete = p.discrete, .x = x, .y = y } });
+            if (p.leave) win.emit(.pointer_leave);
         },
         else => {},
     }

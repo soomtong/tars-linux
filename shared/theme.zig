@@ -66,6 +66,10 @@ pub const TK_TEXT_DIM: u32 = 0x0098A4B4;
 pub const TK_SEPARATOR: u32 = 0x0034425A;
 /// 선택 바탕. 지금은 강조 면과 같은 값이다 — 이름을 따로 두어 위젯이 뜻으로 부르게(TK-M1 plan 확정 8).
 pub const TK_SELECTION: u32 = TK_ACCENT;
+/// 포커스가 아닌 선택 바탕(TK-M2 — 리스트가 first responder가 아니거나 창이 키보드 포커스를 잃었을 때). 강조의 파랑을 바탕 쪽으로 눌러
+/// 채도를 뺀 회청색이다 — 바탕(202C3C)과 면(2A3850)보다 밝아 선택 자리는 보이되 활성 강조(3C78D8)와 한눈에 갈린다. 셸 색 · 다른 앱 색
+/// 어느 것과도 같지 않다(`tk_test` 7이 지킨다).
+pub const TK_SELECTION_INACTIVE: u32 = 0x00465A78;
 
 /// 모서리 반지름(작은 것 · 기본). 크기는 논리 픽셀.
 pub const TK_RADIUS_S: u32 = 6;

@@ -4,7 +4,8 @@
 //! 나오는 것
 //!   모듈 `tk`          층들을 잇는 뿌리(src/tk.zig). 게스트(x86_64) 대상이다. 그 아래 층마다 모듈 하나(R-ARCH-1, TK-M1):
 //!                      `tk_geom`(사각형, 층 밖) · `tk_window`(창, src/window/) · `tk_cg`(판 · 렌더 백엔드 · 글자, src/cg/) ·
-//!                      `tk_ca`(레이어 트리, src/ca/). 아래 층이 위 층을 부를 import 이름을 여기서 주지 않고, 경로로 부르면
+//!                      `tk_ca`(레이어 트리, src/ca/) · `tk_kit`(AppKit — 뷰 · responder, src/kit/, TK-M2)과 층 밖의 순수 값
+//!                      `tk_input`(입력 이벤트, src/input.zig). kit은 창 층을 모른다. 아래 층이 위 층을 부를 import 이름을 여기서 주지 않고, 경로로 부르면
 //!                      그 파일이 두 모듈에 들어 컴파일이 막는다("file exists in modules 'tk_ca' and 'tk_cg'" — 실측) — 층 경계를
 //!                      컴파일이 지킨다.
 //!   `tars-tk-demo`     TK-M0의 시험 앱(plan 확정 5). initrd의 /usr/bin에 실린다.
@@ -90,6 +91,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     tk_window.addImport("tk_geom", layers.geom);
+    tk_window.addImport("tk_input", layers.input);
     tk_window.addImport("wayland", wayland);
 
     // ── 모듈 tk ──────────────────────────────────────────────────────
@@ -104,6 +106,8 @@ pub fn build(b: *std.Build) void {
     tk.addImport("tk_window", tk_window);
     tk.addImport("tk_cg", layers.cg);
     tk.addImport("tk_ca", layers.ca);
+    tk.addImport("tk_input", layers.input);
+    tk.addImport("tk_kit", layers.kit);
     tk.addIncludePath(terminal_vendor);
     tk.addCSourceFile(.{ .file = stb_impl, .flags = &.{} });
     tk.linkSystemLibrary("m", .{});
@@ -121,7 +125,8 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(b.addExecutable(.{ .name = "tars-tk-demo", .root_module = demo_mod }));
 
     // ── 호스트 검사 ─────────────────────────────────────────────────────
-    // 창 층의 Wayland 부분은 빼고 CG · CA와 창 층의 순수 부분(버퍼 나이 `window/age.zig`) — 판은 메모리 배열이다(R-ARCH-4).
+    // 창 층의 Wayland 부분은 빼고 CG · CA · kit과 창 층의 순수 부분(버퍼 나이 `window/age.zig` · 키 반복 `window/repeat.zig`) — 판은
+    // 메모리 배열이다(R-ARCH-4).
     const host_layers = layerModules(b, host_target, optimize, glyph_host, z2d_host);
     const test_mod = b.createModule(.{
         .root_source_file = b.path("src/tk_test.zig"),
@@ -133,6 +138,8 @@ pub fn build(b: *std.Build) void {
     test_mod.addImport("tk_geom", host_layers.geom);
     test_mod.addImport("tk_cg", host_layers.cg);
     test_mod.addImport("tk_ca", host_layers.ca);
+    test_mod.addImport("tk_input", host_layers.input);
+    test_mod.addImport("tk_kit", host_layers.kit);
     test_mod.addIncludePath(terminal_vendor);
     test_mod.addCSourceFile(.{ .file = stb_impl, .flags = &.{} });
     test_mod.linkSystemLibrary("m", .{});
@@ -143,15 +150,17 @@ pub fn build(b: *std.Build) void {
     b.step("test", "호스트 검사(tk_test)").dependOn(&run_test.step);
 }
 
-/// 대상 하나의 `tk_geom` · `tk_cg` · `tk_ca`(게스트와 호스트 검사가 같은 모양으로 받는다). CA는 CG를, CG는 z2d · glyph를 안다.
+/// 대상 하나의 `tk_geom` · `tk_input` · `tk_cg` · `tk_ca` · `tk_kit`(게스트와 호스트 검사가 같은 모양으로 받는다). kit은 CA · CG · 층 밖 값을,
+/// CA는 CG를, CG는 z2d · glyph를 안다.
 fn layerModules(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.lang.Optimize,
     glyph: *std.Build.Module,
     z2d: *std.Build.Module,
-) struct { geom: *std.Build.Module, cg: *std.Build.Module, ca: *std.Build.Module } {
+) struct { geom: *std.Build.Module, input: *std.Build.Module, cg: *std.Build.Module, ca: *std.Build.Module, kit: *std.Build.Module } {
     const geom = b.createModule(.{ .root_source_file = b.path("src/geom.zig"), .target = target, .optimize = optimize });
+    const input = b.createModule(.{ .root_source_file = b.path("src/input.zig"), .target = target, .optimize = optimize });
     const cg = b.createModule(.{ .root_source_file = b.path("src/cg/cg.zig"), .target = target, .optimize = optimize });
     cg.addImport("tk_geom", geom);
     cg.addImport("glyph", glyph);
@@ -159,7 +168,12 @@ fn layerModules(
     const ca = b.createModule(.{ .root_source_file = b.path("src/ca/ca.zig"), .target = target, .optimize = optimize });
     ca.addImport("tk_geom", geom);
     ca.addImport("tk_cg", cg);
-    return .{ .geom = geom, .cg = cg, .ca = ca };
+    const kit = b.createModule(.{ .root_source_file = b.path("src/kit/kit.zig"), .target = target, .optimize = optimize });
+    kit.addImport("tk_geom", geom);
+    kit.addImport("tk_input", input);
+    kit.addImport("tk_cg", cg);
+    kit.addImport("tk_ca", ca);
+    return .{ .geom = geom, .input = input, .cg = cg, .ca = ca, .kit = kit };
 }
 
 /// C 헤더 번역(terminal/build.zig의 같은 이름 함수와 같다 — ZU-M1).

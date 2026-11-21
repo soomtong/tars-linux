@@ -35,8 +35,6 @@ const SAMPLES_H: f32 = 4 * 16 + 8 + 4 * 17;
 const SAMPLES_PAD: f32 = 8;
 const FACE_W: f32 = 64;
 const FACE_H: f32 = 32;
-/// evdev KEY_SPACE.
-const KEY_SPACE: u32 = 57;
 
 const App = struct {
     io: std.Io,
@@ -102,9 +100,14 @@ const App = struct {
         stack.layout(.{ .x = 0, .y = 0, .w = W, .h = H });
     }
 
-    fn key(ctx: *anyopaque, code: u32, pressed: bool) void {
+    /// 입력(TK-M2 — 창 층의 `Handler.input`). 지금 화면이 쓰는 것은 `space`의 누름 하나다(반복은 무시 — 누르고 있어도 한 번).
+    fn input(ctx: *anyopaque, ev: tk.input.Event) void {
         const self: *App = @ptrCast(@alignCast(ctx));
-        if (code != KEY_SPACE or !pressed) return;
+        const k = switch (ev) {
+            .key => |k| k,
+            else => return,
+        };
+        if (k.key != .space or !k.pressed or k.repeat) return;
         self.face_on = !self.face_on;
         self.tree.animate(self.face, .{ .opacity = if (self.face_on) 1 else 0 }, self.anim_ms, self.easing) catch |e| {
             tk.window.say("error anim={s}", .{@errorName(e)});
@@ -215,7 +218,7 @@ pub fn main(init: std.process.Init) !u8 {
         .ctx = &app,
         .draw = App.draw,
         .resize = App.resize,
-        .key = App.key,
+        .input = App.input,
         .tick = App.tick,
     }) catch |e| {
         tk.window.say("error open={s}", .{@errorName(e)});

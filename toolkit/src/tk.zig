@@ -1,8 +1,10 @@
 //! TARS 툴킷 `tk`(TK design). 층은 아래에서 위로 창(`tk_window`) · CG(`tk_cg` — 판 · 렌더 백엔드 · 글자) · CA(`tk_ca` — 레이어 트리 ·
-//! 더티 · 애니메이션 · 스택)이고 위젯(AppKit)은 TK-M2부터 그 위에 선다(R-ARCH-1). 층마다 build 모듈이 따로라 아래 층이 위 층을 import하면 컴파일이 막는다.
-//! 사각형(`tk_geom`)은 층 밖의 순수 값이다. 테마는 terminal과 같은 `shared/theme.zig`이고 앱은 그것을 `tokens`로 부른다(R-CA-5).
+//! 더티 · 애니메이션 · 스택 · hit-test) · AppKit(`tk_kit` — 뷰 · responder · 포커스, TK-M2)이다(R-ARCH-1). 층마다 build 모듈이 따로라 아래 층이
+//! 위 층을 import하면 컴파일이 막는다. kit은 창 층도 모른다(TK design 결정 13).
+//! 사각형(`tk_geom`)과 입력 이벤트(`tk_input`)는 층 밖의 순수 값이다. 테마는 terminal과 같은 `shared/theme.zig`이고 앱은 그것을 `tokens`로 부른다(R-CA-5).
 //!
-//! 이 파일은 층들을 잇는 자리다 — 트리의 더티 · 애니메이션 알림을 창에(`connect`), 창의 판에 트리를(`drawTree`).
+//! 이 파일은 층들을 잇는 자리다 — 트리의 더티 · 애니메이션 알림을 창에(`connect`), 창의 판에 트리를(`drawTree`), kit의 포커스 알림을
+//! 창 층의 줄에(`connectRoot`). 창의 입력은 앱의 `Handler.input`이 `kit.Root.handle`에 넘긴다(앱이 자기 키를 먼저 볼 자리를 남긴다).
 
 const std = @import("std");
 
@@ -11,6 +13,8 @@ pub const geom = @import("tk_geom");
 pub const window = @import("tk_window");
 pub const cg = @import("tk_cg");
 pub const ca = @import("tk_ca");
+pub const input = @import("tk_input");
+pub const kit = @import("tk_kit");
 
 pub const Rect = geom.Rect;
 pub const RectF = geom.RectF;
@@ -39,6 +43,15 @@ fn animEvent(_: *anyopaque, ev: ca.anim.Event) void {
         .start => |s| window.say("anim start prop={s} dur={d}", .{ @tagName(s.prop), s.dur_ms }),
         .end => |e| window.say("anim end prop={s} frames={d} ms={d}", .{ @tagName(e.prop), e.frames, e.ms }),
     }
+}
+
+/// first responder가 바뀌면 `tk> focus view=NAME`(아무도 아니면 `view=-`) 줄(TK-M2 plan 확정 14).
+pub fn connectRoot(root: *kit.Root) void {
+    root.hook = .{ .ctx = root, .on = focusEvent };
+}
+
+fn focusEvent(_: *anyopaque, v: ?*kit.View) void {
+    window.say("focus view={s}", .{if (v) |x| x.name else "-"});
 }
 
 fn sinkInvalidate(ctx: *anyopaque, r: Rect) void {
