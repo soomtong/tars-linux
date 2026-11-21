@@ -4,7 +4,7 @@
 
 Date: 2026-11-20
 Status: TK-M5 끝(2026-11-21, `08fb7fe`, 루트 게이트 36/36). 사용자 위임(2026-11-18 "주요 결정은 너의 의견에 따를 테니까")으로 Claude가 정했다.
-다음은 TK-M6 plan(마지막). 브랜치 `app-layer-0-3`.
+TK-M6 plan `docs/plans/2026-11-21-tars-ui-toolkit-tk-m6.md`(마지막). 브랜치 `app-layer-0-3`.
 
 계기: App Layer의 3단(`docs/plans/2026-11-18-tars-app-layer-roadmap.md` "3단 — TK", 4판 — WY-M6 뒤). 요구사항
 `2026-11-18-tars-app-layer-requirements.md`의 결정 4 · 9 · 13, R-ARCH · R-TKW · R-CG · R-TXT · R-CA · R-KIT · R-FM.
@@ -92,6 +92,12 @@ stb_truetype 비례폭 글자. terminal과는 `shared/`의 테마 색 · 글리�
     포커스면 비운다. `tars_menu_v1` 판 2는 toplevel마다의 모델을 요청 여러 개 + commit으로 통째 교체하고(wl_array 직렬화는 손 파서가 는다), 단축키는 구조(mods · evdev
     코드)로 받아 서버가 글을 그린다. 서버는 표시만 하고 단축키 자체는 앱이 키로 받는다. 여는 키는 `Cmd+Shift+/`. 드롭다운은 프레임의 마지막 그리기이고 열기 · 닫기는
     통째 프레임이다(밑 픽셀 저장 없음). verify의 그림자가 같은 함수로 같은 순서에 그린다.
+17. 메뉴 모델과 미리보기(TK-M6, 조사 `tk-m6`): 메뉴 항목 하나는 action 하나이고 누가 하는지는 responder chain이 정한다(`perform` · `validate` — macOS 꼴). 그래서
+    단축키의 정의가 메뉴 모델 한 곳에 남는다(R-KIT-9): Super가 섞인 키는 메뉴 표가 먼저, 수정키 없는 키는 chain이 거절한 뒤에. 비활성은 입력 이벤트 뒤에만 다시 셈해
+    보낸다(열린 메뉴가 앱의 commit으로 닫히지 않게 — 프로토콜에 `opened`가 없다). 이미지 디코더는 툴킷이 따로 컴파일한다(결정 2의 "나누지 않는다" — 요구사항 R-CG-3의
+    물음에 대한 답이다. 결정 2 본문의 "결정 9"는 이 답을 가리킨 것으로 번호가 엇갈렸다): stb_image의 PNG + JPEG, 상한은 입력 16 MiB · 한 변 8192 · 넓이 × 4 ≤ 64 MiB.
+    R-FM-7의 원칙: 믿을 수 없는 파서는 파일을 열지 않고 상한 안의 바이트만 받는 순수 함수이고 크기는 머리로 먼저 거른다. 그 함수 경계가 격리의 자리라 나중에 별도
+    프로세스(seccomp + 파이프)로 옮겨도 부르는 쪽이 안 바뀐다 — 구현은 뒤로. milestone 표 TK-M6의 "녹화 C"는 체인 판정으로 바꿔 닫고 녹화 자체는 사람의 일로 남긴다.
 
 ## Milestone
 
