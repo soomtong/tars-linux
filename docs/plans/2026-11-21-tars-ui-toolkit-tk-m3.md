@@ -90,4 +90,13 @@ Status: 진행 중. 브랜치 `app-layer-0-3`.
 
 ## 결과
 
-(단계마다 채운다.)
+구현은 `tk-m3`(Herdr, Opus — 조사도 같은 에이전트), lead는 대조 · 게이트 · commit.
+
+1. 단계 A `99e8567`: `kit/column.zig`(`ColumnView` · `ColumnSource` · 열 풀 32) · `kit/split.zig` · List의 `reload` · `restore` · `reset` · delegate ·
+   `View.removeChild` · `Root.viewRemoved` · 토큰 `size.column` · `size.preview` · 창 층 `Handler.idle`. 화면 변화 0: 체인 toolkit 두 번 · terminal PASS, 판정 1~14의
+   문장 그대로. 호스트 검사 덩어리 12 · 13(가짜 트리로 `→ → ←` = n 3 · focus 1 · scroll 201, 풀 300바퀴 뒤 레이어 25 그대로, 깊이 32, 부분 = 통째 300단계).
+   plan과 달라진 것: (가) 버린 열은 `removeChild`만(hidden 없음 — 루트에 안 붙은 레이어는 안 그려진다). (나) 가로 스크롤에 상한(열을 버리거나 창이 넓어지면
+   마지막 열이 보이는 가장 작은 열 경계로). (다) delegate가 안 바뀐 선택도 알린다 — 포커스가 아닌 열의 선택된 행을 누르면 오른쪽 열을 남긴 채 포커스만.
+   (라) column view가 `Root`를 받아 first responder를 직접 옮긴다. (마) "불러오는 중…" 같은 문구는 kit이 아니라 앱이 그린다(kit은 글꼴을 모른다).
+   lead가 대조에서 찾은 것: 이미 열린 오른쪽 열로 다시 `→`하면 소스를 새로 열고 오른쪽을 버린다(로딩 취소 콜백과 엇갈리고 그 열의 선택을 잃는다) — 오른쪽 열이
+   남아 있으면 늘 지금 선택의 열이므로 포커스만 옮기게 단계 B에서 고친다.
