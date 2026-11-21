@@ -113,4 +113,13 @@ Status: 진행 중. 브랜치 `app-layer-0-3`.
 
 ## 결과
 
-(단계마다 채운다.)
+구현은 `tk-m2`(Herdr, Opus — 조사도 같은 에이전트), lead는 대조 · 게이트 · commit.
+
+1. 단계 A `f31b239`: `input.zig`(모듈 `tk_input`) · `window/repeat.zig` · `kit/`(View · Root) · CA `hitTest` · `Layer.owner` · 창 층의 poll 루프와 포인터 ·
+   토큰 `TK_SELECTION_INACTIVE = 465A78`(활성 강조의 채도를 뺀 회청색 — 바탕 · 활성과 채널 차가 커 덤프 판정이 갈린다). 화면 변화 0: 체인 toolkit 두 번 ·
+   terminal PASS, 판정 1~9의 문장이 그대로(애니메이션 163프레임, 부분 draw 중앙 55 µs — poll 루프가 그리기를 느리게 하지 않았다). 호스트 검사 덩어리 8~10
+   (반복 13줄 · hit-test 12줄 · kit 19줄), compile MaxRSS 503 MB.
+   plan과 달라진 것: (가) 잇는 자리 — 창이 Root를 직접 부르지 않고 앱의 `input` 콜백이 `root.handle(ev)`로 넘긴다(앱이 자기 키를 먼저 볼 자리),
+   `tk.connectRoot`는 포커스 줄 훅만. (나) 키 뗌은 뷰에 안 간다, 클릭은 왼쪽 누름만. (다) 반복은 `dispatchPending` 뒤에 낸다(같은 깨움에 온 뗌이 먼저 멈추게).
+   (라) keyboard `leave`에 수정키도 비운다. (마) 불투명도 0은 하위 트리째 hit-test에서 빠진다. (바) `size.row` 토큰은 단계 B로.
+   배운 것: 같은 작업 트리에서 체인 둘을 겹쳐 돌리면 `terminal/.zig-cache` 빌드가 경합한다(`libhighway.a`를 못 엶).
