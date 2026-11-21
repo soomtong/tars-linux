@@ -175,7 +175,7 @@ pane에는 `wl_pointer`의 enter · leave · motion · button · axis가 간다.
 |---|---|---|---|
 | strip 워크스페이스 | SW | `terminal/src/layout.zig` 등 | 지금 `pane/check.sh`를 키운다 |
 | Wayland 서버 | WY | `terminal/src/` | 새 `wayland/check.sh` |
-| 툴킷과 첫 앱 | TK | `toolkit/` · `apps/files/` | 새 `toolkit/check.sh` |
+| 툴킷과 첫 앱 | TK | `toolkit/`(첫 앱은 `toolkit/src/files/` — TK design 결정 14가 고침) | 새 `toolkit/check.sh` |
 | Chromium | CR | devlayer 묶음 | 새 `browser/check.sh` |
 
 `WL`은 wifi가 쓰므로 Wayland는 `WY`다. 둠 포트는 GPL이라 TARS 저장소 밖의

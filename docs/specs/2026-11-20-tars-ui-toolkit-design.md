@@ -4,7 +4,7 @@
 
 Date: 2026-11-20
 Status: TK-M2 끝(2026-11-21, `2619e10`, 루트 게이트 36/36). 사용자 위임(2026-11-18 "주요 결정은 너의 의견에 따를 테니까")으로 Claude가 정했다.
-다음은 TK-M3 plan. 브랜치 `app-layer-0-3`.
+TK-M3 plan `docs/plans/2026-11-21-tars-ui-toolkit-tk-m3.md`. 브랜치 `app-layer-0-3`.
 
 계기: App Layer의 3단(`docs/plans/2026-11-18-tars-app-layer-roadmap.md` "3단 — TK", 4판 — WY-M6 뒤). 요구사항
 `2026-11-18-tars-app-layer-requirements.md`의 결정 4 · 9 · 13, R-ARCH · R-TKW · R-CG · R-TXT · R-CA · R-KIT · R-FM.
@@ -81,6 +81,9 @@ stb_truetype 비례폭 글자. terminal과는 `shared/`의 테마 색 · 글리�
     libxkbcommon이 없다. 글자 키의 문자 표는 TK-M4. 키 반복은 창 층의 몫이다(R-KEY-2, `repeat_info` + timerfd — 대기 루프가 poll이 된다). 창 층은 순수 값
     모듈 `input`의 이벤트를 올리고, AppKit 층 `kit`은 창 층을 모른다(호스트 검사 — R-ARCH-4). 모양은 `window → cg → ca → kit`과 층 밖의 `geom` · `input`.
     hit-test는 CA, 뷰가 레이어를 가지고 레이어는 `owner` 꼬리표만 든다.
+14. 첫 앱(TK-M3, 조사 `tk-m3`): `tars-files`의 소스는 `toolkit/src/files/`이고 `toolkit/build.zig`의 둘째 실행 파일이다(요구사항 결정 12의 `apps/files/`를 고친다 —
+    앱은 `tk` 모듈만 import하므로 경계는 import가 지키고, 호스트 검사 하나가 모델까지 돈다). column view는 `→`가 여는 명시 모델(자동 따라가기는 미리보기가 올 때),
+    디렉터리 로딩은 스레드가 아니라 메인 루프의 조각 읽기(창 층 `Handler.idle`), 안정 선택의 열쇠는 이름이고 갱신의 계기는 창이 포커스를 다시 얻을 때다.
 
 ## Milestone
 
