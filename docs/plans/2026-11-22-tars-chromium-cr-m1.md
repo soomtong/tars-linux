@@ -88,4 +88,17 @@ Status: 진행 중. 브랜치 `app-layer-0-3`.
 
 ## 결과
 
-(단계마다 채운다.)
+구현은 `cr-m1`(Herdr, Opus — 조사도 같은 에이전트), lead는 대조 · 게이트 · commit.
+
+1. 단계 A `3fc9e75`: `devlayer/snapshot`(값 한 줄) · `harvest.sh`(sources를 그 시각으로 · 캐시 해시에 시각 · 빼기 규칙 셋) · `harvest-skip.tsv`(systemd 넷) · manifest의
+   browser 두 줄 · Makefile(`DEV_LAYERS`에 browser · `DEV_SNAPSHOT`). `make dev-layers`: 묶음 15개 모두 `differs=0 dangling=0 unresolved=0`, browser
+   `files=2810 unpacked=740MiB zstd15=294MiB`. 체인 devtools(1,133초) · display(482초) · wayland(528초) PASS, verify mismatch 0.
+   다시 구운 debian 묶음 여덟은 옛 것과 크기가 같다 — 달라진 것은 사라진 `usr/lib/systemd/…` 경로(base 18 · server 15 · media 2 · lang-script 2, 새 빼기 규칙의 몫 — TARS에
+   systemd가 없어 읽는 것이 없다)와 base의 `linux-libc-dev` 6.12.116 → 6.12.117(의존으로 오는 것) 하나다. 거두기는 아홉 묶음에 약 21분, 캐시 상태의 `make dev-layers`는
+   149 → 156초(게이트가 매번 더하는 것 약 7초).
+   plan과 달라진 것: (가) snapshot 시각은 `20261119T120000Z`다(plan의 21일 0시가 아니라). 21일에는 `php8.4-cli=8.4.27`이 없다(11-19 18시에 8.4.28로 바뀜) — 시각은
+   "manifest의 모든 판이 함께 있는 가장 늦은 시각"이어야 한다는 규칙이 여기서 나왔다. chromium 156과 initrd의 glibc `+deb13u4`는 이 시각에도 맞다.
+   (나) server의 pgdg 의존 넷(`postgresql-client-18` · `libpq5` 18.7-1.pgdg13+2, `postgresql-common` · `postgresql-client-common` 295.pgdg13+1)을 manifest에 판 고정으로
+   더했다 — snapshot과 무관한 live vendor-repo의 재빌드(`+2` → `+5`)로 `postgresql-18 +2`가 "held broken packages"에 걸렸다. 옛 캐시가 가려 온 것을 모두 다시 거두며
+   처음 봤다.
+   ISO: `make iso`는 `ISO_LAYERS`만 보고 릴리스의 판들은 묶음을 이름으로 적으므로 기본 판의 내용은 그대로다. `make iso-full`(로컬 전용)만 browser까지 싣는다.
