@@ -4,7 +4,7 @@
 
 Date: 2026-11-20
 Status: TK-M1 끝(2026-11-21, `c270732`, 루트 게이트 36/36). 사용자 위임(2026-11-18 "주요 결정은 너의 의견에 따를 테니까")으로 Claude가 정했다.
-다음은 TK-M2 plan. 브랜치 `app-layer-0-3`.
+TK-M2 plan `docs/plans/2026-11-21-tars-ui-toolkit-tk-m2.md`. 브랜치 `app-layer-0-3`.
 
 계기: App Layer의 3단(`docs/plans/2026-11-18-tars-app-layer-roadmap.md` "3단 — TK", 4판 — WY-M6 뒤). 요구사항
 `2026-11-18-tars-app-layer-requirements.md`의 결정 4 · 9 · 13, R-ARCH · R-TKW · R-CG · R-TXT · R-CA · R-KIT · R-FM.
@@ -77,6 +77,10 @@ stb_truetype 비례폭 글자. terminal과는 `shared/`의 테마 색 · 글리�
 12. 이름: 테스트 앱 `tars-tk-demo`, 로그 접두사 `tk>`(`tk> configure w= h= scale=` · `tk> draw w= h= dirty=x,y,w,h us=` · `tk> commit`), 새 체인
     `toolkit/check.sh`(접두사 TK, monitor 45509 — 예약 범위에서 45508 다음). 호스트 검사는 툴킷의 `zig build test`(메모리 버퍼 백엔드로 픽셀 표)를
     루트 `prebuild`가 부른다.
+13. 입력(TK-M2, 조사 `tk-m2`): 키는 xkb 없이 evdev 코드 표로 읽는다 — 서버 키맵이 고정 us이고 수정키 비트를 서버가 직접 채우며(R-WY-7) initrd에
+    libxkbcommon이 없다. 글자 키의 문자 표는 TK-M4. 키 반복은 창 층의 몫이다(R-KEY-2, `repeat_info` + timerfd — 대기 루프가 poll이 된다). 창 층은 순수 값
+    모듈 `input`의 이벤트를 올리고, AppKit 층 `kit`은 창 층을 모른다(호스트 검사 — R-ARCH-4). 모양은 `window → cg → ca → kit`과 층 밖의 `geom` · `input`.
+    hit-test는 CA, 뷰가 레이어를 가지고 레이어는 `owner` 꼬리표만 든다.
 
 ## Milestone
 
