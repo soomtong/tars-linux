@@ -3,8 +3,9 @@
 접두사: CR
 
 Date: 2026-11-22
-Status: CR-M0 끝(2026-11-22 — 재기만 했다, 저장소 변화 0). 사용자 위임(2026-11-18 "주요 결정은 너의 의견에 따를 테니까")으로 Claude가 정했다.
-CR-M1 plan `docs/plans/2026-11-22-tars-chromium-cr-m1.md`. 브랜치 `app-layer-0-3`.
+Status: CR-M1 끝(2026-11-22, `25e81b4` — 묶음 `browser` · `tars-browser` · 체인 `browser`, 루트 게이트 36/37 + 블루투스 체인의 알려진 간헐 크래시 재실행 초록).
+사용자 위임(2026-11-18 "주요 결정은 너의 의견에 따를 테니까")으로 Claude가 정했다. 다음은 WY-M7 plan(`wl_subcompositor` → `xdg_popup` → text-input의 surface 귀속).
+브랜치 `app-layer-0-3`.
 
 요구사항 `docs/specs/2026-11-18-tars-app-layer-requirements.md`(R-CR-1~6, 결정 3 · 8, 위험 6, 녹화 D), 순서 `docs/plans/2026-11-18-tars-app-layer-roadmap.md`의 4단.
 
@@ -59,7 +60,8 @@ App Layer(0.3)의 4단. Wayland 서버(WY-M0~M6)와 툴킷(TK)이 섰고, 남은
    기존 harvest 길을 그대로 타고 보안 갱신이 매주 온다. 업스트림 스냅샷은 트렁크라 안정판이 아니고 의존을 손으로 채워야 한다.
 2. 묶음은 `browser` 하나, base · gpu · media 위에 얹는 일반 묶음이다(R-CR-2 — initrd에 안 들어간다). GTK는 싣는다(대화상자 — Depends를 그대로 따른다).
    판 고정은 `version=`과 `snapshot.debian.org`의 시각 하나(`devlayer/snapshot`)다 — 저장소 전체에 쓴다(CR-M1 조사: browser에만 쓰면 다른 묶음과 같은 의존의 판이
-   갈라져 대조에 걸리고, live 미러의 `=판` 고정은 2026-11-21 point release로 이미 base에서 깨져 있었다). 지금 도구는 base와 같은 파일만 지우므로 "gpu · media 위"는
+   갈라져 대조에 걸리고, live 미러의 `=판` 고정은 2026-11-21 point release로 이미 base에서 깨져 있었다). 시각은 "manifest의 모든 판이 함께 있는 가장 늦은 시각"
+   (지금 `20261119T120000Z`)이고, 그 시각의 InRelease 셋의 sha256을 함께 적어 내용으로 고정한다(http + 만료 끔은 freeze를 못 막는다). 지금 도구는 base와 같은 파일만 지우므로 "gpu · media 위"는
    "gpu · media와 같은 파일을 함께 싣는다"가 된다 — 294 MiB(겹친 것까지 지우면 228, carryover).
 3. 한글 · 한자 · 가나 글꼴은 `fonts-noto-cjk`를 같은 묶음에 싣는다(웹 페이지는 한자와 일본어가 섞인다 — Pretendard만으로는 두부가 된다). zstd15로 68 MiB
    (Sans + Serif `.ttc` 넷 — CFF라 거의 안 줄어든다. Serif를 빼면 −40 MiB, carryover).

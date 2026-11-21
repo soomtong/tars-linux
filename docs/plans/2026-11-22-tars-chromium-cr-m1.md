@@ -2,7 +2,7 @@
 
 Date: 2026-11-22
 Design: `docs/specs/2026-11-22-tars-chromium-design.md`(확인 1~13, 결정 1~9, milestone 표 CR-M1), 요구사항 R-CR-1~5, 결정 8
-Status: 진행 중. 브랜치 `app-layer-0-3`.
+Status: 끝(2026-11-22). 브랜치 `app-layer-0-3`.
 
 ## 확인(조사 `cr-m1`, 세션 scratchpad `cr1/research.md` — HEAD `ea8b8f4`, 작업 사본에서 거두고 구워 QEMU로 띄움)
 
@@ -102,3 +102,25 @@ Status: 진행 중. 브랜치 `app-layer-0-3`.
    더했다 — snapshot과 무관한 live vendor-repo의 재빌드(`+2` → `+5`)로 `postgresql-18 +2`가 "held broken packages"에 걸렸다. 옛 캐시가 가려 온 것을 모두 다시 거두며
    처음 봤다.
    ISO: `make iso`는 `ISO_LAYERS`만 보고 릴리스의 판들은 묶음을 이름으로 적으므로 기본 판의 내용은 그대로다. `make iso-full`(로컬 전용)만 browser까지 싣는다.
+2. 단계 B `25e81b4`: `devlayer/files/browser/usr/local/bin/tars-browser`(bash — 묶음 없음 · uid 0 · Wayland 없음을 한 줄씩 알리고 1) · `browser/check.sh`(monitor 45510,
+   부팅 하나 `-m 2048 -nic none`, 설정 디스크 `user=cruser`, 홈 디스크에 묶음 넷 836 MiB) · 루트 `check.sh`의 37번째 `CR-M1`과 `big_memory`(게스트 메모리 2048 이상인
+   체인을 한 lane에 — devtools와 browser가 동시에 안 뜬다) · `quick_check.sh`의 shellcheck 대상 · `docs/help/desk.md` · `measurements.md` 115 · `lessons.md`의 snapshot 절 ·
+   `dead-ends.md` 두 줄 · `key-files.md`. 체인 browser 두 번 연속 · display · wayland PASS.
+   판정의 실제 값: 1 `overlay /usr from 4 layers in 30ms` · `layer browser: 83 files into /etc`. 2 `wl> title id=1 app_id=chromium-browser` · `menu> bar id=1
+   name=chromium-browser` · `wl> keys to=1 mode=compat` · `wl> commit id=1 buf=636x772 scale=1` — 친 뒤 25초. 3 `title=tars-cr - Chromium`, 색 상자 (734, 197, 200 × 100)
+   `c0392b` · 바탕 (1000, 400) `2e8b57` · 글자 상자 (690, 415, 170 × 75) 잉크 2,619 · 색 177가지. 4 렌더러 `Seccomp: 2` · `user:[4026532051]`(브라우저 `user:[4026531837]`) ·
+   `uid_map 1000 1000 1` — 화면 셸(사용자)의 권한으로 다 읽힌다. 5 `Cmd+Q` → `wl> close` · `unmap` · `gone`, kill 없음, 남는 프로세스 0. 6 `no Wayland display` · 종료 코드 1.
+   plan과 달라진 것: (가) 한글 상자 판정은 "잉크 > 0"이 아니라 "잉크의 색 가짓수 ≥ 60" — noto-cjk를 뺀 묶음을 띄워 보니 두부도 잉크 2,649라 잉크 수로는 못 가른다
+   (두부는 색 23가지 · 글자는 177가지). (나) sandbox 판정은 화면 셸에서(시리얼 입력 길 없음). (다) 이미지 버전은 initrd의 `init` 문자열에서 읽고 부팅 줄과 대조.
+   (라) 큰 메모리 체인을 ISO lane에 묶음. (마) `--no-first-run`이 없으면 Debian `master_preferences`가 북마크 줄을 만들어 페이지 원점이 90 내려간다 — 문의 플래그가 좌표를 지킨다.
+   lead의 화면 판정: 첫 화면 PNG — 왼쪽 셸에 문의 안내와 `cr6-1`, 오른쪽에 Chromium이 그린 색 상자와 `한글 漢字`.
+3. 추가 할 일(단계 A commit의 자동 보안 검토 — lead가 타당하다고 봤다): http + `check-valid-until=no`는 freeze/replay를 못 막는다(서명은 "Debian이 언젠가 낸 것"만
+   지킨다 — 중간자가 더 옛 시각의 InRelease를 내주면 판을 안 적은 의존 폐포가 옛 판으로 풀린다). `devlayer/snapshot`에 시각 다음 줄로 그 시각의 InRelease 셋의 sha256을
+   적고 `harvest.sh`의 `check_inrelease`가 `apt-get update` 뒤 · 깔기 전에(두 번) 대조한다 — InRelease가 색인의 해시를, 색인이 `.deb`의 해시를 담으므로 폐포 전체가 내용으로
+   고정된다(전송 · 만료에 기대지 않는다, 그래서 https를 안 쓴다). snapshot.debian.org는 같은 시각을 내용 주소(`/file/<sha1>`)로 돌려 늘 같은 바이트다.
+   `DEV_SNAPSHOT`으로 덮어쓴 판은 대조 없이 해시 셋을 `NOT PINNED` 줄로 찍고 진행한다(판올림 시험 — harvest.log에 남는다). 음성 시험: 해시 한 글자를 바꾼 사본은 깔기
+   전에 rc 1로 멈춘다. 이 고침으로 debian 묶음 아홉을 두 번 더 거뒀고(1,262 · 1,250초) `.pkgs` · `.paths`가 단계 A와 바이트까지 같다.
+4. 실측: 체인 QEMU의 RSS 2.22 GiB(`-m 2048` — 게스트 페이지 캐시까지 찬다). 체인 단독 354 · 358초(dev-layers 캐시 확인 156초 포함), 루트 게이트 안에서는 66초 ·
+   첫 화면 25초(상한 60초).
+5. 루트 게이트(`out/gate-logs/20261121-210749`): 36/37 — CR-M1을 포함한 서른여섯이 PASS, 빨간 것은 BT-M2 하나로 `traps: btvirt[107] general protection fault`
+   (carryover의 그 간헐 크래시, 여덟 번째 — 게이트 전용 Debian 바이너리). 블루투스 체인만 다시 돌린 판은 초록. verify mismatch 0. install 부팅 7의 기다림 1800 ms.

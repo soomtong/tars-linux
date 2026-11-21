@@ -201,6 +201,7 @@ BT(2026-11-02)가 남긴 것.
       `controllers 0 paired`). 체인만 다시 돌린 판은 초록(206초). 네 번째는 아래 pointer 항목에 잘못 들어간 PS-M0의 것이다.
       여섯 번째(WY-M0 루트 게이트 둘째 판, 2026-11-19): `btvirt[94]`, 같은 서명. 체인만 다시 돌린 판은 초록(3분 22초).
       일곱 번째(WY-M4 루트 게이트, 2026-11-20): `btvirt[108]` general protection fault(segfault가 아닌 다른 꼴, 같은 btvirt). 체인만 다시 돌린 판은 초록(3분 25초).
+      여덟 번째(CR-M1 루트 게이트, 2026-11-22): `btvirt[107]` general protection fault, 같은 `controllers 0 paired`. 체인만 다시 돌린 판은 초록.
 - [ ] `pointer`(PD-M4) 부팅 C의 말없는 끝(TP-M2 루트 게이트 2회차, 2026-11-06, lane 16). `(라)`의 `=== … ===` 줄 바로 뒤에
       `report_failure` 없이 체인이 끝났다. 시리얼 로그는 `(나)`가 친 `/config/pd/tp-replay`의 메아리와 그 뒤 몇 줄에서 멎었고 패닉
       줄은 없다. lane 출력에도 셸 오류가 없다. `set -e`가 꺼진 체인이 말없이 끝나는 길은 SIGPIPE다 — QEMU(`-no-reboot`)가 사라진 뒤
@@ -442,3 +443,21 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 - 요구사항 가운데 TK가 안 채운 것: R-KIT-3의 레이블 · 버튼 · 스크롤 뷰 위젯, R-ARCH-2의 임의 경로 `fill_path` · 일반 `transform`, R-CG-1의 선 · 그림자, R-TKW-3의
   앱 안 팝업 레이어, R-TXT-4의 `shape` 자리, R-FM-2의 Strata 키 문서 대조(저장소에 없다).
 - 녹화 C(사람 녹화)는 남았다 — "선택 강조가 짧게 움직인다"만 덤프 하나로 안 보이고 나머지 장면은 toolkit 체인 판정 15~34가 돈다.
+
+## CR-M0 · CR-M1이 남긴 것 (Chromium · 거두기의 고정, 그대로 이월)
+
+- Chromium은 주소창에 글자를 치면 죽는다 — 자동 완성 bubble이 서버에 없는 `wl_subcompositor`로 `get_subsurface`를 부른다(CR design 확인 3). 문맥 메뉴 · 앱 메뉴
+  (`xdg_popup`)는 안 보인다. WY-M7이 푼다. 그때까지 주소는 `tars-browser https://…`처럼 인자로 준다.
+- 묶음 browser 294 MiB: gpu · media와 겹친 파일 지우기(→ 228)와 noto Serif CJK 빼기(−40)는 안 했다 — 새 "묶음 사이 의존"을 init · `make_iso.sh` · build에 들여야 한다.
+  기본 판 ISO에는 못 들어간다(2 GiB) — `make iso-full`(로컬)만 싣는다. 어느 판에 실을지는 버전을 낼 때. 묶음 수 15 / init의 `MAX = 16`.
+- 판올림은 넷을 함께: `devlayer/snapshot`의 시각과 InRelease sha256 셋 · chromium 판 · `libc6-dev`와 개발 컨테이너 이미지(initrd의 glibc) · pgdg 의존 넷. Debian chromium은
+  주 1회쯤 보안 판이 온다. vendor-repo(pgdg)는 snapshot 밖이라 재빌드로 같은 판 문자열의 짝이 또 바뀔 수 있다.
+- setuid: base 묶음이 이미 4755 일곱(`mount` · `umount` · `passwd` · `chfn` · `chsh` · `gpasswd` · `ssh-keysign`)과 setgid 셋을 싣고, 묶음 squashfs는 `nosuid`로 붙지만 `/usr`
+  overlay에 `nosuid`가 없어 살아 있다(CR design 확인 13). browser에는 `dbus-daemon-launch-helper` · `unix_chkpwd`가 더 온다. harvest가 setuid를 지울지는 CR 밖의 결정이다.
+- `/etc/pam.d/common-session`이 `pam_systemd.so` 줄을 단 채 browser 묶음으로 `/etc`에 간다(지금 initrd의 `pam.d/sudo`는 그 파일을 include하지 않아 해가 없다).
+- `/dev/shm`이 없다(POSIX shm의 관행 — Chromium은 memfd라 무관, CR에서 뺐다). dbus 없음(stderr에 경고 반복). 로캘은 `C.utf8`뿐(한국어 UI `chromium-l10n` 안 실음).
+- Chromium은 `--disable-gpu`로 뜬다 — gpu 묶음의 `libegl1`로 llvmpipe 합성을 할지는 안 쟀다. 휠 · 스크롤 중 blit 비용도 안 쟀다.
+- root 화면 셸(설정 디스크에 `user=` 없음)에서는 Chromium이 안 뜬다(sandbox — 문이 안내한다). 창이 둘이면 text-input이 첫 창으로 간다(WY-M7).
+- 호환 모드에서 Cmd 키 자체가 evdev 125로 가서 페이지가 `key=Meta` keydown을 본다(modifiers는 Ctrl) — WY-M7이 재고 정한다.
+- 루트 게이트의 lane: 게스트 메모리가 큰 체인(devtools · browser)을 한 lane에 묶었다 — 그 lane이 가장 길어지면 lane에 무게를 주는 스케줄러로 바꾼다.
+- `tars-docs`는 shellcheck 대상이 아니다(`tars-browser`만 넣었다).

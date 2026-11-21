@@ -179,6 +179,9 @@ BV(2026-10-20)부터 시스템 안에 버전이 있다. 빌드는 HEAD가 `v<VER
    홈에서 얹힌다) — 첫 패널의 데모는 설치 smoke로 본다(DY-M3 plan 결과 5, `out/gpu-install-smoke.sh`의 모양).
    기본 판은 `make iso ISO_LAYERS="base container docs editor fakesteak gpu lang-beam lang-jvm lang-native lang-script media server util"`
    (기본값은 묶음을 안 싣는다). base 없이 다른 묶음을 실으면 `make_iso.sh`가 멈춘다 — base와 겹친 파일이 지워져 있다(LD design 결정 1 · 3).
+   (CR-M1, 2026-11-22부터) Debian 줄은 `snapshot.debian.org`의 한 시각에서 거둔다 — 판올림은 넷을 함께 한다: `devlayer/snapshot`의 시각(manifest의 모든 판이 함께
+   있는 가장 늦은 시각)과 그 시각의 InRelease sha256 셋(`make dev-layers DEV_SNAPSHOT=<시각>`이 `NOT PINNED` 줄로 찍어 준다 — 파일에 옮겨 적는다), `libc6-dev` 줄과 개발
+   컨테이너 이미지(initrd의 glibc와 같아야 한다), pgdg 의존 넷. 묶음 `browser`(Chromium, 294 MiB)는 기본 판에 싣지 않는다(2 GiB) — 어느 판에 실을지는 그 버전에서 정한다.
    개발 도구의 판을 올리는 것은 버전을 낼 때 한 번이다(TP design 결정 3): `devlayer/manifest.toml`의 표(version · url · sha256)를 1의 커밋에
    함께 넣고(`make quick`이 검사한다 — MF-M0), 바뀐 표의 묶음만 다시 구워진다. 올리지 않으면 앞 판의 묶음이 그대로 실린다.
    `make iso` — 입력 해시가 같으면 kernel · terminal을 건너뛴다. init은 `zig build`가 git을 다시 물어 버전 글자가 바뀌었으면
