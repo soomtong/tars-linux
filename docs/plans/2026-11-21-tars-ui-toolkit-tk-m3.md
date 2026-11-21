@@ -2,7 +2,7 @@
 
 Date: 2026-11-21
 Design: `docs/specs/2026-11-20-tars-ui-toolkit-design.md`(결정 1 · 14, milestone 표 TK-M3), 요구사항 R-KIT-3 · 5, R-FM-1 · 3 · 6 · 8, R-ARCH-3 · 4, 녹화 C
-Status: 진행 중. 브랜치 `app-layer-0-3`.
+Status: 끝(2026-11-21). 브랜치 `app-layer-0-3`.
 
 ## 확인(조사 `tk-m3`, 세션 scratchpad `tk3/research.md` — HEAD `3820666`, 개발 컨테이너 aarch64 · tmpfs 벤치)
 
@@ -100,3 +100,16 @@ Status: 진행 중. 브랜치 `app-layer-0-3`.
    (라) column view가 `Root`를 받아 first responder를 직접 옮긴다. (마) "불러오는 중…" 같은 문구는 kit이 아니라 앱이 그린다(kit은 글꼴을 모른다).
    lead가 대조에서 찾은 것: 이미 열린 오른쪽 열로 다시 `→`하면 소스를 새로 열고 오른쪽을 버린다(로딩 취소 콜백과 엇갈리고 그 열의 선택을 잃는다) — 오른쪽 열이
    남아 있으면 늘 지금 선택의 열이므로 포커스만 옮기게 단계 B에서 고친다.
+2. 단계 B `a8397d4`: `files/model.zig`(자연 정렬 · 조각 병합 · `follow` — 확정 10 · 12) · `files/dir.zig`(getdents64 32 KiB · `d_type`, 링크만 `statx`) ·
+   `files/main.zig`(분할 뷰 · column view · 미리보기 자리 · idle 로딩 · 창 포커스 갱신) · 둘째 exe · initrd · `docs/help/desk.md` 한 줄 · 체인 판정 15~18 ·
+   `measurements.md` 110. `openSelection`은 오른쪽 열이 있으면 포커스만 옮긴다(lead가 찾은 것 — 호스트 검사 `→ ← →`). 체인 toolkit 두 번 · terminal · wayland PASS.
+   판정의 실제 값: 15 첫 열 `a` `z` `m.txt`(숨김 `.h` 없음) · 행 0 `3c78d8` · 구분선 `34425a` · 미리보기 `2a3850`, 16 `columns n=3 focus=1 scroll=201` · 화면의 둘째 열
+   행 0 `3c78d8` · 셋째 열 행 0 `465a78`, 17 `refresh path=/tmp/tkf/a name=b before=0 after=1` · `b`가 행 1에서 강조 · 셋째 열 남음, 18 1만 항목 8조각 ·
+   paint 194~214 ms < all 242~253 ms.
+   plan과 달라진 것: (가) `tk> column` 줄은 첫 로딩이 끝날 때도 낸다. (나) `tk> load`에 `paint_us` · `read_us` · `merge_us`. (다) 갱신은 "한 번 포커스를 가진 뒤의 포커스
+   얻음"이고 읽는 중인 열은 건너뛴다. (라) 오른쪽 열을 버리는 조건은 "선택이 디렉터리였고 이름이 사라짐"뿐. (마) 판정 17의 셸 포커스는 `Cmd+[` `Cmd+]`.
+3. lead의 화면 판정: `files-refresh` 덤프를 직접 봤다 — 둘째 열에 `0`이 끼어든 뒤에도 강조가 `b`에 있고 셋째 열과 미리보기의 이름이 남는다. `›`가 13 px에서 읽힌다.
+4. 실측: 게스트 getdents 한 번 약 1.5 ms. 10만 항목은 96조각 · 끝 1.67초(병합 합 1.2초 — 조각마다 O(n) 병합이 대부분, carryover) · 처음 보인 그림 196 ms, 로딩 중 `↓`
+   다섯 번을 다 받고 그림 31번(poll 0이 그리기를 굶기지 않는다). 가로 스크롤 프레임 중앙 1.8 ms. VmRSS 1만 10.6 MB · 10만 11.5 MB. 풀 100바퀴 뒤 +104 kB.
+   체인 toolkit 단독 +약 32초, 루트 게이트 lane 71 → 111초.
+5. 루트 게이트 36/36 첫 판(`out/gate-logs/20261121-044901`), verify mismatch 0.
