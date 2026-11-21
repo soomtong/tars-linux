@@ -26,3 +26,6 @@ pub const SplitView = split.SplitView;
 pub const textfield = @import("textfield.zig");
 pub const TextField = textfield.TextField;
 pub const ImeHook = view.ImeHook;
+pub const ActionHook = view.ActionHook;
+pub const MenuHook = view.MenuHook;
+pub const Via = view.Via;

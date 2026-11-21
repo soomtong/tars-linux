@@ -5,9 +5,17 @@
 //! 레이어에서 조상으로 올라가며 처음 만나는 `owner`가 포인터 아래의 뷰다(CA는 뷰를 모른다).
 //!
 //! 길(`Root.handle`):
-//! - 키(누름만 — 반복 포함): first responder → 부모 → … → 루트 뷰의 `keyDown`. 받으면(참) 멈춘다. 아무도 안 받으면 Tab · Shift+Tab
-//!   (Ctrl · Alt · Super 없이)은 루트가 포커스를 옮기고(R-KIT-2), 나머지는 `Root.unhandled`(TK-M6의 단축키 표 자리). Super가 섞인 키도
-//!   같은 길이다(원래 모드 — 요구사항 결정 3). 뗌은 지금 아무 뷰도 안 쓴다.
+//! - 키(누름만 — 반복 포함, TK-M6 plan 확정 3): (가) Super가 섞인 키는 먼저 메뉴 표(`Root.menu`, 없으면 `tk_menu.default_table`)에 맞춘다 —
+//!   맞으면 그 항목의 action을 `validate`로 chain에 묻고 활성이면 `perform`을 chain으로, 비활성이면 먹고 끝(macOS의 key equivalent). (나) 안
+//!   맞으면 first responder → 부모 → … → 루트 뷰의 `keyDown`. 받으면(참) 멈춘다. 아무도 안 받으면 Tab · Shift+Tab(Ctrl · Alt · Super 없이)은
+//!   루트가 포커스를 옮기고(R-KIT-2), (다) 수정키 없는 키는 메뉴 표를 한 번 더 본다(`Space` — 필드에서는 글자라 여기 안 온다), 나머지는
+//!   `Root.unhandled`. 뗌은 지금 아무 뷰도 안 쓴다.
+//! - action(TK-M6 plan 확정 2 · 5, R-KIT-9): 메뉴 항목 하나가 단축키와 메뉴 둘 다의 원천이다. `validate`는 first responder(없으면 루트 뷰)부터
+//!   조상으로 처음 null이 아닌 답을 쓰고(아무도 모르면 비활성), `perform`은 같은 길에서 처음 참을 돌려준 뷰에서 멈춘다. 그래서 `copy`는 필드가
+//!   first responder면 필드의 것, 아니면 루트 뷰(앱)의 것이다. 서버 메뉴의 `activated(id)`(`Event.menu`)도 같은 함수를 지난다.
+//! - 메뉴의 비활성(plan 확정 6): 입력 이벤트(수정키 아닌 키 누름 · 버튼 누름 · 창 포커스 · menu) 하나를 처리한 뒤 모든 항목을 다시 묻고, 지난번과
+//!   다를 때만 `menu_hook`으로 보낸다. 수정키 · 포인터 움직임 · 휠 · ime · idle에서는 셈하지 않는다 — 서버 메뉴가 열린 동안 앱에 오는 것은 수정키
+//!   뿐이고(그리고 열 때 서버가 확정한 ime 하나), 그때 다시 보내면 서버가 열린 메뉴를 닫는다(`why=model`).
 //! - 포커스 순서: 뷰 트리의 깊이 우선(앞 순서)에서 `acceptsFocus`이고 보이는(자기와 조상 레이어가 hidden이 아닌) 뷰. 끝에서 처음으로 돈다.
 //! - 클릭(왼쪽 버튼 누름): hit-test → 그 뷰에서 조상으로 `acceptsFocus`인 첫 뷰가 first responder → `mouseDown`은 맞은 뷰부터 조상으로.
 //! - 휠: 포인터 아래 뷰부터 조상으로 `scroll`을 받는 첫 뷰(포커스와 상관없다 — AppKit과 같다).
@@ -17,6 +25,7 @@
 
 const std = @import("std");
 const input = @import("tk_input");
+const menu = @import("tk_menu");
 const ca = @import("tk_ca");
 const Layer = ca.Layer;
 const Tree = ca.Tree;
@@ -38,6 +47,10 @@ pub const VTable = struct {
     textInput: ?*const fn (ctx: *anyopaque, ev: input.ImeEvent) bool = null,
     /// first responder일 때 text-input을 켜야 하는가(텍스트 필드 — TK design 결정 8). 없으면 거짓.
     wantsTextInput: ?*const fn (ctx: *anyopaque) bool = null,
+    /// action 하나를 한다(TK-M6 plan 확정 2). 했으면 참(chain이 멈춘다).
+    perform: ?*const fn (ctx: *anyopaque, action: u32) bool = null,
+    /// action이 지금 되는가. 모르면 null(부모에게 묻는다).
+    validate: ?*const fn (ctx: *anyopaque, action: u32) ?bool = null,
 };
 
 pub const View = struct {
@@ -114,6 +127,21 @@ pub const Unhandled = struct {
     on: *const fn (ctx: *anyopaque, ev: input.KeyEvent) void,
 };
 
+/// action이 어느 길로 왔나(줄 `tk> action name= via=`).
+pub const Via = enum { key, menu };
+
+/// action을 했다(창 층의 줄 — kit은 창을 모르므로 바깥이 찍는다).
+pub const ActionHook = struct {
+    ctx: *anyopaque,
+    on: *const fn (ctx: *anyopaque, name: []const u8, via: Via) void,
+};
+
+/// 메뉴의 비활성이 바뀌었다 — 모델 전체를 다시 보낼 때(`tk.connectMenu`가 창의 `sendMenu`에 잇는다).
+pub const MenuHook = struct {
+    ctx: *anyopaque,
+    send: *const fn (ctx: *anyopaque, disabled: *const menu.Disabled) void,
+};
+
 /// 창 하나의 뷰 트리 뿌리와 입력 상태(first responder · 창 포커스 · 포인터 자리).
 pub const Root = struct {
     tree: *Tree,
@@ -128,6 +156,12 @@ pub const Root = struct {
     ime_hook: ?ImeHook = null,
     /// 지금 켜 달라고 한 값(훅에 마지막으로 알린 것).
     ime_want: bool = false,
+    /// 앱의 메뉴 모델(TK-M6). null이면 키는 `tk_menu.default_table`에 맞춘다.
+    menu: ?*const menu.Model = null,
+    /// 마지막으로 셈한(보낸) 비활성.
+    disabled: menu.Disabled = .empty,
+    menu_hook: ?MenuHook = null,
+    action_hook: ?ActionHook = null,
 
     pub fn init(tree: *Tree) Root {
         return .{ .tree = tree };
@@ -136,6 +170,68 @@ pub const Root = struct {
     pub fn setView(self: *Root, v: *View) void {
         self.view = v;
         v.layer.owner = v;
+    }
+
+    /// 앱의 메뉴 모델을 건다(뷰 트리와 first responder를 세운 뒤 — 첫 비활성을 여기서 셈한다, 창을 열 때 그것을 함께 보낸다).
+    pub fn setMenu(self: *Root, m: *const menu.Model) void {
+        self.menu = m;
+        self.computeDisabled(&self.disabled);
+    }
+
+    fn table(self: *const Root) *const menu.Model {
+        return self.menu orelse &menu.default_table;
+    }
+
+    /// action이 지금 되는가 — first responder(없으면 루트 뷰)부터 조상으로 처음 답한 뷰. 아무도 모르면 거짓.
+    pub fn validate(self: *const Root, action: u32) bool {
+        return self.answer(action) orelse false;
+    }
+
+    /// chain의 첫 답(아무도 모르면 null).
+    fn answer(self: *const Root, action: u32) ?bool {
+        var v = self.first orelse self.view;
+        while (v) |x| : (v = x.parent) {
+            if (x.vtable.validate) |f| if (f(x.ctx, action)) |r| return r;
+        }
+        return null;
+    }
+
+    /// action을 chain으로 — 처음 한 뷰에서 멈춘다. 아무도 안 했으면 거짓.
+    pub fn perform(self: *Root, action: u32) bool {
+        var v = self.first orelse self.view;
+        while (v) |x| : (v = x.parent) {
+            if (x.vtable.perform) |f| if (f(x.ctx, action)) return true;
+        }
+        return false;
+    }
+
+    /// 메뉴 항목 하나를 쏜다: 되면 하고 줄, 안 되면 아무것도(키 · 메뉴 둘 다 먹은 채).
+    fn fire(self: *Root, it: menu.Item, via: Via) void {
+        if (!self.validate(it.action)) return;
+        if (!self.perform(it.action)) return;
+        if (self.action_hook) |h| h.on(h.ctx, it.name, via);
+    }
+
+    /// 모델의 모든 항목을 chain에 물어 비활성 비트를 셈한다(구분선 자리는 0).
+    pub fn computeDisabled(self: *const Root, out: *menu.Disabled) void {
+        out.* = .empty;
+        const m = self.menu orelse return;
+        const n = m.entryCount();
+        var i: usize = 0;
+        while (i < n) : (i += 1) {
+            const it = m.itemAt(i) orelse continue;
+            if (!self.validate(it.action)) out.set(i);
+        }
+    }
+
+    /// 입력 하나 뒤의 다시 셈(plan 확정 6) — 바뀌었으면 보낸다.
+    fn refreshMenu(self: *Root) void {
+        if (self.menu == null) return;
+        var now: menu.Disabled = undefined;
+        self.computeDisabled(&now);
+        if (now.eql(self.disabled)) return;
+        self.disabled = now;
+        if (self.menu_hook) |h| h.send(h.ctx, &self.disabled);
     }
 
     /// `v`를 first responder로(null이면 아무도). `acceptsFocus`가 아니면 거짓이고 그대로다.
@@ -168,10 +264,18 @@ pub const Root = struct {
     /// 창 층의 이벤트 하나.
     pub fn handle(self: *Root, ev: input.Event) void {
         switch (ev) {
-            .key => |k| if (k.pressed) self.keyDown(k),
+            .key => |k| if (k.pressed) {
+                self.keyDown(k);
+                if (!input.isModifier(k.code)) self.refreshMenu();
+            },
             .focus => |f| {
                 self.window_focused = f;
                 if (self.view) |v| notifyWindowFocus(v, f);
+                self.refreshMenu();
+            },
+            .menu => |id| {
+                if (menu.find(self.table(), id)) |hit| self.fire(hit.item, .menu);
+                self.refreshMenu();
             },
             .pointer_motion => |m| {
                 self.ptr_x = m.x;
@@ -182,6 +286,7 @@ pub const Root = struct {
                 self.ptr_x = b.x;
                 self.ptr_y = b.y;
                 if (b.pressed and b.code == input.BTN_LEFT) self.mouseDown(b);
+                if (b.pressed) self.refreshMenu();
             },
             .ime => |m| {
                 var v = self.first;
@@ -199,6 +304,12 @@ pub const Root = struct {
     }
 
     fn keyDown(self: *Root, k: input.KeyEvent) void {
+        // (가) Super가 섞인 키 — 메뉴 표가 먼저(비활성이어도 먹는다). 모델이 없을 때의 기본 표는 chain의 누군가가 그 action을 알 때만 단축키다 —
+        // 필드가 없는 데모의 `Cmd+A`는 지금처럼 chain · `unhandled`로 간다.
+        if (k.mods.super) if (menu.match(self.table(), k.mods, k.code)) |hit| {
+            if (self.menu != null or self.answer(hit.item.action) != null) return self.fire(hit.item, .key);
+        };
+        // (나) chain.
         var v = self.first orelse self.view;
         while (v) |x| : (v = x.parent) {
             if (x.vtable.keyDown) |f| if (f(x.ctx, k)) return;
@@ -207,6 +318,10 @@ pub const Root = struct {
             self.focusNext(k.mods.shift);
             return;
         }
+        // (다) chain이 다 거절한 수정키 없는 키.
+        if (k.mods.none()) if (menu.match(self.table(), k.mods, k.code)) |hit| {
+            if (self.menu != null or self.answer(hit.item.action) != null) return self.fire(hit.item, .key);
+        };
         if (self.unhandled) |u| u.on(u.ctx, k);
     }
 

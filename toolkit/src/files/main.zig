@@ -18,6 +18,12 @@
 //! — 리스트가 그것을 본다, 선택은 이름으로 따라감, Enter는 바만 닫고 Esc는 풂, 갱신은 필터를 지킴), `Cmd+K`는 열 0의 경로 아래를 idle 조각으로 걸어(`search.zig`)
 //! 열 자리를 덮는 결과 리스트에 상위 100을 보인다(`↑` `↓`는 필드가 넘겨 앱이 고르고, Enter는 경로 바의 Enter와 같은 길).
 //!
+//! 메뉴(TK-M6 plan 확정 9, R-KIT-9): 단축키의 정의는 메뉴 모델 `MENU` 하나다 — File[끝내기 `Cmd+Q`] · Edit[표준 Edit 다섯 · 찾기 `Cmd+F`] ·
+//! View[미리보기 `Space` · 새로 고침] · Go[경로로 가기 `Cmd+L` · 검색 `Cmd+K`]. 창이 열 때 서버에 보내고(바에 `File Edit View Go`), kit `Root`가 키를
+//! 이 표에 맞춰 action을 responder chain으로 보낸다. 앱의 action은 루트 뷰가 한다(`rootPerform` · `rootValidate`) — `copy`는 필드가 포커스면 필드의
+//! 것이고 아니면 여기의 경로 복사다. `Cmd+Q`는 서버의 chord라 키로는 안 온다(서버가 close) — 메뉴로 고르면 앱이 스스로 끝난다.
+//! `Space`는 미리보기 판 토글(분할 뷰의 오른쪽 폭 0 ↔ 200, plan 확정 14) — 필드에서는 글자다.
+//!
 //! 인자: `tars-files [경로]` — 없으면 `$HOME`, 그것도 없으면 `/`.
 //!
 //! 줄(plan 확정 14): `tk> files path=` · `tk> load path= n= chunks= first_us= paint_us= all_us= read_us= merge_us= state=done|cancelled|error` ·
@@ -202,6 +208,8 @@ const App = struct {
     /// 지금 창 크기(논리).
     width: f32 = 0,
     height: f32 = 0,
+    /// 미리보기 판이 보이는가(`Space`, TK-M6).
+    preview_on: bool = true,
     /// 창이 한 번이라도 키보드 포커스를 가졌다 — 그 뒤의 포커스 얻음만 갱신의 계기다(처음 붙는 enter는 아니다).
     had_focus: bool = false,
 
@@ -252,6 +260,7 @@ const App = struct {
         try self.root_view.addChild(self.alloc, &self.field.view);
         self.kit_root.unhandled = .{ .ctx = self, .on = unhandled };
         self.cv.focusFirst();
+        self.kit_root.setMenu(&MENU);
         self.startLoad(0, false);
     }
 
@@ -886,7 +895,7 @@ const App = struct {
         if (self.win) |w| w.copyText(p);
     }
 
-    /// 체인 끝까지 아무도 안 받은 키(TK-M6의 단축키 표 자리 — 지금은 `Cmd+L` · `Cmd+F` · `Cmd+K` · `Cmd+C`, 그리고 검색 중 필드가 넘긴 `↑` `↓`).
+    /// 체인 끝까지 아무도 안 받은 키 — 검색 중 필드가 넘긴 `↑` `↓`(단축키는 메뉴 모델 `MENU`가 맞춘다, TK-M6).
     fn unhandled(ctx: *anyopaque, ev: tk.input.KeyEvent) void {
         const self = me(ctx);
         const md = ev.mods;
@@ -895,16 +904,46 @@ const App = struct {
             if (n == 0) return;
             const sel = self.results.selected;
             self.results.select(if (ev.key == .up) sel -| 1 else @min(sel + 1, n - 1));
-            return;
         }
-        if (!md.super or md.ctrl or md.alt or md.shift) return;
-        switch (ev.code) {
-            KEY_L => self.openBar(.path),
-            KEY_F => self.openBar(.filter),
-            KEY_K => self.openBar(.search),
-            KEY_C => self.copyPath(),
-            else => {},
+    }
+
+    /// 앱의 action이 지금 되는가(루트 뷰 — chain의 끝, plan 확정 9). `copy`는 포커스 열에 선택 항목이 있을 때(필드가 포커스면 필드가 먼저 답한다).
+    /// 필드의 것(되돌리기 · 오려두기 · 붙여넣기 · 전체 선택)은 모른다 — 필드가 포커스가 아니면 비활성이 된다.
+    fn rootValidate(ctx: *anyopaque, action: u32) ?bool {
+        const self = me(ctx);
+        return switch (action) {
+            tk.menu.COPY => self.hasSelection(),
+            A_QUIT, A_FILTER, A_PREVIEW, A_REFRESH, A_GOTO, A_SEARCH => true,
+            else => null,
+        };
+    }
+
+    fn rootPerform(ctx: *anyopaque, action: u32) bool {
+        const self = me(ctx);
+        switch (action) {
+            tk.menu.COPY => self.copyPath(),
+            A_QUIT => if (self.win) |w| w.quit(),
+            A_FILTER => self.openBar(.filter),
+            A_PREVIEW => self.togglePreview(),
+            A_REFRESH => self.refreshAll(),
+            A_GOTO => self.openBar(.path),
+            A_SEARCH => self.openBar(.search),
+            else => return false,
         }
+        return true;
+    }
+
+    fn hasSelection(self: *App) bool {
+        const i = self.cv.focus;
+        return self.cv.list(i).selected < self.cols[i].entries().len;
+    }
+
+    /// `Space`(plan 확정 14): 미리보기 판을 감추고(폭 0) 다시 보인다. 시작은 보임.
+    fn togglePreview(self: *App) void {
+        self.preview_on = !self.preview_on;
+        self.split.second_w = if (self.preview_on) tokens.size.preview else 0;
+        self.relayout();
+        tk.window.say("preview shown={d}", .{@intFromBool(self.preview_on)});
     }
 
     fn fieldCopy(ctx: *anyopaque, bytes: []const u8) void {
@@ -944,11 +983,16 @@ const App = struct {
     }
 };
 
-const ROOT_VT: kit.VTable = .{};
-const KEY_C: u32 = 46;
-const KEY_F: u32 = 33;
-const KEY_K: u32 = 37;
-const KEY_L: u32 = 38;
+const ROOT_VT: kit.VTable = .{ .perform = App.rootPerform, .validate = App.rootValidate };
+
+const menus = @import("menus.zig");
+const MENU = menus.MENU;
+const A_QUIT = menus.A_QUIT;
+const A_FILTER = menus.A_FILTER;
+const A_PREVIEW = menus.A_PREVIEW;
+const A_REFRESH = menus.A_REFRESH;
+const A_GOTO = menus.A_GOTO;
+const A_SEARCH = menus.A_SEARCH;
 
 /// 바의 모드(TK-M4 plan 확정 18).
 const Mode = enum {
@@ -1012,7 +1056,7 @@ pub fn main(init: std.process.Init) !u8 {
         .input = App.input,
         .tick = App.tick,
         .idle = App.idle,
-    }) catch |e| {
+    }, .{ .menu = &MENU, .disabled = &app.kit_root.disabled }) catch |e| {
         tk.window.say("error open={s}", .{@errorName(e)});
         return 1;
     };
@@ -1020,6 +1064,7 @@ pub fn main(init: std.process.Init) !u8 {
     app.win = win;
     tk.connect(&app.tree, win);
     tk.connectIme(&app.kit_root, win);
+    tk.connectMenu(&app.kit_root, win);
     win.run() catch |e| {
         tk.window.say("error run={s}", .{@errorName(e)});
         return 1;

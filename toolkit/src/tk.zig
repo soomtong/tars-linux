@@ -14,6 +14,7 @@ pub const window = @import("tk_window");
 pub const cg = @import("tk_cg");
 pub const ca = @import("tk_ca");
 pub const input = @import("tk_input");
+pub const menu = @import("tk_menu");
 pub const kit = @import("tk_kit");
 
 pub const Rect = geom.Rect;
@@ -47,10 +48,25 @@ fn animEvent(_: *anyopaque, ev: ca.anim.Event) void {
 }
 
 /// first responder가 바뀌면 `tk> focus view=NAME`(아무도 아니면 `view=-`), 클릭(왼쪽 누름)마다 `tk> hit x= y= view=` 줄(TK-M2 plan 확정 14).
-/// 좌표는 surface 논리 좌표의 정수 부분이다.
+/// 좌표는 surface 논리 좌표의 정수 부분이다. action을 하면 `tk> action name= via=key|menu`(TK-M6 plan 확정 5).
 pub fn connectRoot(root: *kit.Root) void {
     root.hook = .{ .ctx = root, .on = focusEvent };
     root.hit_hook = .{ .ctx = root, .on = hitEvent };
+    root.action_hook = .{ .ctx = root, .on = actionEvent };
+}
+
+fn actionEvent(_: *anyopaque, name: []const u8, via: kit.Via) void {
+    window.say("action name={s} via={s}", .{ name, @tagName(via) });
+}
+
+/// kit `Root`의 메뉴 비활성 바뀜을 창의 `sendMenu`에 잇는다(TK-M6 plan 확정 6 · 7). 첫 모델은 `Window.open`의 `Options`가 보낸다.
+pub fn connectMenu(root: *kit.Root, win: *Window) void {
+    root.menu_hook = .{ .ctx = win, .send = menuSend };
+}
+
+fn menuSend(ctx: *anyopaque, disabled: *const menu.Disabled) void {
+    const win: *Window = @ptrCast(@alignCast(ctx));
+    win.sendMenu(disabled);
 }
 
 /// first responder가 text-input을 바라는지를 창의 `setTextInput`에 잇는다(TK-M4 plan 확정 10 — kit은 창을 모른다).

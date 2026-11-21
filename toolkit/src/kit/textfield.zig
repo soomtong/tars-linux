@@ -6,6 +6,8 @@
 //! 스냅숏을 찍는다. `Cmd+Z`는 스냅숏과 지금을 맞바꾼다(다시 누르면 되살리기).
 //!
 //! 뷰(`TextField`): 키(plan 확정 7) · 클릭 · IME 이벤트를 모델에 넣고, 클립보드와 Enter · Esc는 앱의 `Delegate`로 낸다(kit은 창을 모른다).
+//! 편집 명령 `Cmd+Z/X/C/V/A`는 키로 받지 않는다 — 메뉴 표(`Root`)가 맞춘 표준 action(`tk_menu.UNDO` …)을 `perform`으로 받고 `validate`로
+//! 활성을 답한다(TK-M6 plan 확정 2, R-KIT-9). 단축키의 정의는 메뉴 모델 하나이고 필드는 동작만 가진다. `Cmd+←` `→`는 메뉴 항목이 아니라 키로 남는다.
 //! first responder인 동안 text-input을 바란다(`wantsTextInput` — `Root`의 훅이 창에 알린다). 포커스를 잃을 때 남은 preedit은 본문에 넣는다
 //! (WY 결정 42와 같은 뜻 — 서버 쪽 음절은 disable 뒤 다음 키 배치에서 버려진다).
 //!
@@ -15,6 +17,7 @@
 
 const std = @import("std");
 const input = @import("tk_input");
+const menu = @import("tk_menu");
 const tokens = @import("tk_tokens");
 const cg = @import("tk_cg");
 const layout = cg.layout;
@@ -338,6 +341,8 @@ pub const TextField = struct {
         .windowFocusChanged = windowFocusChanged,
         .textInput = textInput,
         .wantsTextInput = wantsTextInput,
+        .perform = perform,
+        .validate = validate,
     };
 
     /// 레이어 하나를 만든다(어디에도 안 붙음 — 앱이 붙인다). `self`는 사는 동안 옮기지 않는다.
@@ -389,6 +394,47 @@ pub const TextField = struct {
         return handled;
     }
 
+    /// 표준 action이 지금 되는가(TK-M6 plan 확정 9의 활성): 되돌리기 = 스냅숏, 오려두기 · 복사 = 선택, 붙여넣기 · 전체 선택 = 늘(first responder인
+    /// 동안만 chain에 있다). 클립보드가 필요한 셋은 delegate가 있어야 한다. 그 밖의 action은 모른다(부모에게).
+    fn validate(ctx: *anyopaque, action: u32) ?bool {
+        const self = me(ctx);
+        const m = &self.model;
+        const has_clip = self.delegate != null;
+        return switch (action) {
+            menu.UNDO => m.has_undo,
+            menu.CUT, menu.COPY => has_clip and m.selection() != null,
+            menu.PASTE => has_clip,
+            menu.SELECT_ALL => true,
+            else => null,
+        };
+    }
+
+    /// 표준 action을 한다 — 키로 받던 때와 같은 일과 같은 다시 그림 · 알림.
+    fn perform(ctx: *anyopaque, action: u32) bool {
+        const self = me(ctx);
+        const m = &self.model;
+        const gen = m.gen;
+        switch (action) {
+            menu.UNDO => _ = m.undo(),
+            menu.CUT => if (self.delegate) |d| if (m.selection() != null) {
+                d.copy(d.ctx, m.selected());
+                m.deleteSelection();
+            },
+            menu.COPY => if (self.delegate) |d| {
+                if (m.selection() != null) d.copy(d.ctx, m.selected());
+            },
+            menu.PASTE => if (self.delegate) |d| {
+                var buf: [MAX_TEXT]u8 = undefined;
+                if (d.paste(d.ctx, &buf)) |t| m.paste(t);
+            },
+            menu.SELECT_ALL => m.selectAll(),
+            else => return false,
+        }
+        self.changed();
+        self.notify(gen);
+        return true;
+    }
+
     fn key(self: *TextField, ev: input.KeyEvent) bool {
         const m = &self.model;
         const md = ev.mods;
@@ -397,30 +443,15 @@ pub const TextField = struct {
             switch (ev.key) {
                 .left => m.moveTo(0, md.shift),
                 .right => m.moveTo(m.len, md.shift),
-                else => switch (ev.code) {
-                    KEY_A => m.selectAll(),
-                    KEY_C => if (self.delegate) |d| {
-                        if (m.selection() != null) d.copy(d.ctx, m.selected());
-                    },
-                    KEY_X => if (self.delegate) |d| if (m.selection() != null) {
-                        d.copy(d.ctx, m.selected());
-                        m.deleteSelection();
-                    },
-                    KEY_V => if (self.delegate) |d| {
-                        var buf: [MAX_TEXT]u8 = undefined;
-                        if (d.paste(d.ctx, &buf)) |t| m.paste(t);
-                    },
-                    KEY_Z => _ = m.undo(),
-                    else => return false,
-                },
+                else => return false,
             }
             return true;
         }
         if (md.ctrl) {
             if (md.alt) return false;
             switch (ev.code) {
-                KEY_A => m.moveTo(0, md.shift),
-                KEY_E => m.moveTo(m.len, md.shift),
+                input.KEY_A => m.moveTo(0, md.shift),
+                input.KEY_E => m.moveTo(m.len, md.shift),
                 else => return false,
             }
             return true;
@@ -560,11 +591,3 @@ pub const TextField = struct {
         }
     }
 };
-
-// evdev 글자 키(편집 명령).
-const KEY_A: u32 = 30;
-const KEY_C: u32 = 46;
-const KEY_E: u32 = 18;
-const KEY_V: u32 = 47;
-const KEY_X: u32 = 45;
-const KEY_Z: u32 = 44;

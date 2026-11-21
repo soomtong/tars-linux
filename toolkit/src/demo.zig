@@ -316,7 +316,7 @@ pub fn main(init: std.process.Init) !u8 {
         .resize = App.resize,
         .input = App.input,
         .tick = App.tick,
-    }) catch |e| {
+    }, .{}) catch |e| {
         tk.window.say("error open={s}", .{@errorName(e)});
         return 1;
     };

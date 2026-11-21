@@ -40,6 +40,12 @@ cd "$(dirname "$0")" || exit 1
 #   → `Cmd+F` · `m`: 첫 열에 m.txt 한 행(a가 걸러져 오른쪽 열이 버려짐), Esc로 넷과 m.txt 선택(24)
 #   → `Cmd+K` · `xtxt`: 열 자리를 덮는 결과 리스트에 a/b/x.txt · 한/x.txt, Enter로 열 셋 · x.txt 선택(25)
 #   → tars-files 로그: `files` · `load` · `column` · `columns` · `focus` · `refresh` 줄이 위와 맞고, 그린 수 = commit 수
+#   → 다섯째 `tars-files /tmp/tkp`(TK-M6 plan 확정 17 — 25 뒤 같은 부팅): 바에 `tars-files  File  Edit  View  Go`(`menu> bar … titles=File,Edit,View,Go`,
+#     위 띠의 이름 · 제목 잉크 = 서버 덤프)와 앱의 `tk> menu sent menus=4 items=13`(26)
+#   → `Cmd+L`과 메뉴 Go › 경로로 가기가 같은 동작 — 둘 다 경로 바를 연다(`tk> action name=goto via=key|menu`, 27)
+#   → 리스트 포커스의 `Cmd+C`와 메뉴 Edit › 복사가 둘 다 경로 복사(`tk> copy path=/tmp/tkp/d` 둘, 28)
+#   → 비활성 Edit › 붙여넣기는 클릭해도 `menu> activate`가 없고, 키 `Cmd+V`는 앱이 먹는다(`tk> paste` · `action` 없음, 29). 앱의 모델 commit이 연 메뉴를
+#     닫은 일 없음(`why=model` 0)
 #
 # 부팅 하나, NIC 없음, 디스크 없음 — 셸은 root(fish), 소켓은 `/run/user/0`. 키보드는 QEMU의 PS/2라 pc로 읽혀 Cmd가 Alt
 # 자리다(wayland 체인과 같다). USB 마우스 하나(TK-M2 — 판정 12의 클릭 · 휠). HMP `mouse_move` · `mouse_button`이 그 장치로 가고 포인터는
@@ -235,6 +241,25 @@ ppm_px() {
   got="$(ppm_ink "$1" "$2" "$3" 1 1)"
   got="${got#bg=}"
   echo "${got%% *}"
+}
+
+# 상자 안에서 한 색의 픽셀 수(wayland 체인의 같은 이름 함수 — TK-M6 판정 26의 바 잉크).
+ppm_count() {
+  perl -e '
+    my ($f, $x0, $y0, $w, $h, $c) = @ARGV;
+    open(my $fh, "<:raw", $f) or die "$f: $!\n";
+    local $/; my $d = <$fh>;
+    $d =~ s/\AP6\s+(\d+)\s+\d+\s+\d+\s//s or die "$f: not a P6 ppm\n";
+    my $row = $1 * 3; my $n = 0;
+    for my $y ($y0 .. $y0 + $h - 1) {
+      for my $x ($x0 .. $x0 + $w - 1) { $n++ if unpack("H6", substr($d, $y * $row + $x * 3, 3)) eq $c; }
+    }
+    print "$n\n";' "$@"
+}
+
+# 마지막 `menu> bar ink` 줄의 칸 하나(`name` · `fg` · `other` — wayland 체인의 같은 이름 함수).
+bar_ink() {
+  tlog | tr -d '\r' | grep -a 'terminal: menu> bar ink ' | tail -n 1 | sed -E "s/.* $1=([0-9]+).*/\1/"
 }
 
 # 상자 안에서 두 색 어느 것도 아닌 픽셀의 수 — 안티에일리어스의 중간값.
@@ -966,6 +991,172 @@ wait_for_log "terminal: wl> close id=${ID6}" || report_failure "Cmd+Q sent no 'w
 wait_for_log "terminal: wl> unmap id=${ID6} ws=1 slot=1" || report_failure "tars-files' fourth slot was not removed"
 sleep 2
 
+# ══ 메뉴 모델 · 단축키 표 하나(TK-M6 단계 A, plan 확정 9 · 17) ═══════════════════════
+#
+# 판정 25 뒤 셸에서 다섯째 `tars-files /tmp/tkp`(d/ e.txt — 단계 B의 미리보기가 늘린다). 첫 열: d(선택) · e.txt. 앱이 첫 commit 앞에 메뉴 모델
+# (4 메뉴 13 항목)을 보내 바가 `tars-files  File  Edit  View  Go`다. 바의 셈(menubar — 이름 10칸 80 px, 두 칸 띄고 제목): 이름 x 20..99, File x 116,
+# Edit x 164, View x 212, Go x 260, 글자 줄 y 2..18. 제목 칸(클릭 자리)은 글 앞뒤 한 칸 — Edit은 x 156..203.
+# action id(`src/files/menus.zig`): 표준 copy 3 · paste 4, 앱 quit 16 · filter 17 · preview 18 · refresh 19 · goto 20 · search 21.
+# 키로 연 메뉴는 첫 고를 칸이 강조이고 `↓`는 비활성을 건너뛴다(서버) — 리스트 포커스의 Edit은 되돌리기 · 오려두기가 비활성이라 첫 칸이 복사(item 3)다.
+# 비활성 칸에 Enter를 칠 수 없으므로(키 이동이 건너뛴다) 판정 29는 포인터로 그 칸을 누른다.
+echo "=== (26) tars-files sends its menu model: the bar shows File Edit View Go ==="
+type_text 'mkdir -p /tmp/tkp/d'
+type_keys ret
+type_text 'touch /tmp/tkp/e.txt'
+type_keys ret
+type_text 'tars-files /tmp/tkp > /tmp/tk7.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' 7 || report_failure "(26) tars-files did not open a seventh column"
+ID7="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+' | tail -n 1 | sed 's/.*id=//')"
+wait_for_log "terminal: wl> menu id=${ID7} menus=4 items=13([^0-9]|$)" || report_failure "(26) no 'wl> menu id=${ID7} menus=4 items=13' (the model did not reach the server)"
+wait_for_log "terminal: wl> commit id=${ID7} buf=616x752 " || report_failure "(26) tars-files never committed a 616x752 buffer"
+wait_for_log "terminal: menu> bar id=${ID7} name=tars-files titles=File,Edit,View,Go" ||
+  report_failure "(26) no 'menu> bar id=${ID7} name=tars-files titles=File,Edit,View,Go'"
+sleep 1.5
+SHOT26="${SCREENS_DIR}/files-menu-bar.ppm"
+screendump "$SHOT26" || report_failure "(26) screendump did not write ${SHOT26}"
+B_NAME="$(bar_ink name)"
+B_FG="$(bar_ink fg)"
+S_NAME="$(ppm_count "$SHOT26" 20 2 80 16 e8d8b0)"
+A_NAME="$(ppm_count "$SHOT26" 0 0 1280 20 e8d8b0)"
+A_FG="$(ppm_count "$SHOT26" 0 0 1280 20 d0d8e0)"
+T_SUM=0
+T_EACH=""
+for t in 116:32 164:32 212:32 260:16; do
+  n="$(ppm_count "$SHOT26" "${t%%:*}" 2 "${t##*:}" 16 d0d8e0)"
+  [ "${n:-0}" -gt 0 ] || report_failure "(26) the title at x ${t%%:*} has no d0d8e0 ink"
+  T_SUM=$((T_SUM + n))
+  T_EACH="${T_EACH} ${n}"
+done
+echo "(26) bar ink: dump name=${B_NAME} fg=${B_FG}; screen name box ${S_NAME}, titles${T_EACH} (sum ${T_SUM}); band name ${A_NAME} fg ${A_FG}"
+[ "${S_NAME:-0}" -gt 0 ] && [ "$S_NAME" = "$B_NAME" ] && [ "$A_NAME" = "$S_NAME" ] ||
+  report_failure "(26) the name's ink is not in its box at x 20 (box ${S_NAME}, dump ${B_NAME}, band ${A_NAME})"
+[ "$T_SUM" = "$B_FG" ] && [ "$A_FG" = "$B_FG" ] ||
+  report_failure "(26) the titles' ink is not at x 116 164 212 260 (sum ${T_SUM}, dump ${B_FG}, band ${A_FG})"
+echo "(26): the model (4 menus, 13 entries) reached the server and the bar shows tars-files File Edit View Go"
+
+echo "=== (27) Cmd+L and Go > 경로로 가기 are the same action: both open the path bar ==="
+type_keys alt-l
+wait_for_count "terminal: wl> ti enable to=${ID7}([^0-9]|$)" 1 || report_failure "(27) Cmd+L did not open the path bar"
+type_keys esc
+wait_for_count "terminal: wl> ti disable to=${ID7}([^0-9]|$)" 1 || report_failure "(27) Esc did not close the path bar"
+sleep 1
+type_keys alt-shift-slash
+wait_for_log "terminal: menu> open id=${ID7} menu=0" || report_failure "(27) Cmd+Shift+/ did not open File"
+type_keys right right right
+wait_for_log 'terminal: menu> move menu=3 item=0' || report_failure "(27) three rights did not reach Go with 경로로 가기 highlighted"
+wait_for_log "terminal: menu> drop id=${ID7} menu=3 hl=0 rect=" || report_failure "(27) no 'menu> drop … menu=3 hl=0' for Go"
+sleep 0.5
+SHOT27="${SCREENS_DIR}/files-menu-go.ppm"
+screendump "$SHOT27" || report_failure "(27) screendump did not write ${SHOT27}"
+GO_DROP="$(tlog | tr -d '\r' | grep -a "terminal: menu> drop id=${ID7} menu=3 hl=0 " | tail -n 1 | sed -E 's/.* rect=([0-9]+,[0-9]+ [0-9]+x[0-9]+) .*/\1/')"
+echo "(27) Go's dropdown: ${GO_DROP}"
+type_keys ret
+wait_for_log "terminal: menu> activate id=${ID7} item=20" || report_failure "(27) Enter did not activate goto (item 20)"
+wait_for_log "terminal: menu> close id=${ID7} why=pick" || report_failure "(27) the menu did not close after the pick"
+wait_for_count "terminal: wl> ti enable to=${ID7}([^0-9]|$)" 2 || report_failure "(27) Go > 경로로 가기 did not open the path bar"
+type_keys esc
+wait_for_count "terminal: wl> ti disable to=${ID7}([^0-9]|$)" 2 || report_failure "(27) Esc did not close the path bar again"
+sleep 1
+echo "(27): Cmd+L and Go > 경로로 가기 (activate item 20) both opened the path bar"
+
+echo "=== (28) Cmd+C and Edit > 복사 are both the path copy when the list has the focus ==="
+SELS="$(count_log "terminal: wl> selection from=${ID7} ")"
+type_keys alt-c
+wait_for_count "terminal: wl> selection from=${ID7} " $((SELS + 1)) || report_failure "(28) Cmd+C set no selection"
+wait_for_log 'terminal: clip> len=10 text=/tmp/tkp/d' || report_failure "(28) the path /tmp/tkp/d did not reach the shell's clipboard"
+CLIPS="$(count_log 'terminal: clip> len=10 text=/tmp/tkp/d')"
+sleep 0.5
+OPENS="$(count_log "terminal: menu> open id=${ID7} ")"
+type_keys alt-shift-slash
+wait_for_count "terminal: menu> open id=${ID7} menu=0" $((OPENS + 1)) || report_failure "(28) Cmd+Shift+/ did not open File"
+MOVES="$(count_log 'terminal: menu> move menu=1 item=3')"
+type_keys right
+wait_for_count 'terminal: menu> move menu=1 item=3' $((MOVES + 1)) || report_failure "(28) right did not land on Edit > 복사 (item 3 — undo and cut disabled)"
+type_keys ret
+wait_for_log "terminal: menu> activate id=${ID7} item=3" || report_failure "(28) Enter did not activate copy (item 3)"
+wait_for_count "terminal: wl> selection from=${ID7} " $((SELS + 2)) || report_failure "(28) Edit > 복사 set no selection"
+wait_for_count 'terminal: clip> len=10 text=/tmp/tkp/d' $((CLIPS + 1)) || report_failure "(28) the menu's copy did not reach the shell's clipboard"
+sleep 0.5
+echo "(28): Cmd+C and Edit > 복사 both put /tmp/tkp/d on the clipboard"
+
+echo "=== (29) a disabled item: clicking Edit > 붙여넣기 does nothing, the key Cmd+V is eaten ==="
+OPENS="$(count_log "terminal: menu> open id=${ID7} menu=1")"
+move_to 180 10 || report_failure "(29) the pointer did not reach 180,10 (last at: $(last_at))"
+hmp "mouse_button 1"
+hmp "mouse_button 0"
+wait_for_count "terminal: menu> open id=${ID7} menu=1" $((OPENS + 1)) || report_failure "(29) a click on Edit did not open it"
+wait_for_log "terminal: menu> drop id=${ID7} menu=1 hl=- rect=" || report_failure "(29) no 'menu> drop … menu=1 hl=-' for Edit"
+EDIT_DROP="$(tlog | tr -d '\r' | grep -a "terminal: menu> drop id=${ID7} menu=1 hl=- " | tail -n 1 | sed -E 's/.* rect=([0-9]+),([0-9]+) ([0-9]+)x([0-9]+) .*/\1 \2 \3 \4/')"
+read -r EX EY EW EH <<<"$EDIT_DROP"
+sleep 0.5
+SHOT29="${SCREENS_DIR}/files-menu-edit.ppm"
+screendump "$SHOT29" || report_failure "(29) screendump did not write ${SHOT29}"
+# 칸: 되돌리기 16 · 구분선 8 · 오려두기 16 · 복사 16 · 붙여넣기 16 — 붙여넣기 행은 드롭다운 위 + 56..72, 가운데 + 64.
+PASTE_Y=$((EY + 64))
+DIM29="$(ppm_count "$SHOT29" "$EX" $((EY + 56)) "$EW" 16 687484)"
+FG29="$(ppm_count "$SHOT29" "$EX" $((EY + 40)) "$EW" 16 d0d8e0)"
+echo "(29) Edit's dropdown: ${EX},${EY} ${EW}x${EH}; 붙여넣기 row dim ink ${DIM29}, 복사 row fg ink ${FG29}"
+[ "${DIM29:-0}" -gt 0 ] && [ "${FG29:-0}" -gt 0 ] || report_failure "(29) 붙여넣기 is not dimmed (687484 ${DIM29}) or 복사 not drawn as enabled (d0d8e0 ${FG29})"
+ACTS="$(count_log "terminal: menu> activate id=${ID7} ")"
+move_to $((EX + EW / 2)) "$PASTE_Y" || report_failure "(29) the pointer did not reach the 붙여넣기 row"
+hmp "mouse_button 1"
+hmp "mouse_button 0"
+sleep 1
+[ "$(count_log "terminal: menu> activate id=${ID7} ")" -eq "$ACTS" ] || report_failure "(29) a click on the disabled 붙여넣기 activated something"
+type_keys esc
+wait_for_log "terminal: menu> close id=${ID7} why=esc" || report_failure "(29) the menu was not still open (no 'why=esc' — the click closed it?)"
+sleep 0.5
+VKEYS="$(count_log "terminal: wl> key code=47 state=1 to=${ID7}([^0-9]|$)")"
+type_keys alt-v
+wait_for_count "terminal: wl> key code=47 state=1 to=${ID7}([^0-9]|$)" $((VKEYS + 1)) || report_failure "(29) Cmd+V did not reach tars-files"
+sleep 1
+MODELS="$(count_log "terminal: menu> close id=${ID7} why=model")"
+[ "$MODELS" -eq 0 ] || report_failure "(27-29) ${MODELS} open menu(s) closed because the app committed its model"
+echo "(29): the click on the disabled 붙여넣기 did not activate, Esc closed the menu; Cmd+V reached the app (its log below)"
+type_keys alt-q
+wait_for_log "terminal: wl> close id=${ID7}" || report_failure "Cmd+Q sent no 'wl> close id=${ID7}' to tars-files"
+wait_for_log "terminal: wl> unmap id=${ID7} ws=1 slot=1" || report_failure "tars-files' fifth slot was not removed"
+sleep 2
+type_text 'echo tk7begin > /dev/console'
+type_keys ret
+type_text 'cat /tmp/tk7.log > /dev/console'
+type_keys ret
+got_rss=0
+for _ in $(seq 1 150); do
+  if tr -d '\r' < "$LOG" | sed -n '/^tk7begin$/,$p' | grep -aE '^tk> rss vmrss_kb=[0-9]+ ' > /dev/null; then got_rss=1; break; fi
+  sleep 0.1
+done
+[ "$got_rss" = 1 ] || report_failure "tars-files' fifth log did not come out on the serial (no 'tk> rss' after 'tk7begin')"
+TK7="$(tr -d '\r' < "$LOG" | sed -n '/^tk7begin$/,$p' | grep -a '^tk> ')"
+has7() {
+  printf '%s\n' "$TK7" | grep -aE -- "$1" > /dev/null || report_failure "$2: no '$1' in tars-files' fifth log"
+}
+count7() {
+  printf '%s\n' "$TK7" | grep -acE -- "$1"
+}
+has7 '^tk> files path=/tmp/tkp$' "(26)"
+has7 '^tk> native$' "(26)"
+has7 '^tk> menu sent menus=4 items=13$' "(26)"
+has7 '^tk> action name=goto via=key$' "(27)"
+has7 '^tk> menu activated id=20$' "(27)"
+has7 '^tk> action name=goto via=menu$' "(27)"
+[ "$(count7 '^tk> bar open$')" -eq 2 ] || report_failure "(27) the path bar did not open exactly twice ($(count7 '^tk> bar open$'))"
+[ "$(count7 '^tk> copy path=/tmp/tkp/d$')" -eq 2 ] || report_failure "(28) not two path copies ($(count7 '^tk> copy path=/tmp/tkp/d$'))"
+has7 '^tk> action name=copy via=key$' "(28)"
+has7 '^tk> menu activated id=3$' "(28)"
+has7 '^tk> action name=copy via=menu$' "(28)"
+has7 '^tk> key code=47 state=1$' "(29)"
+[ "$(count7 '^tk> (paste |action name=paste )')" -eq 0 ] || report_failure "(29) the disabled paste ran (a 'tk> paste' or 'action name=paste' line)"
+[ "$(count7 '^tk> menu (error|unsupported)')" -eq 0 ] || report_failure "(26) the window layer did not send the model (menu error/unsupported)"
+SENT7="$(count7 '^tk> menu sent ')"
+D7="$(count7 '^tk> draw ')"
+C7="$(count7 '^tk> commit$')"
+[ "$D7" -eq "$C7" ] || report_failure "tars-files (menu) drew ${D7} times but committed ${C7}"
+echo "(26-29 log): menu sent ×${SENT7}, goto via key and menu, two bars, two path copies (key, menu), Cmd+V eaten; ${D7} draws = ${C7} commits"
+echo "--- reference: tars-files with the menu model (TK-M6 phase A) ---"
+printf '%s\n' "$TK7" | grep -aE '^tk> (menu|action|bar|copy|focus|configure|draw .* age=0) '
+
 # ── tars-files의 로그를 꺼낸다 ───────────────────────────────────────────
 type_text 'echo tk3begin > /dev/console'
 type_keys ret
@@ -1066,4 +1257,4 @@ printf '%s\n' "$TK3A" | grep -aE '^tk> (draw|columns|refresh) '
 MISMATCH="$(count_log 'terminal: verify> mismatch')"
 [ "$MISMATCH" -eq 0 ] || report_failure "render verify mismatch lines: ${MISMATCH}"
 
-echo "PASS: TK-M4 — tars-tk-demo binds tars_menu_v1 (native), opens as a 616x752 column, draws a rounded rectangle (z2d) with antialiased corners and antialiased Pretendard text, redraws centred at 1240x752 on Cmd+R, animates a face's opacity (mid colour between, end colour after) with only the face's rectangle blitted, commits only when it draws (2 + ${N} draws and commits, none while idle), and ends by itself on Cmd+Q; tars-tk-demo --list 100000 moves list1's highlight to row 10 after ten downs, End shows the last row and the bar at the bottom, a click selects row 4 and the wheel scrolls three rows, Tab and Shift+Tab move the focus between the lists, and holding down repeats ${REPEATS} time(s) on the client; tars-files lists /tmp/tkf with directories first and hidden names out, -> -> <- leaves three columns with the focus on the second (scroll 201), re-reads on focus and keeps b selected after a/0 appears, and streams ${FILES_N} entries in ${CHUNKS18} chunks (painted at ${PAINT18} us of ${ALL18} us), elides a long directory and a long file name in the middle so they stop short of the › and the bar, copies the selected path to the shell's clipboard on Cmd+C, and opens the path bar on Cmd+L where a typed path, a Hangul path (preedit underlined, then committed) and a pasted path rebuild the columns, filters the focused column on Cmd+F and searches under the first column on Cmd+K"
+echo "PASS: TK-M6 (phase A) — tars-tk-demo binds tars_menu_v1 (native), opens as a 616x752 column, draws a rounded rectangle (z2d) with antialiased corners and antialiased Pretendard text, redraws centred at 1240x752 on Cmd+R, animates a face's opacity (mid colour between, end colour after) with only the face's rectangle blitted, commits only when it draws (2 + ${N} draws and commits, none while idle), and ends by itself on Cmd+Q; tars-tk-demo --list 100000 moves list1's highlight to row 10 after ten downs, End shows the last row and the bar at the bottom, a click selects row 4 and the wheel scrolls three rows, Tab and Shift+Tab move the focus between the lists, and holding down repeats ${REPEATS} time(s) on the client; tars-files lists /tmp/tkf with directories first and hidden names out, -> -> <- leaves three columns with the focus on the second (scroll 201), re-reads on focus and keeps b selected after a/0 appears, and streams ${FILES_N} entries in ${CHUNKS18} chunks (painted at ${PAINT18} us of ${ALL18} us), elides a long directory and a long file name in the middle so they stop short of the › and the bar, copies the selected path to the shell's clipboard on Cmd+C, and opens the path bar on Cmd+L where a typed path, a Hangul path (preedit underlined, then committed) and a pasted path rebuild the columns, filters the focused column on Cmd+F and searches under the first column on Cmd+K; tars-files /tmp/tkp sends its menu model so the bar shows tars-files File Edit View Go, Cmd+L and Go > 경로로 가기 both open the path bar, Cmd+C and Edit > 복사 both copy the path, and the disabled 붙여넣기 does nothing from the menu or the key, with no open menu closed by the app's model"

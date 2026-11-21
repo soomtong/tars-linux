@@ -5,7 +5,7 @@
 //!   모듈 `tk`          층들을 잇는 뿌리(src/tk.zig). 게스트(x86_64) 대상이다. 그 아래 층마다 모듈 하나(R-ARCH-1, TK-M1):
 //!                      `tk_geom`(사각형, 층 밖) · `tk_window`(창, src/window/) · `tk_cg`(판 · 렌더 백엔드 · 글자, src/cg/) ·
 //!                      `tk_ca`(레이어 트리, src/ca/) · `tk_kit`(AppKit — 뷰 · responder, src/kit/, TK-M2)과 층 밖의 순수 값
-//!                      `tk_input`(입력 이벤트, src/input.zig). kit은 창 층을 모른다. 아래 층이 위 층을 부를 import 이름을 여기서 주지 않고, 경로로 부르면
+//!                      `tk_input`(입력 이벤트, src/input.zig) · `tk_menu`(메뉴 모델, src/menu.zig — TK-M6). kit은 창 층을 모른다. 아래 층이 위 층을 부를 import 이름을 여기서 주지 않고, 경로로 부르면
 //!                      그 파일이 두 모듈에 들어 컴파일이 막는다("file exists in modules 'tk_ca' and 'tk_cg'" — 실측) — 층 경계를
 //!                      컴파일이 지킨다.
 //!   `tars-tk-demo`     TK-M0의 시험 앱(plan 확정 5). initrd의 /usr/bin에 실린다.
@@ -78,7 +78,7 @@ pub fn build(b: *std.Build) void {
     scanner.generate("wl_output", 4);
     scanner.generate("wl_seat", 7);
     scanner.generate("xdg_wm_base", 5);
-    scanner.generate("tars_menu_manager_v1", 1);
+    scanner.generate("tars_menu_manager_v1", 2);
     scanner.generate("zwp_text_input_manager_v3", 1);
     scanner.generate("wl_data_device_manager", 2);
     const wayland = b.createModule(.{ .root_source_file = scanner.result });
@@ -97,6 +97,7 @@ pub fn build(b: *std.Build) void {
     });
     tk_window.addImport("tk_geom", layers.geom);
     tk_window.addImport("tk_input", layers.input);
+    tk_window.addImport("tk_menu", layers.menu);
     tk_window.addImport("wayland", wayland);
 
     // ── 모듈 tk ──────────────────────────────────────────────────────
@@ -112,6 +113,7 @@ pub fn build(b: *std.Build) void {
     tk.addImport("tk_cg", layers.cg);
     tk.addImport("tk_ca", layers.ca);
     tk.addImport("tk_input", layers.input);
+    tk.addImport("tk_menu", layers.menu);
     tk.addImport("tk_kit", layers.kit);
     tk.addImport("tk_tokens", layers.tokens);
     tk.addIncludePath(terminal_vendor);
@@ -139,6 +141,9 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     files_mod.addImport("tk", tk);
+    // 메뉴 모델 `src/files/menus.zig`(TK-M6)는 `tk` 아래의 순수 모듈 둘을 직접 부른다 — 호스트 검사가 같은 파일을 부르게(같은 모듈이라 `tk.menu`와 같은 타입).
+    files_mod.addImport("tk_menu", layers.menu);
+    files_mod.addImport("tk_input", layers.input);
     b.installArtifact(b.addExecutable(.{ .name = "tars-files", .root_module = files_mod }));
 
     // ── 호스트 검사 ─────────────────────────────────────────────────────
@@ -156,9 +161,14 @@ pub fn build(b: *std.Build) void {
     test_mod.addImport("tk_cg", host_layers.cg);
     test_mod.addImport("tk_ca", host_layers.ca);
     test_mod.addImport("tk_input", host_layers.input);
+    test_mod.addImport("tk_menu", host_layers.menu);
     test_mod.addImport("tk_kit", host_layers.kit);
     test_mod.addImport("tk_tokens", host_layers.tokens);
     // `tars-files`의 순수한 것 — 검색(`search.zig`)이 모델(`model.zig`)을 경로로 부르므로 한 모듈이다(`files_search.model`, TK-M4 단계 C).
+    const files_menus = b.createModule(.{ .root_source_file = b.path("src/files/menus.zig"), .target = host_target, .optimize = optimize });
+    files_menus.addImport("tk_menu", host_layers.menu);
+    files_menus.addImport("tk_input", host_layers.input);
+    test_mod.addImport("files_menus", files_menus);
     test_mod.addImport("files_search", b.createModule(.{ .root_source_file = b.path("src/files/search.zig"), .target = host_target, .optimize = optimize }));
     // 서버 키맵(TK-M4 — 글자 키 표 `tk_input.charFor`를 이 파일과 대조한다, design 결정 13 · 15). 서버와 같은 파일이다(terminal/build.zig).
     test_mod.addAnonymousImport("keymap", .{ .root_source_file = b.path("../terminal/vendor/keymap-us.xkb") });
@@ -181,9 +191,12 @@ fn layerModules(
     theme: *std.Build.Module,
     glyph: *std.Build.Module,
     z2d: *std.Build.Module,
-) struct { geom: *std.Build.Module, input: *std.Build.Module, cg: *std.Build.Module, ca: *std.Build.Module, kit: *std.Build.Module, tokens: *std.Build.Module } {
+) struct { geom: *std.Build.Module, input: *std.Build.Module, menu: *std.Build.Module, cg: *std.Build.Module, ca: *std.Build.Module, kit: *std.Build.Module, tokens: *std.Build.Module } {
     const geom = b.createModule(.{ .root_source_file = b.path("src/geom.zig"), .target = target, .optimize = optimize });
     const input = b.createModule(.{ .root_source_file = b.path("src/input.zig"), .target = target, .optimize = optimize });
+    // 메뉴 모델(TK-M6 plan 확정 1) — 층 밖의 순수 값. 창 층이 직렬화하고 kit이 맞춘다.
+    const menu = b.createModule(.{ .root_source_file = b.path("src/menu.zig"), .target = target, .optimize = optimize });
+    menu.addImport("tk_input", input);
     const cg = b.createModule(.{ .root_source_file = b.path("src/cg/cg.zig"), .target = target, .optimize = optimize });
     cg.addImport("tk_geom", geom);
     cg.addImport("glyph", glyph);
@@ -198,9 +211,10 @@ fn layerModules(
     kit.addImport("tk_tokens", tokens);
     kit.addImport("tk_geom", geom);
     kit.addImport("tk_input", input);
+    kit.addImport("tk_menu", menu);
     kit.addImport("tk_cg", cg);
     kit.addImport("tk_ca", ca);
-    return .{ .geom = geom, .input = input, .cg = cg, .ca = ca, .kit = kit, .tokens = tokens };
+    return .{ .geom = geom, .input = input, .menu = menu, .cg = cg, .ca = ca, .kit = kit, .tokens = tokens };
 }
 
 /// C 헤더 번역(terminal/build.zig의 같은 이름 함수와 같다 — ZU-M1).

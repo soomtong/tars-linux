@@ -30,6 +30,9 @@
 //!    `ColumnView.setColumns`.
 //! 17 필터 · 검색(TK-M4 단계 C) — 걷기(너비 우선 · 숨김 · 링크 · 뿌리 `/`의 제외 · 20만 · 주입한 시계의 10초), 점수 순서(연속 · 이름 · 짧은 경로 · 성분 처음 · 한글),
 //!    판정 25의 결과 순서, 걷는 중 질의 늘이기 = 처음부터, 상위 100 = 전체 정렬의 앞 100, 줄인 질의, 필터의 일치 · 안정 선택 · 갱신 뒤 유지.
+//! 18 메뉴 모델 · 단축키 표 하나(TK-M6 단계 A) — 모델 → 요청 열(순서 · 비트 · 비활성), 상한 넷의 경계, `match`(caps · Shift · 코드 0), mask 왕복,
+//!    chain(필드의 Cmd+C = 필드 · 리스트의 Cmd+C = 앱 · 비활성 단축키는 먹음 · 필드의 Space는 글자 · 리스트의 Space는 메뉴 · `Event.menu` · 비활성 id는
+//!    버림), 다시 셈(수정키 · ime에는 안 셈, 같으면 안 보냄), `tars-files`의 모델(상한 안 · 4 메뉴 13 항목 · 키가 서버의 이름 표 안 · 서버 chord와 안 겹침).
 
 const std = @import("std");
 const theme = @import("theme");
@@ -43,7 +46,9 @@ const ca = @import("tk_ca");
 const Age = @import("window/age.zig").Age;
 const Repeat = @import("window/repeat.zig").Repeat;
 const input = @import("tk_input");
+const menu = @import("tk_menu");
 const kit = @import("tk_kit");
+const files_menus = @import("files_menus");
 
 const W: u32 = 200;
 const H: u32 = 120;
@@ -233,6 +238,8 @@ pub fn main(init: std.process.Init) !u8 {
     try setColumnsTests(alloc, &f13);
     try searchTests(alloc);
     try filterTests(alloc);
+    menuModelTests();
+    try menuChainTests(alloc, font, &f13);
 
     if (failures != 0) {
         std.debug.print("tk_test: {d} failure(s)\n", .{failures});
@@ -2894,4 +2901,272 @@ fn filterTests(alloc: std.mem.Allocator) !void {
     try fm.filterInto(alloc, &items2, "m", &out2);
     const a3 = fm.follow(.{ .sel = sel, .index = 0, .offset = 0, .touched = true }, out2.items, 600, 24);
     check(out2.items.len == 2 and a3.index.? == 0 and std.mem.eql(u8, out2.items[a3.index.?].name, "m.txt"), "a refresh with the filter kept: 2 rows, the selection stays on m.txt", .{});
+}
+
+// ── 18 메뉴 모델 · 단축키 표 하나(TK-M6 단계 A) ─────────────────────────────
+
+/// `menu.emit`을 받아 요청 열을 글로 적는다(`M:File` · `I:16:끝내기:40:16:0` · `S` · `C`).
+const Recorder = struct {
+    buf: [2048]u8 = undefined,
+    len: usize = 0,
+
+    fn put(self: *Recorder, comptime fmt: []const u8, args: anytype) void {
+        const out = std.fmt.bufPrint(self.buf[self.len..], fmt, args) catch return;
+        self.len += out.len;
+    }
+    pub fn addMenu(self: *Recorder, title: []const u8) void {
+        self.put("M:{s} ", .{title});
+    }
+    pub fn addItem(self: *Recorder, id: u32, label: []const u8, mods: u32, key: u32, disabled: bool) void {
+        self.put("I:{d}:{s}:{x}:{d}:{d} ", .{ id, label, mods, key, @intFromBool(disabled) });
+    }
+    pub fn addSeparator(self: *Recorder) void {
+        self.put("S ", .{});
+    }
+    pub fn commit(self: *Recorder) void {
+        self.put("C", .{});
+    }
+    fn text(self: *const Recorder) []const u8 {
+        return self.buf[0..self.len];
+    }
+};
+
+fn isErr(r: menu.Error!void, want: menu.Error) bool {
+    r catch |e| return e == want;
+    return false;
+}
+
+const SEP: menu.Entry = .separator;
+const LONG64_ARR: [64]u8 = @splat('a');
+const LONG65_ARR: [65]u8 = @splat('a');
+const LONG64: []const u8 = &LONG64_ARR;
+const LONG65: []const u8 = &LONG65_ARR;
+
+fn menuModelTests() void {
+    const cmd: input.Mods = .{ .super = true };
+    const file = [_]menu.Entry{
+        .{ .item = .{ .action = 16, .name = "open", .label = "Open", .mods = cmd, .key = input.KEY_O } },
+        SEP,
+        .{ .item = .{ .action = 17, .name = "quit", .label = "Quit" } },
+    };
+    const edit = [_]menu.Entry{
+        .{ .item = .{ .action = menu.COPY, .name = "copy", .label = "복사", .mods = .{ .super = true, .shift = true }, .key = input.KEY_C } },
+    };
+    const m: menu.Model = .{ .menus = &.{ .{ .title = "File", .entries = &file }, .{ .title = "Edit", .entries = &edit } } };
+    var dis: menu.Disabled = .empty;
+    dis.set(2);
+    var rec: Recorder = .{};
+    menu.emit(&m, &dis, &rec);
+    check(std.mem.eql(u8, rec.text(), "M:File I:16:Open:40:24:0 S I:17:Quit:0:0:1 M:Edit I:3:복사:41:46:0 C"), "the model as requests: order, Cmd = 0x40, Cmd+Shift = 0x41, the separator counts as entry 1, entry 2 disabled ({s})", .{rec.text()});
+    check(m.entryCount() == 4 and m.itemAt(1) == null and m.itemAt(2).?.action == 17, "entry count 4 (with the separator), entry 1 is the separator", .{});
+
+    // 상한 넷의 경계(서버와 같은 수).
+    const ok64 = [_]menu.Entry{.{ .item = .{ .action = 16, .name = "x", .label = LONG64 } }};
+    const long65 = [_]menu.Entry{.{ .item = .{ .action = 16, .name = "x", .label = LONG65 } }};
+    check(blk: {
+        (menu.Model{ .menus = &.{.{ .title = LONG64, .entries = &ok64 }} }).check() catch break :blk false;
+        break :blk true;
+    }, "a 64-byte title and label pass", .{});
+    check(isErr((menu.Model{ .menus = &.{.{ .title = "T", .entries = &long65 }} }).check(), error.TooLong), "a 65-byte label is too_long", .{});
+    check(isErr((menu.Model{ .menus = &.{.{ .title = LONG65, .entries = &.{} }} }).check(), error.TooLong), "a 65-byte title is too_long", .{});
+    const bad = [_]menu.Entry{.{ .item = .{ .action = 16, .name = "x", .label = "\xed\x95" } }};
+    check(isErr((menu.Model{ .menus = &.{.{ .title = "T", .entries = &bad }} }).check(), error.BadUtf8), "a cut UTF-8 label is bad_utf8", .{});
+    const nine: [9]menu.Menu = @splat(.{ .title = "T", .entries = &.{} });
+    check(isErr((menu.Model{ .menus = &nine }).check(), error.TooMany), "nine menus are too_many", .{});
+    const eight: [8]menu.Menu = @splat(.{ .title = "T", .entries = &.{} });
+    check(blk: {
+        (menu.Model{ .menus = &eight }).check() catch break :blk false;
+        break :blk true;
+    }, "eight menus pass", .{});
+    const e33: [33]menu.Entry = @splat(SEP);
+    const e32: [32]menu.Entry = @splat(SEP);
+    check(isErr((menu.Model{ .menus = &.{.{ .title = "T", .entries = &e33 }} }).check(), error.TooMany), "33 entries in one menu are too_many", .{});
+    const four32: [4]menu.Menu = @splat(.{ .title = "T", .entries = &e32 });
+    check(blk: {
+        (menu.Model{ .menus = &four32 }).check() catch break :blk false;
+        break :blk true;
+    }, "4 x 32 = 128 entries pass", .{});
+    const e1 = [_]menu.Entry{SEP};
+    const over = four32 ++ [_]menu.Menu{.{ .title = "T", .entries = &e1 }};
+    check(isErr((menu.Model{ .menus = &over }).check(), error.TooMany), "129 entries in all are too_many", .{});
+
+    // match: caps는 안 보고, Shift는 가른다, 코드 0은 안 맞는다.
+    check(menu.match(&m, cmd, input.KEY_O).?.index == 0, "Cmd+O matches Open (entry 0)", .{});
+    check(menu.match(&m, .{ .super = true, .caps = true }, input.KEY_O) != null, "CapsLock does not change the match", .{});
+    check(menu.match(&m, .{ .super = true, .shift = true }, input.KEY_O) == null, "Cmd+Shift+O does not match Cmd+O", .{});
+    check(menu.match(&m, cmd, input.KEY_C) == null and menu.match(&m, .{ .super = true, .shift = true }, input.KEY_C).?.index == 3, "Cmd+C does not match Cmd+Shift+C (entry 3)", .{});
+    check(menu.match(&m, .{}, 0) == null, "code 0 (Quit has no key) matches nothing", .{});
+    check(menu.find(&m, 17).?.index == 2 and menu.find(&m, 99) == null, "find by action: 17 is entry 2, 99 none", .{});
+
+    // mask 왕복(수정키 넷의 열여섯 조합).
+    var round_ok = true;
+    var bits: u32 = 0;
+    while (bits < 16) : (bits += 1) {
+        const md: input.Mods = .{ .shift = bits & 1 != 0, .ctrl = bits & 2 != 0, .alt = bits & 4 != 0, .super = bits & 8 != 0 };
+        const back = input.modsFromMask(menu.maskOf(md), 0);
+        if (back.shift != md.shift or back.ctrl != md.ctrl or back.alt != md.alt or back.super != md.super) round_ok = false;
+    }
+    check(round_ok and menu.maskOf(.{ .super = true }) == 0x40 and menu.maskOf(.{ .caps = true }) == 0, "maskOf <-> modsFromMask for all 16 combinations, caps left out", .{});
+
+    // tars-files의 모델.
+    const fm_menu = &files_menus.MENU;
+    check(blk: {
+        fm_menu.check() catch break :blk false;
+        break :blk true;
+    }, "tars-files' model is inside the server's limits", .{});
+    check(fm_menu.menus.len == 4 and fm_menu.entryCount() == 13, "tars-files: 4 menus, 13 entries", .{});
+    var titles: [64]u8 = undefined;
+    var tn: usize = 0;
+    for (fm_menu.menus) |mm| {
+        @memcpy(titles[tn .. tn + mm.title.len], mm.title);
+        tn += mm.title.len;
+        titles[tn] = ',';
+        tn += 1;
+    }
+    check(std.mem.eql(u8, titles[0 .. tn - 1], "File,Edit,View,Go"), "tars-files' titles are File,Edit,View,Go", .{});
+    // 서버가 이름을 그리는 키(`terminal/src/menubar.zig`의 `keyName`): 글자 표의 키와 이름 있는 키 — 툴킷 안에서 셈한다.
+    // 서버가 먹는 chord(`terminal/src/input.zig`의 `tableChord` · `chord`의 copy mode): 앱에 안 온다.
+    const Chord = struct { mods: input.Mods, key: u32 };
+    const sh: input.Mods = .{ .super = true, .shift = true };
+    const op: input.Mods = .{ .super = true, .alt = true };
+    const chords = [_]Chord{
+        .{ .mods = cmd, .key = input.KEY_D }, .{ .mods = cmd, .key = input.KEY_W },   .{ .mods = cmd, .key = 26 },
+        .{ .mods = cmd, .key = 27 },          .{ .mods = cmd, .key = input.KEY_R },   .{ .mods = cmd, .key = input.KEY_Q },
+        .{ .mods = cmd, .key = input.KEY_T }, .{ .mods = sh, .key = input.KEY_D },    .{ .mods = sh, .key = 53 },
+        .{ .mods = sh, .key = input.KEY_C },  .{ .mods = op, .key = input.KEY_LEFT }, .{ .mods = op, .key = input.KEY_RIGHT },
+        .{ .mods = op, .key = input.KEY_UP }, .{ .mods = op, .key = input.KEY_DOWN }, .{ .mods = .{ .super = true, .ctrl = true }, .key = input.KEY_F },
+    };
+    var named = true;
+    var clash: u32 = 0;
+    var quit_clash = false;
+    var i: usize = 0;
+    while (i < fm_menu.entryCount()) : (i += 1) {
+        const it = fm_menu.itemAt(i) orelse continue;
+        if (it.key == 0) continue;
+        const has_name = (it.key < input.US_CHARS.len and input.US_CHARS[it.key][0] != 0) or input.keyFromCode(it.key) != .other;
+        if (!has_name) named = false;
+        var hits = false;
+        for (chords) |c| {
+            if (c.key == it.key and c.mods.super == it.mods.super and c.mods.shift == it.mods.shift and c.mods.alt == it.mods.alt and c.mods.ctrl == it.mods.ctrl) hits = true;
+        }
+        if (it.mods.super and !it.mods.shift and !it.mods.alt and !it.mods.ctrl and it.key >= 2 and it.key <= 10) hits = true; // Cmd+1~9
+        if (hits) {
+            if (it.action == files_menus.A_QUIT) quit_clash = true else clash += 1;
+        }
+    }
+    check(named, "every tars-files shortcut key is one the server draws a name for", .{});
+    check(clash == 0 and quit_clash, "no tars-files shortcut is a server chord except Quit's Cmd+Q (the server's own)", .{});
+}
+
+const APP_GOTO: u32 = menu.FIRST_APP;
+const APP_SPACE: u32 = menu.FIRST_APP + 1;
+const AppProbe = struct {
+    copies: u32 = 0,
+    gotos: u32 = 0,
+    spaces: u32 = 0,
+    sends: u32 = 0,
+    actions: u32 = 0,
+    last_name: []const u8 = "",
+    last_via: kit.Via = .key,
+};
+var app_probe: AppProbe = .{};
+
+fn appValidate(_: *anyopaque, a: u32) ?bool {
+    return switch (a) {
+        menu.COPY, APP_GOTO, APP_SPACE => true,
+        else => null,
+    };
+}
+fn appPerform(_: *anyopaque, a: u32) bool {
+    switch (a) {
+        menu.COPY => app_probe.copies += 1,
+        APP_GOTO => app_probe.gotos += 1,
+        APP_SPACE => app_probe.spaces += 1,
+        else => return false,
+    }
+    return true;
+}
+const APP_VT: kit.VTable = .{ .perform = appPerform, .validate = appValidate };
+fn onMenuSend(_: *anyopaque, _: *const menu.Disabled) void {
+    app_probe.sends += 1;
+}
+fn onActionHook(_: *anyopaque, name: []const u8, via: kit.Via) void {
+    app_probe.actions += 1;
+    app_probe.last_name = name;
+    app_probe.last_via = via;
+}
+
+const CHAIN_EDIT = menu.standard_edit;
+const CHAIN_GO = [_]menu.Entry{
+    .{ .item = .{ .action = APP_GOTO, .name = "goto", .label = "Go", .mods = .{ .super = true }, .key = input.KEY_L } },
+    .{ .item = .{ .action = APP_SPACE, .name = "space", .label = "Space", .key = input.KEY_SPACE } },
+};
+const CHAIN_MODEL: menu.Model = .{ .menus = &.{ .{ .title = "Edit", .entries = &CHAIN_EDIT }, .{ .title = "Go", .entries = &CHAIN_GO } } };
+
+fn menuChainTests(alloc: std.mem.Allocator, font: []const u8, face13: *text.Face) !void {
+    var env: FieldEnv = undefined;
+    try env.init(alloc, font, face13);
+    defer env.deinit();
+    app_probe = .{};
+    env.root_view.vtable = &APP_VT;
+    var un: KitLog = .{};
+    env.root.unhandled = .{ .ctx = &un, .on = KitLog.onUnhandled };
+    env.root.action_hook = .{ .ctx = &env, .on = onActionHook };
+    env.root.menu_hook = .{ .ctx = &env, .send = onMenuSend };
+    const f = &env.field;
+    const cmd: input.Mods = .{ .super = true };
+
+    // 리스트가 first responder: 필드는 chain에 없다.
+    _ = env.root.setFirstResponder(&env.other.view);
+    env.root.setMenu(&CHAIN_MODEL);
+    // 항목 순서: 0 되돌리기 · 1 구분선 · 2 오려두기 · 3 복사 · 4 붙여넣기 · 5 전체 선택 · 6 Go · 7 Space.
+    const d0 = env.root.disabled;
+    check(d0.isSet(0) and !d0.isSet(1) and d0.isSet(2) and !d0.isSet(3) and d0.isSet(4) and d0.isSet(5) and !d0.isSet(6) and !d0.isSet(7), "list focused: undo · cut · paste · select all disabled (only the field has them), copy · go · space enabled (the app)", .{});
+    env.key(input.KEY_C, cmd);
+    check(app_probe.copies == 1 and env.copied_len == 0 and app_probe.actions == 1 and std.mem.eql(u8, app_probe.last_name, "copy") and app_probe.last_via == .key, "list focused: Cmd+C is the app's copy (action copy via key)", .{});
+    const text_before = f.text().len;
+    env.clip_text = "zz";
+    env.key(input.KEY_V, cmd);
+    check(f.text().len == text_before and un.unhandled == 0 and app_probe.actions == 1, "list focused: Cmd+V (paste disabled) is eaten — no paste, no unhandled, no action line", .{});
+    env.key(input.KEY_SPACE, .{});
+    check(app_probe.spaces == 1 and app_probe.last_via == .key, "list focused: Space (no modifier, the list does not take it) reaches the menu table", .{});
+    env.root.handle(.{ .menu = APP_GOTO });
+    check(app_probe.gotos == 1 and app_probe.last_via == .menu and std.mem.eql(u8, app_probe.last_name, "goto"), "Event.menu goto runs the same action (via menu)", .{});
+    const acts = app_probe.actions;
+    env.root.handle(.{ .menu = menu.PASTE });
+    env.root.handle(.{ .menu = 999 });
+    check(app_probe.actions == acts and f.text().len == text_before, "Event.menu for a disabled item (paste) or an unknown id does nothing", .{});
+
+    // 필드가 first responder.
+    const sends0 = app_probe.sends;
+    _ = env.root.setFirstResponder(&f.view);
+    env.root.handle(.{ .focus = true });
+    check(app_probe.sends == sends0 + 1, "moving the focus to the field and the next input event sends the model once (flags changed)", .{});
+    const d1 = env.root.disabled;
+    check(!d1.isSet(4) and !d1.isSet(5) and d1.isSet(3), "field focused, no selection: paste · select all enabled, copy disabled (the field answers before the app)", .{});
+    f.setText("abc");
+    env.key(input.KEY_A, cmd);
+    env.key(input.KEY_C, cmd);
+    check(env.copied_len == 3 and app_probe.copies == 1, "field focused: Cmd+A, Cmd+C copy the field's text, not the app's path", .{});
+    env.key(input.KEY_SPACE, .{});
+    check(std.mem.eql(u8, f.text(), " ") and app_probe.spaces == 1, "field focused: Space is a character (the menu table is not asked)", .{});
+    env.key(input.KEY_L, cmd);
+    check(app_probe.gotos == 2, "field focused: Cmd+L reaches the app's goto (the field does not know it)", .{});
+    env.key(input.KEY_LEFT, cmd);
+    check(f.model.caret == 0, "Cmd+Left stays a key (not a menu item): caret to the start", .{});
+    // 다시 셈: 수정키 · ime에는 안 센다, 같으면 안 보낸다.
+    const sends1 = app_probe.sends;
+    env.key(input.KEY_LEFTMETA, .{});
+    env.root.handle(.{ .ime = .{ .commit = "x", .preedit = "" } });
+    check(app_probe.sends == sends1, "a modifier key and an ime event do not resend the model", .{});
+    env.root.handle(.{ .focus = true });
+    const sends2 = app_probe.sends;
+    env.root.handle(.{ .focus = true });
+    check(app_probe.sends == sends2, "an input event with the same flags sends nothing", .{});
+    f.model.selectAll();
+    env.key(input.KEY_LEFTSHIFT, .{});
+    check(app_probe.sends == sends2, "flags changed (a selection) but only a modifier came: nothing sent", .{});
+    env.key(input.KEY_RIGHT, .{ .shift = true });
+    check(app_probe.sends == sends2 + 1 and !env.root.disabled.isSet(3), "the next key resends: copy now enabled", .{});
+    _ = env.root.setFirstResponder(null);
 }

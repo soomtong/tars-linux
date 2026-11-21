@@ -66,6 +66,34 @@ pub const KEY_DELETE: u32 = 111;
 pub const KEY_LEFTMETA: u32 = 125;
 pub const KEY_RIGHTMETA: u32 = 126;
 /// 포인터 버튼(`wl_pointer.button`의 코드).
+/// 글자 키(TK-M6 plan 확정 8 — 단축키 · 필드의 Ctrl 키가 이 한 자리에서 부른다). us 배열의 물리 자리 그대로다(`US_CHARS`와 같은 표).
+pub const KEY_A: u32 = 30;
+pub const KEY_B: u32 = 48;
+pub const KEY_C: u32 = 46;
+pub const KEY_D: u32 = 32;
+pub const KEY_E: u32 = 18;
+pub const KEY_F: u32 = 33;
+pub const KEY_G: u32 = 34;
+pub const KEY_H: u32 = 35;
+pub const KEY_I: u32 = 23;
+pub const KEY_J: u32 = 36;
+pub const KEY_K: u32 = 37;
+pub const KEY_L: u32 = 38;
+pub const KEY_M: u32 = 50;
+pub const KEY_N: u32 = 49;
+pub const KEY_O: u32 = 24;
+pub const KEY_P: u32 = 25;
+pub const KEY_Q: u32 = 16;
+pub const KEY_R: u32 = 19;
+pub const KEY_S: u32 = 31;
+pub const KEY_T: u32 = 20;
+pub const KEY_U: u32 = 22;
+pub const KEY_V: u32 = 47;
+pub const KEY_W: u32 = 17;
+pub const KEY_X: u32 = 45;
+pub const KEY_Y: u32 = 21;
+pub const KEY_Z: u32 = 44;
+
 pub const BTN_LEFT: u32 = 272;
 
 pub fn keyFromCode(code: u32) Key {
@@ -150,4 +178,6 @@ pub const Event = union(enum) {
     scroll: ScrollEvent,
     /// text-input의 확정 · 조합(텍스트 입력을 켠 동안만 온다 — TK design 결정 8).
     ime: ImeEvent,
+    /// 서버의 메뉴 바에서 사용자가 항목을 골랐다 — `tars_menu_v1.activated`의 id(= 메뉴 모델의 action, TK-M6 plan 확정 5).
+    menu: u32,
 };

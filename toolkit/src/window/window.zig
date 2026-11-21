@@ -10,7 +10,10 @@
 //!   `set_min_size`를 무시하므로(design 확인 8) 보내지 않는다.
 //! - 배율: compositor 판 6의 `preferred_buffer_scale`(S)을 받으면 버퍼를 surface 크기 × S로 만들고 `set_buffer_scale(S)`(R-TKW-4).
 //!   그리는 쪽은 물리 픽셀로 그린다(`Frame.scale`을 곱한다).
-//! - `tars_menu_manager_v1`을 창보다 먼저 bind한다 — 원래 모드라 Cmd가 Super로 온다(design 결정 8, WY 결정 46).
+//! - `tars_menu_manager_v1`을 창보다 먼저 bind한다 — 원래 모드라 Cmd가 Super로 온다(design 결정 8, WY 결정 46). 판 2(TK-M6 plan 확정 7)로
+//!   bind하고 manager를 들고 있다가, `open`이 메뉴 모델(`Options.menu`)을 받으면 toplevel 뒤 · 첫 commit 앞에 `get_menu` + 모델 + commit을 보낸다
+//!   (창이 처음 보일 때부터 바에 제목이 있다). 그 뒤의 비활성 바뀜은 `sendMenu`(매번 전체 — 서버는 증분이 없다). 모델이 서버의 상한을 넘으면
+//!   보내지 않고 줄만(연결을 잃지 않는다), 서버가 판 1이면 조용히 건너뛴다. 고른 항목(`activated`)은 `input.Event.menu`로 올린다.
 //! - 더티(TK-M1 plan 확정 5): 앱은 바뀐 사각형을 `invalidate(rect)`로 알린다(물리, 버퍼 좌표). 그릴 때 버퍼 나이(`age.zig`)로 이
 //!   버퍼에 다시 그릴 사각형(repaint)을 셈해 `Frame.clip`으로 넘기고, 서버에는 이번 프레임의 더티(pending)만 `damage_buffer`
 //!   사각형 하나로 보낸다 — 서버의 화면에는 지난 프레임이 이미 있다.
@@ -32,7 +35,8 @@
 //! 줄(design 결정 12): `tk> configure w= h= scale=` · `tk> draw w= h= dirty=x,y,w,h us= age=` (+ damage가 dirty와 다르면 ` damage=x,y,w,h`) ·
 //! `tk> commit` · `tk> key code= state=`(반복이면 끝에 ` repeat=1`) · `tk> native` · `tk> close`, TK-M4: `tk> ti enter|leave|enable|disable` ·
 //! `tk> ime commit= preedit= serial= match=` · `tk> copy len= serial=` · `tk> send mime= len= us=` · `tk> cancelled` · `tk> offer mimes=`|`offer none` ·
-//! `tk> paste len= us=`(없으면 `paste none`). `dirty=`는 이 버퍼에 다시 그린 사각형(`us`가 잰 것), `age=`는 이 버퍼가
+//! `tk> paste len= us=`(없으면 `paste none`), TK-M6: `tk> menu sent menus= items=` · `tk> menu activated id=` · `tk> menu unsupported` ·
+//! `tk> menu error=` · `tk> quit`. `dirty=`는 이 버퍼에 다시 그린 사각형(`us`가 잰 것), `age=`는 이 버퍼가
 //! 마지막으로 그려진 뒤 지난 프레임 수(새 버퍼면 0 — 통째). 표준 출력에 버퍼 없이 쓴다(게이트가 `> 파일`로 받는다 — tars-wl-test와 같다).
 
 const std = @import("std");
@@ -48,13 +52,15 @@ const Repeat = @import("repeat.zig").Repeat;
 const Ime = @import("ime.zig").Ime;
 const clipboard = @import("clip.zig");
 pub const input = @import("tk_input");
+pub const menu = @import("tk_menu");
 
 /// 서버가 내는 판(WY design 결정 5 · 27 · 46)을 넘지 않는다.
 const COMPOSITOR_VERSION: u32 = 6;
 const SHM_VERSION: u32 = 1;
 const SEAT_VERSION: u32 = 7;
 const WM_BASE_VERSION: u32 = 5;
-const MENU_MANAGER_VERSION: u32 = 1;
+/// 판 2 — 메뉴 모델(`get_menu`, TK-M6). 판 1 서버면 `@min`이 1로 bind해 원래 모드만 쓴다.
+const MENU_MANAGER_VERSION: u32 = 2;
 const TEXT_INPUT_MANAGER_VERSION: u32 = 1;
 const DATA_DEVICE_MANAGER_VERSION: u32 = 2;
 /// 복사로 들고 있는 글의 상한(경로 · 필드 — 파이프 64 KiB에 다 들어 블록 쓰기가 멈추지 않는다).
@@ -125,6 +131,12 @@ pub const Handler = struct {
     idle: ?*const fn (ctx: *anyopaque) bool = null,
 };
 
+/// `open`의 선택 인자(TK-M6). `menu`가 있으면 첫 commit 앞에 보낸다 — `disabled`는 그때의 비활성(kit `Root.disabled`).
+pub const Options = struct {
+    menu: ?*const menu.Model = null,
+    disabled: ?*const menu.Disabled = null,
+};
+
 // ── 버퍼 ───────────────────────────────────────────────────────────
 
 /// `wl_pointer.frame` 하나에 모은 것(TK-M2 plan 확정 3). frame에서 차례로 올린다: 움직임 · 버튼 · 휠 · 나감.
@@ -165,6 +177,10 @@ pub const Window = struct {
     seat: ?*wl.Seat = null,
     wm_base: ?*xdg.WmBase = null,
     menu_global: ?struct { name: u32, version: u32 } = null,
+    menu_manager: ?*tars.MenuManagerV1 = null,
+    /// 이 창의 메뉴 객체와 그 모델(보낸 뒤 — `sendMenu`가 다시 쓴다).
+    menu_obj: ?*tars.MenuV1 = null,
+    menu_model: ?*const menu.Model = null,
     keyboard: ?*wl.Keyboard = null,
     pointer: ?*wl.Pointer = null,
     text_input_manager: ?*zwp.TextInputManagerV3 = null,
@@ -221,7 +237,7 @@ pub const Window = struct {
     const Slot = struct { win: *Window, index: usize };
 
     /// 붙고 창을 연다. 첫 commit(버퍼 없음)까지 보낸다 — 첫 configure가 오면 `run`이 그린다. `title`은 app id로도 쓴다.
-    pub fn open(alloc: std.mem.Allocator, title: [*:0]const u8, handler: Handler) !*Window {
+    pub fn open(alloc: std.mem.Allocator, title: [*:0]const u8, handler: Handler, opts: Options) !*Window {
         const display = try wl.Display.connect(null);
         errdefer display.disconnect();
         const registry = try display.getRegistry();
@@ -243,7 +259,7 @@ pub const Window = struct {
 
         // 원래 모드(design 결정 8). 창보다 먼저 — 첫 포커스의 modifiers부터 Super로 받는다.
         if (win.menu_global) |mg| {
-            _ = try registry.bind(mg.name, tars.MenuManagerV1, @min(mg.version, MENU_MANAGER_VERSION));
+            win.menu_manager = try registry.bind(mg.name, tars.MenuManagerV1, @min(mg.version, MENU_MANAGER_VERSION));
             say("native", .{});
         }
 
@@ -273,8 +289,37 @@ pub const Window = struct {
         win.toplevel.setListener(*Window, toplevelListener, win);
         win.toplevel.setTitle(title);
         win.toplevel.setAppId(title);
+        if (opts.menu) |m| try win.startMenu(m, opts.disabled);
         win.surface.commit();
         return win;
+    }
+
+    /// 메뉴 객체를 얻고 첫 모델을 보낸다(첫 commit 앞). 서버가 판 1이거나 global이 없으면 `tk> menu unsupported`, 상한을 넘으면 `tk> menu error=`.
+    fn startMenu(self: *Window, m: *const menu.Model, disabled: ?*const menu.Disabled) !void {
+        const mgr = self.menu_manager orelse return say("menu unsupported", .{});
+        if (mgr.getVersion() < 2) return say("menu unsupported", .{});
+        m.check() catch |e| return say("menu error={s}", .{@errorName(e)});
+        const obj = try mgr.getMenu(self.toplevel);
+        obj.setListener(*Window, menuListener, self);
+        self.menu_obj = obj;
+        self.menu_model = m;
+        const none: menu.Disabled = .empty;
+        self.sendMenu(disabled orelse &none);
+    }
+
+    /// 모델 전체를 다시 보낸다(비활성이 바뀐 때 — kit `Root`의 훅). 메뉴 객체가 없으면 아무것도.
+    pub fn sendMenu(self: *Window, disabled: *const menu.Disabled) void {
+        const obj = self.menu_obj orelse return;
+        const m = self.menu_model orelse return;
+        var sink: MenuSink = .{ .obj = obj };
+        menu.emit(m, disabled, &sink);
+        say("menu sent menus={d} items={d}", .{ m.menus.len, m.entryCount() });
+    }
+
+    /// 앱이 스스로 끝낸다(메뉴의 "끝내기" — 서버의 `close`와 같은 끝).
+    pub fn quit(self: *Window) void {
+        say("quit", .{});
+        self.running = false;
     }
 
     /// 버퍼 · 임시 판 · 연결을 놓고 창을 지운다(`open`의 짝). 프로세스가 곧 끝나도 부른다 — allocator의 누수 검사(ReleaseSafe)가
@@ -525,6 +570,46 @@ pub const Window = struct {
         say("commit", .{});
     }
 };
+
+/// `menu.emit`의 받는 쪽 — 글을 NUL 끝 칸에 옮겨 `tars_menu_v1` 요청으로(글은 `check`가 64바이트 이하로 걸렀다).
+const MenuSink = struct {
+    obj: *tars.MenuV1,
+
+    fn z(buf: *[menu.MAX_TEXT + 1]u8, t: []const u8) [*:0]const u8 {
+        const n = @min(t.len, menu.MAX_TEXT);
+        @memcpy(buf[0..n], t[0..n]);
+        buf[n] = 0;
+        return buf[0..n :0].ptr;
+    }
+
+    pub fn addMenu(self: *MenuSink, title: []const u8) void {
+        var buf: [menu.MAX_TEXT + 1]u8 = undefined;
+        self.obj.addMenu(z(&buf, title));
+    }
+
+    pub fn addItem(self: *MenuSink, id: u32, label: []const u8, mods: u32, key: u32, disabled: bool) void {
+        var buf: [menu.MAX_TEXT + 1]u8 = undefined;
+        self.obj.addItem(id, z(&buf, label), mods, key, .{ .disabled = disabled });
+    }
+
+    pub fn addSeparator(self: *MenuSink) void {
+        self.obj.addSeparator();
+    }
+
+    pub fn commit(self: *MenuSink) void {
+        self.obj.commit();
+    }
+};
+
+/// 서버가 고른 항목을 알렸다 — 줄과 `Event.menu`.
+fn menuListener(_: *tars.MenuV1, event: tars.MenuV1.Event, win: *Window) void {
+    switch (event) {
+        .activated => |a| {
+            say("menu activated id={d}", .{a.id});
+            win.emit(.{ .menu = a.id });
+        },
+    }
+}
 
 fn slotRelease(_: *wl.Buffer, event: wl.Buffer.Event, slot: *Window.Slot) void {
     switch (event) {
