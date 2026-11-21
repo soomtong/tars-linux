@@ -86,3 +86,15 @@ fn follow(dirfd: i32, name: [*:0]const u8) model.Kind {
     if (linux.errno(rc) != .SUCCESS) return .file;
     return if (st.mode & linux.S.IFMT == linux.S.IFDIR) .dir else .file;
 }
+
+/// 경로가 무엇인가(경로 필드의 Enter — TK-M4 plan 확정 14). 링크는 따라간다. 없거나 못 보면 null.
+pub fn kindOf(path: []const u8) ?model.Kind {
+    var pbuf: [4096]u8 = undefined;
+    if (path.len >= pbuf.len) return null;
+    @memcpy(pbuf[0..path.len], path);
+    pbuf[path.len] = 0;
+    var st: linux.Statx = undefined;
+    const rc = linux.statx(linux.AT.FDCWD, @ptrCast(&pbuf), 0, .{ .TYPE = true }, &st);
+    if (linux.errno(rc) != .SUCCESS) return null;
+    return if (st.mode & linux.S.IFMT == linux.S.IFDIR) .dir else .file;
+}

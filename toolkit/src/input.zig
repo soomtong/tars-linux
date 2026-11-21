@@ -134,6 +134,10 @@ pub const ButtonEvent = struct { code: u32, pressed: bool, x: f32, y: f32 };
 /// 휠(`wl_pointer.frame`에서 모은 값). `dy`는 px(wl_fixed 그대로 — 서버는 한 칸에 10), 아래로가 양수. `discrete`는 칸 수(없으면 0).
 pub const ScrollEvent = struct { dy: f32, discrete: i32, x: f32, y: f32 };
 
+/// 한글 IME의 `done` 하나(TK-M4 plan 확정 10 — text-input-v3의 `done` 하나가 이벤트 하나). `commit`은 캐럿 자리에 넣을 확정, `preedit`은
+/// 그 뒤에 겹쳐 그릴 조합(빈 것이면 조합 없음). 조각은 콜백 동안만 유효하다(창 층의 칸).
+pub const ImeEvent = struct { commit: []const u8, preedit: []const u8 };
+
 /// 창 층이 올리는 이벤트 하나. 포인터 좌표는 surface 논리 좌표(레이어 frame과 같은 단위)다.
 pub const Event = union(enum) {
     key: KeyEvent,
@@ -144,4 +148,6 @@ pub const Event = union(enum) {
     pointer_leave,
     button: ButtonEvent,
     scroll: ScrollEvent,
+    /// text-input의 확정 · 조합(텍스트 입력을 켠 동안만 온다 — TK design 결정 8).
+    ime: ImeEvent,
 };

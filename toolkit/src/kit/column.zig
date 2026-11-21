@@ -232,6 +232,31 @@ pub const ColumnView = struct {
         if (self.source.truncated) |f| f(self.source.ctx, n);
     }
 
+    /// 열을 통째로 다시 세운다(TK-M4 plan 확정 14 — 경로 필드의 Enter): 열 0은 `sources[0]`로 다시 쓰고(`List.reset`), 나머지는 새로 붙인다.
+    /// 포커스는 마지막 열, 가로 스크롤은 그 열이 보이게. first responder는 옮기지 않는다(앱이 `focusFirst`로 — 필드에서 돌아올 때). 줄 하나.
+    pub fn setColumns(self: *ColumnView, sources: []const ListSource) !void {
+        std.debug.assert(sources.len >= 1 and sources.len <= MAX_COLUMNS);
+        self.truncate(1);
+        self.cols[0].list.reset(sources[0]);
+        var i: usize = 1;
+        while (i < sources.len) : (i += 1) {
+            self.activate(i, sources[i]) catch |e| {
+                self.n = i;
+                self.setFocus(i - 1);
+                _ = self.updateScroll();
+                self.placeContent();
+                self.emitColumns();
+                return e;
+            };
+            self.n = i + 1;
+        }
+        self.n = sources.len;
+        self.setFocus(sources.len - 1);
+        _ = self.updateScroll();
+        self.placeContent();
+        self.emitColumns();
+    }
+
     /// 포커스 열을 `i`로(그 리스트만 first responder가 될 수 있다). first responder가 column view 안에 있었으면 새 열로 옮긴다.
     fn setFocus(self: *ColumnView, i: usize) void {
         const old = &self.cols[self.focus].list;

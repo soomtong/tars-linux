@@ -17,6 +17,8 @@ pub const color = struct {
     pub const text = theme.TK_TEXT;
     pub const text_dim = theme.TK_TEXT_DIM;
     pub const separator = theme.TK_SEPARATOR;
+    /// 포커스 링(TK-M4 plan 확정 8 — 텍스트 필드가 처음 쓴다). 강조색과 같다.
+    pub const focus_ring = theme.TK_ACCENT;
 };
 
 pub const space = struct {
@@ -33,6 +35,11 @@ pub const size = struct {
     /// column view의 열 폭 · 분할 뷰의 미리보기 자리 폭(TK-M3 plan 확정 3 · 8).
     pub const column: f32 = theme.TK_COLUMN;
     pub const preview: f32 = theme.TK_PREVIEW;
+    /// 텍스트 필드 한 줄의 높이와 그것을 담는 창 위 바의 높이(TK-M4 plan 확정 8 · 13).
+    pub const field: f32 = 24;
+    pub const bar: f32 = 32;
+    /// 필드 안 글자의 왼쪽 · 오른쪽 여백.
+    pub const field_pad: f32 = 8;
 };
 
 pub const radius = struct {

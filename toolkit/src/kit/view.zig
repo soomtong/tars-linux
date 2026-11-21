@@ -34,6 +34,10 @@ pub const VTable = struct {
     focusChanged: ?*const fn (ctx: *anyopaque, focused: bool) void = null,
     /// 창이 키보드 포커스를 얻었다 · 잃었다.
     windowFocusChanged: ?*const fn (ctx: *anyopaque, focused: bool) void = null,
+    /// IME의 확정 · 조합(TK-M4). 받았으면 참.
+    textInput: ?*const fn (ctx: *anyopaque, ev: input.ImeEvent) bool = null,
+    /// first responder일 때 text-input을 켜야 하는가(텍스트 필드 — TK design 결정 8). 없으면 거짓.
+    wantsTextInput: ?*const fn (ctx: *anyopaque) bool = null,
 };
 
 pub const View = struct {
@@ -97,6 +101,13 @@ pub const HitHook = struct {
     on: *const fn (ctx: *anyopaque, x: f32, y: f32, view: ?*View) void,
 };
 
+/// text-input을 켜고 끄는 곳(TK-M4 plan 확정 10 — kit은 창을 모르므로 `tk.connectIme`가 창의 `setTextInput`에 잇는다). first responder가
+/// 바뀔 때 그 뷰의 `wantsTextInput`이 바뀌었으면 부른다.
+pub const ImeHook = struct {
+    ctx: *anyopaque,
+    on: *const fn (ctx: *anyopaque, on: bool) void,
+};
+
 /// 체인 끝까지 아무도 안 받은 키.
 pub const Unhandled = struct {
     ctx: *anyopaque,
@@ -114,6 +125,9 @@ pub const Root = struct {
     hook: ?FocusHook = null,
     hit_hook: ?HitHook = null,
     unhandled: ?Unhandled = null,
+    ime_hook: ?ImeHook = null,
+    /// 지금 켜 달라고 한 값(훅에 마지막으로 알린 것).
+    ime_want: bool = false,
 
     pub fn init(tree: *Tree) Root {
         return .{ .tree = tree };
@@ -132,7 +146,16 @@ pub const Root = struct {
         self.first = v;
         if (v) |nv| if (nv.vtable.focusChanged) |f| f(nv.ctx, true);
         if (self.hook) |h| h.on(h.ctx, v);
+        self.syncIme();
         return true;
+    }
+
+    /// first responder가 text-input을 바라는지 훅에 맞춘다(바뀌었을 때만).
+    fn syncIme(self: *Root) void {
+        const want = if (self.first) |f| (if (f.vtable.wantsTextInput) |w| w(f.ctx) else false) else false;
+        if (want == self.ime_want) return;
+        self.ime_want = want;
+        if (self.ime_hook) |h| h.on(h.ctx, want);
     }
 
     /// 뷰 `v`를 트리에서 뗐다 — first responder가 `v`나 그 자손이면 아무도 아니게 한다(`focusChanged(false)` · 줄). 새 자리는 부르는
@@ -159,6 +182,12 @@ pub const Root = struct {
                 self.ptr_x = b.x;
                 self.ptr_y = b.y;
                 if (b.pressed and b.code == input.BTN_LEFT) self.mouseDown(b);
+            },
+            .ime => |m| {
+                var v = self.first;
+                while (v) |x| : (v = x.parent) {
+                    if (x.vtable.textInput) |f| if (f(x.ctx, m)) return;
+                }
             },
             .scroll => |s| {
                 var v = self.viewAt(s.x, s.y);

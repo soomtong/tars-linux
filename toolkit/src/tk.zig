@@ -53,6 +53,17 @@ pub fn connectRoot(root: *kit.Root) void {
     root.hit_hook = .{ .ctx = root, .on = hitEvent };
 }
 
+/// first responder가 text-input을 바라는지를 창의 `setTextInput`에 잇는다(TK-M4 plan 확정 10 — kit은 창을 모른다).
+pub fn connectIme(root: *kit.Root, win: *Window) void {
+    root.ime_hook = .{ .ctx = win, .on = imeEvent };
+    if (root.ime_want) win.setTextInput(true);
+}
+
+fn imeEvent(ctx: *anyopaque, on: bool) void {
+    const win: *Window = @ptrCast(@alignCast(ctx));
+    win.setTextInput(on);
+}
+
 fn focusEvent(_: *anyopaque, v: ?*kit.View) void {
     window.say("focus view={s}", .{if (v) |x| x.name else "-"});
 }

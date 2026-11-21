@@ -8,12 +8,19 @@
 //! i × 201 − 가로 스크롤). 행 24, 이름은 행 왼쪽 16에서 13 px `TK_TEXT`, 디렉터리는 행 오른쪽 끝(막대 6 + 4 앞)에 `›` `TK_TEXT_DIM`.
 //! 0행인 열은 세로 가운데 한 줄: 로딩 중 "불러오는 중…", 끝났는데 비면 "비어 있음", 못 열면 "열 수 없음"(`TK_TEXT_DIM`).
 //!
+//! 경로 바(TK-M4 plan 확정 13~15): `Cmd+L`이 창 위 한 줄(높이 32, 평소 숨김 — 숨어 있으면 화면이 TK-M3과 같다)을 열고 포커스 열의 경로를 텍스트
+//! 필드에 채운다(캐럿은 끝). 바: 왼쪽 16에 이름표 "경로"(`TK_TEXT_DIM`), 필드는 x 64..W − 16 · y 4 · 높이 24. Enter는 경로를 해석해(`model.resolvePath`)
+//! 열을 다시 세우고(`model.columnPaths` · `ColumnView.setColumns`, 각 열의 선택은 다음 성분 — 로딩이 그 이름을 만나면 고른다) 바를 닫는다. 없는
+//! 경로면 바를 열어 둔 채 `tk> path error=`. Esc는 닫기. 필드가 포커스인 동안 text-input이 켜진다(한글 — design 결정 8). `Cmd+C`(필드가 아닐 때)는
+//! 포커스 열의 선택 항목 경로를 클립보드로(R-FM-8).
+//!
 //! 인자: `tars-files [경로]` — 없으면 `$HOME`, 그것도 없으면 `/`.
 //!
 //! 줄(plan 확정 14): `tk> files path=` · `tk> load path= n= chunks= first_us= paint_us= all_us= read_us= merge_us= state=done|cancelled|error` ·
 //! `tk> columns n= focus= scroll=` · `tk> column i= path= count= sel= name=`(열의 선택이 키 · 클릭으로 바뀔 때와 첫 로딩이 끝날 때) ·
 //! `tk> refresh path= name= before= after=`(사라졌으면 ` gone=1`) · 끝날 때 `tk> rss vmrss_kb= vmhwm_kb=`. 창 층의 줄(`configure` · `draw` ·
-//! `commit` · `key` · `focus`)은 그대로.
+//! `commit` · `key` · `focus`)은 그대로. TK-M4: `tk> column … shown=`, `tk> bar open|close`, `tk> field text= action=enter|escape`,
+//! `tk> path error= text=`, `tk> copy path=`(경로 복사 — 그 뒤 창 층의 `tk> copy len= serial=`).
 
 const std = @import("std");
 const linux = std.os.linux;
@@ -21,13 +28,17 @@ const tk = @import("tk");
 const tokens = tk.tokens;
 const kit = tk.kit;
 const model = @import("model.zig");
-const Dir = @import("dir.zig").Dir;
+const dir_mod = @import("dir.zig");
+const Dir = dir_mod.Dir;
 
 const MAX = kit.column.MAX_COLUMNS;
 const LABEL_X: f32 = 16;
 /// `›`의 오른쪽 끝과 막대 사이.
 const CHEVRON_GAP: f32 = 4;
 const ANIM_MS: u32 = 120;
+/// 바 안 필드의 왼쪽(이름표 "경로"의 자리 16 + 48)과 오른쪽 여백.
+const FIELD_X: f32 = 64;
+const FIELD_RIGHT: f32 = 16;
 
 /// 생략한 이름을 담는 칸 — 이름(리눅스 255바이트) + `…`(3바이트)이 든다. 경계 칸은 클러스터 수 + 1(255 + 1).
 const NAME_BUF = 260;
@@ -79,6 +90,10 @@ const Col = struct {
     merge_us: u64 = 0,
     /// 리스트 위의 한 줄(0행일 때). 풀의 리스트 컨테이너에 한 번 붙인다.
     overlay: ?*tk.Layer = null,
+    /// 첫 로딩이 고를 이름(경로 바의 Enter — 다음 성분, TK-M4 plan 확정 14). 사용자가 선택을 건드리면 버린다.
+    want_buf: [256]u8 = undefined,
+    want_len: usize = 0,
+    want_kind: model.Kind = .dir,
 
     fn path(self: *const Col) []const u8 {
         return self.path_buf[0..self.path_len];
@@ -149,6 +164,15 @@ const App = struct {
     split: kit.SplitView = undefined,
     cv: kit.ColumnView = undefined,
     cols: [MAX]Col = @splat(.{}),
+    /// 경로 바(TK-M4).
+    bar: *tk.Layer = undefined,
+    bar_label: *tk.Layer = undefined,
+    field: kit.TextField = undefined,
+    bar_open: bool = false,
+    home: ?[]const u8 = null,
+    /// 지금 창 크기(논리).
+    width: f32 = 0,
+    height: f32 = 0,
     /// 창이 한 번이라도 키보드 포커스를 가졌다 — 그 뒤의 포커스 얻음만 갱신의 계기다(처음 붙는 enter는 아니다).
     had_focus: bool = false,
 
@@ -185,6 +209,16 @@ const App = struct {
         try self.root_view.addChild(self.alloc, &self.split.view);
         try self.split.view.addChild(self.alloc, &self.cv.view);
         try self.ensureOverlays();
+        // 경로 바(TK-M4): 루트의 앞 자식, 평소 숨김. 필드 뷰는 루트 뷰의 자식 — 받지 않은 키가 루트 뷰를 지나 `unhandled`로 간다.
+        self.bar = try t.create(.{ .background = tokens.color.bg, .masks = true, .hidden = true });
+        self.bar_label = try t.create(.{ .content = .{ .ctx = self, .draw = drawBarLabel } });
+        try self.field.init(t, "field", &self.small);
+        self.field.delegate = .{ .ctx = self, .action = fieldAction, .copy = fieldCopy, .paste = fieldPaste };
+        try self.bar.addChild(self.bar_label);
+        try self.bar.addChild(self.field.view.layer);
+        try self.root.addChild(self.bar);
+        try self.root_view.addChild(self.alloc, &self.field.view);
+        self.kit_root.unhandled = .{ .ctx = self, .on = unhandled };
         self.cv.focusFirst();
         self.startLoad(0, false);
     }
@@ -194,6 +228,7 @@ const App = struct {
         self.cv.deinit();
         self.split.deinit(self.alloc);
         self.root_view.deinit(self.alloc);
+        self.field.view.deinit(self.alloc);
     }
 
     fn setPath(c: *Col, p: []const u8) void {
@@ -307,7 +342,9 @@ const App = struct {
         } else {
             // 첫 로딩: 받은 만큼 바로 보인다. 선택은 건드리지 않았으면 0행, 건드렸으면 이름을 따라간다(확정 10).
             const list = self.cv.list(c.index);
-            const before = self.beforeOf(c, list, c.touched);
+            var before = self.beforeOf(c, list, c.touched);
+            // 경로 바가 고른 이름(확정 14) — 그 이름을 만날 때까지 그것을 따라간다.
+            if (c.want_len > 0) before = .{ .sel = .{ .name = c.want_buf[0..c.want_len], .kind = c.want_kind }, .index = list.selected, .offset = list.offset, .touched = true };
             _ = l.addChunk(rs) catch {
                 self.finish(c, .failed);
                 return;
@@ -345,6 +382,7 @@ const App = struct {
         self.sayLoad(c, l, if (state == .done) "done" else "error");
         if (!c.refresh) {
             c.failed = state == .failed;
+            c.want_len = 0;
             if (self.active(c.index)) {
                 self.updateOverlay(c);
                 self.sayColumn(c.index);
@@ -446,6 +484,7 @@ const App = struct {
             },
             .select => |e| {
                 self.cols[e.column].touched = true;
+                self.cols[e.column].want_len = 0;
                 if (e.changed) self.sayColumn(e.column);
             },
         }
@@ -512,10 +551,152 @@ const App = struct {
         self.tree.setScale(s);
         // 글꼴을 여기서도 맞춘다 — 그리기 전의 `tk> column` 줄(첫 로딩의 끝)이 생략한 이름(`shown=`)을 낼 수 있게. 실패하면 `draw`가 다시 해 본다.
         self.faces(s) catch {};
-        const W: f32 = @floatFromInt(width / s);
-        const H: f32 = @floatFromInt(height / s);
-        self.root.setFrame(.{ .x = 0, .y = 0, .w = W, .h = H });
-        self.split.layout(.{ .x = 0, .y = 0, .w = W, .h = H });
+        self.width = @floatFromInt(width / s);
+        self.height = @floatFromInt(height / s);
+        self.root.setFrame(.{ .x = 0, .y = 0, .w = self.width, .h = self.height });
+        self.relayout();
+    }
+
+    /// 바가 열려 있으면 [바 32 | 분할 뷰], 아니면 분할 뷰가 창 전체(TK-M3과 같은 자리).
+    fn relayout(self: *App) void {
+        const W = self.width;
+        const H = self.height;
+        if (self.bar_open) {
+            const bh = tokens.size.bar;
+            self.bar.setFrame(.{ .x = 0, .y = 0, .w = W, .h = bh });
+            self.bar_label.setFrame(.{ .x = LABEL_X, .y = 0, .w = FIELD_X - LABEL_X, .h = bh });
+            self.field.view.layer.setFrame(.{ .x = FIELD_X, .y = (bh - tokens.size.field) / 2, .w = @max(0, W - FIELD_X - FIELD_RIGHT), .h = tokens.size.field });
+            self.split.layout(.{ .x = 0, .y = bh, .w = W, .h = @max(0, H - bh) });
+        } else {
+            self.split.layout(.{ .x = 0, .y = 0, .w = W, .h = H });
+        }
+    }
+
+    // ── 경로 바 · 경로 복사(TK-M4) ─────────────────────────────────────
+
+    fn drawBarLabel(ctx: *anyopaque, p: *tk.Painter, size: [2]f32, alpha: u8) anyerror!void {
+        const self = me(ctx);
+        const f = if (self.small) |*x| x else return;
+        const base: i32 = @intFromFloat(@round((size[1] + f.ascent - f.descent) / 2));
+        _ = try p.drawGlyphs(f, 0, base, "경로", tokens.color.text_dim, alpha);
+    }
+
+    /// `Cmd+L`: 바를 열고 포커스 열의 경로로 채운다(캐럿은 끝).
+    fn openBar(self: *App) void {
+        self.field.setText(self.cols[self.cv.focus].path());
+        if (!self.bar_open) {
+            self.bar_open = true;
+            self.bar.setHidden(false);
+            self.relayout();
+            tk.window.say("bar open", .{});
+        }
+        _ = self.kit_root.setFirstResponder(&self.field.view);
+    }
+
+    fn closeBar(self: *App) void {
+        if (!self.bar_open) return;
+        self.cv.focusFirst();
+        self.bar_open = false;
+        self.bar.setHidden(true);
+        self.field.setText("");
+        self.relayout();
+        tk.window.say("bar close", .{});
+    }
+
+    fn fieldAction(ctx: *anyopaque, field: *kit.TextField, a: kit.textfield.Action) void {
+        const self = me(ctx);
+        tk.window.say("field text={s} action={s}", .{ field.text(), @tagName(a) });
+        switch (a) {
+            .escape => self.closeBar(),
+            .enter => self.submitPath(),
+        }
+    }
+
+    /// 경로 바의 Enter(plan 확정 14).
+    fn submitPath(self: *App) void {
+        var tbuf: [4096]u8 = undefined;
+        const target = model.resolvePath(&tbuf, self.field.text(), self.cols[self.cv.focus].path(), self.home) catch |e| {
+            tk.window.say("path error={s} text={s}", .{ @errorName(e), self.field.text() });
+            return;
+        };
+        const kind = dir_mod.kindOf(target) orelse {
+            tk.window.say("path error=NotFound text={s}", .{target});
+            return;
+        };
+        const dir_path = if (kind == .dir) target else model.dirname(target);
+        var pbuf: [MAX][]const u8 = undefined;
+        const paths = model.columnPaths(self.cols[0].path(), dir_path, &pbuf) catch |e| {
+            tk.window.say("path error={s} text={s}", .{ @errorName(e), target });
+            return;
+        };
+        // 열의 경로 칸을 덮어쓰기 전에 옮긴다 — 조각이 열 0의 경로를 가리킬 수 있다.
+        var copy_buf: [4096]u8 = undefined;
+        @memcpy(copy_buf[0..dir_path.len], dir_path);
+        var copies: [MAX][]const u8 = undefined;
+        for (paths, 0..) |p, i| copies[i] = if (std.mem.eql(u8, p, "/")) "/" else copy_buf[0..p.len];
+        var last: [256]u8 = undefined;
+        const last_name = if (kind == .file) model.basename(target) else "";
+        const ln = @min(last_name.len, last.len);
+        @memcpy(last[0..ln], last_name[0..ln]);
+        self.closeBar();
+        self.applyPath(copies[0..paths.len], last[0..ln]);
+    }
+
+    /// 열을 `paths`로 다시 세운다. 각 열은 다음 열의 이름을, 마지막 열은 `last_file`(파일 목표면)을 고른다.
+    fn applyPath(self: *App, paths: []const []const u8, last_file: []const u8) void {
+        const n = paths.len;
+        self.cv.truncate(1);
+        for (paths, 0..) |p, i| {
+            const c = &self.cols[i];
+            self.dropCol(c);
+            setPath(c, p);
+            const want = if (i + 1 < n) model.basename(paths[i + 1]) else last_file;
+            const k = @min(want.len, c.want_buf.len);
+            @memcpy(c.want_buf[0..k], want[0..k]);
+            c.want_len = k;
+            c.want_kind = if (i + 1 < n) .dir else .file;
+        }
+        var srcs: [MAX]kit.ListSource = undefined;
+        for (0..n) |i| srcs[i] = self.cols[i].listSource();
+        self.cv.setColumns(srcs[0..n]) catch {};
+        for (0..self.cv.n) |i| self.startLoad(i, false);
+        self.ensureOverlays() catch {};
+        self.cv.focusFirst();
+        self.preview.setNeedsDisplay();
+    }
+
+    /// `Cmd+C`(필드가 아닐 때): 포커스 열의 선택 항목 경로(R-FM-8).
+    fn copyPath(self: *App) void {
+        const i = self.cv.focus;
+        const c = &self.cols[i];
+        const items = c.entries();
+        const list = self.cv.list(i);
+        if (list.selected >= items.len) return;
+        var buf: [4096]u8 = undefined;
+        const p = model.join(&buf, c.path(), items[list.selected].name) catch return;
+        tk.window.say("copy path={s}", .{p});
+        if (self.win) |w| w.copyText(p);
+    }
+
+    /// 체인 끝까지 아무도 안 받은 키(TK-M6의 단축키 표 자리 — 지금은 `Cmd+L` · `Cmd+C`).
+    fn unhandled(ctx: *anyopaque, ev: tk.input.KeyEvent) void {
+        const self = me(ctx);
+        const md = ev.mods;
+        if (!md.super or md.ctrl or md.alt or md.shift) return;
+        switch (ev.code) {
+            KEY_L => self.openBar(),
+            KEY_C => self.copyPath(),
+            else => {},
+        }
+    }
+
+    fn fieldCopy(ctx: *anyopaque, bytes: []const u8) void {
+        if (me(ctx).win) |w| w.copyText(bytes);
+    }
+
+    fn fieldPaste(ctx: *anyopaque, buf: []u8) ?[]const u8 {
+        const w = me(ctx).win orelse return null;
+        return w.pasteText(buf);
     }
 
     fn input(ctx: *anyopaque, ev: tk.input.Event) void {
@@ -547,6 +728,8 @@ const App = struct {
 };
 
 const ROOT_VT: kit.VTable = .{};
+const KEY_C: u32 = 46;
+const KEY_L: u32 = 38;
 
 /// 시작 경로: 인자 → `$HOME` → `/`. 끝의 `/`는 뗀다(루트는 그대로).
 fn startPath(arg: ?[]const u8, home: ?[]const u8) []const u8 {
@@ -579,6 +762,7 @@ pub fn main(init: std.process.Init) !u8 {
         .lut = tk.text.gammaLut(tk.text.GAMMA),
         .tree = tk.Tree.init(alloc),
         .dir = .{ .alloc = alloc },
+        .home = init.environ_map.get("HOME"),
     };
     defer app.tree.deinit();
     defer if (app.small) |*x| x.deinit();
@@ -601,6 +785,7 @@ pub fn main(init: std.process.Init) !u8 {
     defer win.deinit();
     app.win = win;
     tk.connect(&app.tree, win);
+    tk.connectIme(&app.kit_root, win);
     win.run() catch |e| {
         tk.window.say("error run={s}", .{@errorName(e)});
         return 1;

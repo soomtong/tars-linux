@@ -23,8 +23,16 @@
 //! 이 층은 창 층이다(R-ARCH-1의 맨 아래) — 그리는 법(CG)을 모른다. 넘기는 것은 픽셀 판 · 임시 판 · clip이고 판을 z2d로 감싸는
 //! 것은 위 층의 일이다.
 //!
+//! - 텍스트 입력 · 클립보드(TK-M4 plan 확정 9 · 12): `zwp_text_input_v3` 하나와 `wl_data_device` 하나를 창보다 먼저 얻는다(첫 포커스의 `enter` ·
+//!   `selection`을 놓치지 않는다). 켜고 끄는 것은 `setTextInput`(앱 · kit의 훅이 부른다), 셈은 순수 상태 기계 `ime.zig`. 복사 `copyText`는 source 하나에
+//!   mime 넷을 offer하고 마지막 키 · 버튼의 serial로 `set_selection` — 서버가 그 자리에서 `send`로 읽어 간다(WY 결정 33). 붙여넣기 `pasteText`는
+//!   동기다: 지금 offer에 `receive` → flush → 쓰기 끝을 닫고 읽기 끝을 1초씩 poll. offer는 늘 서버 사본이라 자기 복사를 붙여도 교착이 없다.
+//!   SIGPIPE는 무시한다(서버가 기한으로 읽기 끝을 닫은 뒤 쓰면 앱이 죽지 않게).
+//!
 //! 줄(design 결정 12): `tk> configure w= h= scale=` · `tk> draw w= h= dirty=x,y,w,h us= age=` (+ damage가 dirty와 다르면 ` damage=x,y,w,h`) ·
-//! `tk> commit` · `tk> key code= state=`(반복이면 끝에 ` repeat=1`) · `tk> native` · `tk> close`. `dirty=`는 이 버퍼에 다시 그린 사각형(`us`가 잰 것), `age=`는 이 버퍼가
+//! `tk> commit` · `tk> key code= state=`(반복이면 끝에 ` repeat=1`) · `tk> native` · `tk> close`, TK-M4: `tk> ti enter|leave|enable|disable` ·
+//! `tk> ime commit= preedit= serial= match=` · `tk> copy len= serial=` · `tk> send mime= len= us=` · `tk> cancelled` · `tk> offer mimes=`|`offer none` ·
+//! `tk> paste len= us=`(없으면 `paste none`). `dirty=`는 이 버퍼에 다시 그린 사각형(`us`가 잰 것), `age=`는 이 버퍼가
 //! 마지막으로 그려진 뒤 지난 프레임 수(새 버퍼면 0 — 통째). 표준 출력에 버퍼 없이 쓴다(게이트가 `> 파일`로 받는다 — tars-wl-test와 같다).
 
 const std = @import("std");
@@ -33,9 +41,12 @@ const wayland = @import("wayland");
 const wl = wayland.client.wl;
 const xdg = wayland.client.xdg;
 const tars = wayland.client.tars;
+const zwp = wayland.client.zwp;
 pub const Rect = @import("tk_geom").Rect;
 const Age = @import("age.zig").Age;
 const Repeat = @import("repeat.zig").Repeat;
+const Ime = @import("ime.zig").Ime;
+const clipboard = @import("clip.zig");
 pub const input = @import("tk_input");
 
 /// 서버가 내는 판(WY design 결정 5 · 27 · 46)을 넘지 않는다.
@@ -44,6 +55,13 @@ const SHM_VERSION: u32 = 1;
 const SEAT_VERSION: u32 = 7;
 const WM_BASE_VERSION: u32 = 5;
 const MENU_MANAGER_VERSION: u32 = 1;
+const TEXT_INPUT_MANAGER_VERSION: u32 = 1;
+const DATA_DEVICE_MANAGER_VERSION: u32 = 2;
+/// 복사로 들고 있는 글의 상한(경로 · 필드 — 파이프 64 KiB에 다 들어 블록 쓰기가 멈추지 않는다).
+pub const COPY_MAX: usize = 4096;
+
+extern "c" fn pipe2(fds: *[2]c_int, flags: c_int) c_int;
+const O_CLOEXEC: c_int = 0o2000000;
 
 /// configure가 0(클라이언트가 정하라)일 때의 첫 크기.
 const DEFAULT_W: u32 = 640;
@@ -149,6 +167,22 @@ pub const Window = struct {
     menu_global: ?struct { name: u32, version: u32 } = null,
     keyboard: ?*wl.Keyboard = null,
     pointer: ?*wl.Pointer = null,
+    text_input_manager: ?*zwp.TextInputManagerV3 = null,
+    data_device_manager: ?*wl.DataDeviceManager = null,
+    text_input: ?*zwp.TextInputV3 = null,
+    data_device: ?*wl.DataDevice = null,
+    ime: Ime = .{},
+    /// 마지막 키 · 키보드 enter · 버튼의 serial(`set_selection`에 — 서버는 값을 안 보지만 xml의 뜻대로).
+    serial: u32 = 0,
+    /// 지금 selection offer와 그 mime 비트(`clip.bit`). 막 온 offer(아직 `selection` 전)는 따로.
+    offer: ?*wl.DataOffer = null,
+    offer_mask: u8 = 0,
+    new_offer: ?*wl.DataOffer = null,
+    new_mask: u8 = 0,
+    /// 내가 낸 selection과 그 글.
+    source: ?*wl.DataSource = null,
+    copy_buf: [COPY_MAX]u8 = undefined,
+    copy_len: usize = 0,
     surface: *wl.Surface = undefined,
     xdg_surface: *xdg.Surface = undefined,
     toplevel: *xdg.Toplevel = undefined,
@@ -201,6 +235,7 @@ pub const Window = struct {
         errdefer _ = linux.close(win.timer_fd);
         registry.setListener(*Window, registryListener, win);
         if (display.roundtrip() != .SUCCESS) return error.RoundtripFailed;
+        ignoreSigpipe();
 
         const compositor = win.compositor orelse return error.NoCompositor;
         _ = win.shm orelse return error.NoShm;
@@ -215,7 +250,20 @@ pub const Window = struct {
         win.surface = try compositor.createSurface();
         win.surface.setListener(*Window, surfaceListener, win);
         wm_base.setListener(*Window, wmBaseListener, win);
-        if (win.seat) |seat| seat.setListener(*Window, seatListener, win);
+        if (win.seat) |seat| {
+            seat.setListener(*Window, seatListener, win);
+            // 텍스트 입력 · 클립보드 장치(TK-M4) — 창보다 먼저(첫 포커스의 `enter` · `selection`을 놓치지 않는다).
+            if (win.text_input_manager) |m| {
+                const ti = try m.getTextInput(seat);
+                ti.setListener(*Window, textInputListener, win);
+                win.text_input = ti;
+            }
+            if (win.data_device_manager) |m| {
+                const dev = try m.getDataDevice(seat);
+                dev.setListener(*Window, dataDeviceListener, win);
+                win.data_device = dev;
+            }
+        }
         // seat capabilities를 받아 `get_keyboard`를 첫 commit보다 먼저 보낸다(tars-wl-test와 같은 까닭 — 첫 키를 놓치지 않는다).
         if (display.roundtrip() != .SUCCESS) return error.RoundtripFailed;
 
@@ -311,6 +359,72 @@ pub const Window = struct {
 
     fn emit(self: *Window, ev: input.Event) void {
         if (self.handler.input) |f| f(self.handler.ctx, ev);
+    }
+
+    // ── 텍스트 입력 · 클립보드(TK-M4) ────────────────────────────────────
+
+    /// text-input을 켜 달라(참) · 꺼 달라(거짓) — first responder가 텍스트 필드인가(kit `Root`의 훅이 부른다, design 결정 8).
+    pub fn setTextInput(self: *Window, on: bool) void {
+        if (self.ime.setWant(on)) |en| self.sendEnable(en);
+    }
+
+    fn sendEnable(self: *Window, on: bool) void {
+        const ti = self.text_input orelse return;
+        if (on) {
+            ti.enable();
+            ti.setContentType(.{}, .normal);
+        } else ti.disable();
+        ti.commit();
+        self.ime.sent();
+        say("ti {s}", .{if (on) "enable" else "disable"});
+    }
+
+    /// 글을 클립보드로(복사). source 하나에 mime 넷, 마지막 serial로 `set_selection`. 서버가 곧 `send`로 읽어 간다.
+    pub fn copyText(self: *Window, bytes: []const u8) void {
+        const dev = self.data_device orelse return say("copy no-device", .{});
+        const mgr = self.data_device_manager orelse return;
+        const n = @min(bytes.len, COPY_MAX);
+        const src = mgr.createDataSource() catch return say("copy no-source", .{});
+        if (self.source) |old| old.destroy();
+        @memcpy(self.copy_buf[0..n], bytes[0..n]);
+        self.copy_len = n;
+        self.source = src;
+        src.setListener(*Window, sourceListener, self);
+        for (clipboard.MIMES) |m| src.offer(m.ptr);
+        dev.setSelection(src, self.serial);
+        say("copy len={d} serial={d}", .{ n, self.serial });
+    }
+
+    /// 지금 selection을 `buf`에 받는다(동기 — 파일 머리). 없거나 실패하면 null.
+    pub fn pasteText(self: *Window, buf: []u8) ?[]const u8 {
+        const o = self.offer orelse {
+            say("paste none", .{});
+            return null;
+        };
+        const mime = clipboard.pick(self.offer_mask) orelse {
+            say("paste none", .{});
+            return null;
+        };
+        const t0 = nowNs();
+        var fds: [2]c_int = undefined;
+        if (pipe2(&fds, O_CLOEXEC) != 0) return null;
+        o.receive(mime.ptr, fds[1]);
+        _ = self.display.flush();
+        _ = linux.close(fds[1]);
+        defer _ = linux.close(fds[0]);
+        var n: usize = 0;
+        while (n < buf.len) {
+            var pfd = [1]linux.pollfd{.{ .fd = fds[0], .events = linux.POLL.IN, .revents = 0 }};
+            const rc = linux.poll(&pfd, 1, 1000);
+            if (linux.errno(rc) == .INTR) continue;
+            if (linux.errno(rc) != .SUCCESS or rc == 0) break;
+            const r = linux.read(fds[0], buf[n..].ptr, buf.len - n);
+            if (linux.errno(r) == .INTR) continue;
+            if (linux.errno(r) != .SUCCESS or r == 0) break;
+            n += r;
+        }
+        say("paste len={d} us={d}", .{ n, (nowNs() - t0) / std.time.ns_per_us });
+        return buf[0..n];
     }
 
     /// 사각형 `r`(물리, 버퍼 좌표)이 바뀌었다. 적기만 한다 — 그리기는 `run`의 다음 바퀴(frame을 기다리는 중이면 그 `done` 뒤).
@@ -432,6 +546,10 @@ fn registryListener(registry: *wl.Registry, event: wl.Registry.Event, win: *Wind
                 win.seat = registry.bind(global.name, wl.Seat, @min(global.version, SEAT_VERSION)) catch return;
             } else if (std.mem.eql(u8, name, std.mem.span(xdg.WmBase.interface.name))) {
                 win.wm_base = registry.bind(global.name, xdg.WmBase, @min(global.version, WM_BASE_VERSION)) catch return;
+            } else if (std.mem.eql(u8, name, std.mem.span(zwp.TextInputManagerV3.interface.name))) {
+                win.text_input_manager = registry.bind(global.name, zwp.TextInputManagerV3, @min(global.version, TEXT_INPUT_MANAGER_VERSION)) catch return;
+            } else if (std.mem.eql(u8, name, std.mem.span(wl.DataDeviceManager.interface.name))) {
+                win.data_device_manager = registry.bind(global.name, wl.DataDeviceManager, @min(global.version, DATA_DEVICE_MANAGER_VERSION)) catch return;
             } else if (std.mem.eql(u8, name, std.mem.span(tars.MenuManagerV1.interface.name))) {
                 win.menu_global = .{ .name = global.name, .version = global.version };
             }
@@ -554,6 +672,7 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, win: *Window) voi
     switch (event) {
         .keymap => |k| _ = linux.close(k.fd),
         .key => |k| {
+            win.serial = k.serial;
             const pressed = k.state == .pressed;
             say("key code={d} state={d}", .{ k.key, @intFromBool(pressed) });
             if (pressed) win.repeat.press(k.key, input.repeats(k.key), nowNs()) else win.repeat.release(k.key);
@@ -562,7 +681,10 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, win: *Window) voi
         .modifiers => |m| win.mods = input.modsFromMask(m.mods_depressed | m.mods_latched, m.mods_locked),
         .repeat_info => |r| win.repeat.setInfo(r.rate, r.delay),
         // 서버는 enter의 눌린 키 목록을 비워 보낸다(R-KEY-7). 떠나면 반복을 멈춘다.
-        .enter => win.emit(.{ .focus = true }),
+        .enter => |e| {
+            win.serial = e.serial;
+            win.emit(.{ .focus = true });
+        },
         .leave => {
             win.repeat.stop();
             win.mods = .{};
@@ -588,7 +710,10 @@ fn pointerListener(_: *wl.Pointer, event: wl.Pointer.Event, win: *Window) void {
             pp.motion = true;
         },
         .leave => pp.leave = true,
-        .button => |b| pp.button = .{ .code = b.button, .pressed = b.state == .pressed },
+        .button => |b| {
+            win.serial = b.serial;
+            pp.button = .{ .code = b.button, .pressed = b.state == .pressed };
+        },
         .axis => |a| if (a.axis == .vertical_scroll) {
             pp.dy += @floatCast(a.value.toDouble());
             pp.axis = true;
@@ -607,5 +732,101 @@ fn pointerListener(_: *wl.Pointer, event: wl.Pointer.Event, win: *Window) void {
             if (p.leave) win.emit(.pointer_leave);
         },
         else => {},
+    }
+}
+
+// ── 텍스트 입력 · 클립보드(TK-M4) ─────────────────────────────────────
+
+fn ignoreSigpipe() void {
+    const act: linux.Sigaction = .{
+        .handler = .{ .handler = linux.SIG.IGN },
+        .mask = linux.sigemptyset(),
+        .flags = 0,
+    };
+    _ = linux.sigaction(.PIPE, &act, null);
+}
+
+fn span(t: ?[*:0]const u8) []const u8 {
+    return if (t) |x| std.mem.span(x) else "";
+}
+
+/// text_input 이벤트(plan 확정 9): enter · leave는 상태 기계에, preedit · commit은 모았다가 `done`에서 이벤트 하나로.
+fn textInputListener(_: *zwp.TextInputV3, event: zwp.TextInputV3.Event, win: *Window) void {
+    switch (event) {
+        .enter => {
+            say("ti enter", .{});
+            if (win.ime.enter()) |en| win.sendEnable(en);
+        },
+        .leave => {
+            say("ti leave", .{});
+            win.ime.leave();
+        },
+        .preedit_string => |e| win.ime.preedit(span(e.text)),
+        .commit_string => |e| win.ime.commitString(span(e.text)),
+        .delete_surrounding_text => {},
+        .done => |e| {
+            const d = win.ime.done(e.serial);
+            say("ime commit={s} preedit={s} serial={d} match={d}", .{ d.commit, d.preedit, d.serial, @intFromBool(d.match) });
+            win.emit(.{ .ime = .{ .commit = d.commit, .preedit = d.preedit } });
+        },
+    }
+}
+
+/// 서버의 offer. `data_offer` 뒤에 `offer`들, 그 뒤 `selection`이 그것을 selection으로 정한다(xml). 옛 offer는 지운다.
+fn dataDeviceListener(_: *wl.DataDevice, event: wl.DataDevice.Event, win: *Window) void {
+    switch (event) {
+        .data_offer => |d| {
+            if (win.new_offer) |old| if (old != win.offer) old.destroy();
+            win.new_offer = d.id;
+            win.new_mask = 0;
+            d.id.setListener(*Window, offerListener, win);
+        },
+        .selection => |s| {
+            if (win.offer) |old| if (s.id != old) old.destroy();
+            win.offer = s.id;
+            win.offer_mask = if (s.id != null and s.id == win.new_offer) win.new_mask else 0;
+            win.new_offer = null;
+            if (s.id == null) return say("offer none", .{});
+            var names: [96]u8 = undefined;
+            var n: usize = 0;
+            for (clipboard.MIMES) |m| if (win.offer_mask & clipboard.bit(m) != 0) {
+                if (n != 0 and n < names.len) {
+                    names[n] = ',';
+                    n += 1;
+                }
+                const k = @min(m.len, names.len - n);
+                @memcpy(names[n .. n + k], m[0..k]);
+                n += k;
+            };
+            say("offer mimes={s}", .{names[0..n]});
+        },
+        else => {},
+    }
+}
+
+fn offerListener(o: *wl.DataOffer, event: wl.DataOffer.Event, win: *Window) void {
+    switch (event) {
+        .offer => |e| if (o == win.new_offer) {
+            win.new_mask |= clipboard.bit(std.mem.span(e.mime_type));
+        },
+    }
+}
+
+/// 서버가 내 selection을 청했다(`send`) — 그 자리에서 쓰고 닫는다(블록 파이프 · 4096 이하라 멈추지 않는다).
+fn sourceListener(src: *wl.DataSource, event: wl.DataSource.Event, win: *Window) void {
+    switch (event) {
+        .send => |e| {
+            const t0 = nowNs();
+            const n = if (src == win.source) win.copy_len else 0;
+            writeAll(e.fd, win.copy_buf[0..n]);
+            _ = linux.close(e.fd);
+            say("send mime={s} len={d} us={d}", .{ e.mime_type, n, (nowNs() - t0) / std.time.ns_per_us });
+        },
+        .cancelled => {
+            say("cancelled", .{});
+            if (src == win.source) win.source = null;
+            src.destroy();
+        },
+        .target => {},
     }
 }

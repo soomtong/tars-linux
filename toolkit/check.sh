@@ -7,7 +7,7 @@ cd "$(dirname "$0")" || exit 1
 #
 # 이 게이트가 증명하는 사슬(TK-M0 plan 확정 6의 판정 1~6, TK-M1 plan 확정 10의 판정 7~9 — 7~9는 5와 6 사이에 돈다, TK-M2 plan 확정 15의
 # 판정 10~14 — 9 뒤 같은 부팅에서 둘째 데모 `--list 100000`, TK-M3 plan 확정 15의 판정 15~18 — 14 뒤 같은 부팅에서 `tars-files`,
-# TK-M4 plan 확정 17의 판정 19 — 18 뒤 같은 부팅에서 `tars-files /tmp/tkl`):
+# TK-M4 plan 확정 17의 판정 19 — 18 뒤 같은 부팅에서 `tars-files /tmp/tkl`, 판정 20~23 — 19 뒤 같은 부팅에서 넷째 `tars-files /tmp/tkf`):
 #   셸에서 띄운 tars-tk-demo가 tars_menu_manager_v1을 bind하고(원래 모드) 셸 오른쪽 column이 되어 pane 크기(616 × 752)의
 #   configure를 받는다
 #   → 그 크기로 버퍼를 만들어 바탕 · 둥근 사각형(z2d) · 글자(stb_truetype, Pretendard 13 · 14 px)를 그린다 — screendump의
@@ -32,6 +32,11 @@ cd "$(dirname "$0")" || exit 1
 #   → 셸에서 `mkdir /tmp/tkf/a/0` 뒤 돌아오면 다시 읽고 선택 b가 행 1로 따라간다, 셋째 열은 남는다(17)
 #   → `touch (seq 1 N)`의 큰 디렉터리가 조각 여럿으로 들어오고 끝나기 전에 항목이 그려진다(18)
 #   → 긴 이름(디렉터리 · 파일)이 가운데 생략되어 `›` · 막대 앞 틈에 글자가 없고 꼬리는 그려진다, `tk> column … shown=`에 머리 · `…` · 꼬리(19)
+#   → `Cmd+C`가 선택 항목 경로를 클립보드로 — 셸의 `Cmd+V`가 `/tmp/tkf/a`를 찍는다(20)
+#   → `Cmd+L` · `/a/b` · Enter: text-input이 켜졌다 꺼지고 열 셋(/tmp/tkf · a · b)이 서며 b가 길에서 골라진다(21)
+#   → `Cmd+L` · `Cmd+A` · `/tmp/tkf/` · 한/영 · `m f s`: preedit `한`에 1 px 밑줄(덤프), 한/영으로 확정되면 본문(밑줄 없음), Enter로 `/tmp/tkf/한`의 열 —
+#     먹은 키는 키로 안 간다(22 — design의 끝나는 조건)
+#   → 셸에서 복사한 `/tmp/tkf/a/b`를 필드에 `Cmd+V` → Enter(23)
 #   → tars-files 로그: `files` · `load` · `column` · `columns` · `focus` · `refresh` 줄이 위와 맞고, 그린 수 = commit 수
 #
 # 부팅 하나, NIC 없음, 디스크 없음 — 셸은 root(fish), 소켓은 `/run/user/0`. 키보드는 QEMU의 PS/2라 pc로 읽혀 Cmd가 Alt
@@ -768,21 +773,154 @@ wait_for_log "terminal: wl> unmap id=${ID5} ws=1 slot=1" || report_failure "tars
 sleep 2
 echo "(19): both long names stop short of their gap (the › and the bar), and their tails are drawn"
 
+# ══ 경로 바 · 경로 복사 · 한글(TK-M4 단계 B) ═══════════════════════════════
+#
+# 판정 19 뒤 셸에서 `/tmp/tkf/한/x.txt`를 만들고(셸의 한/영 — 디스크 없는 부팅의 자판은 신세벌 PCS, `m f s` = 한) 넷째 `tars-files /tmp/tkf`를 띄운다.
+# 첫 열: a/ z/ 한/ m.txt(디렉터리 먼저, 한은 바이트 순서로 z 뒤). 경로 바(plan 확정 13)는 창 위 32줄 — 화면 y 20..51, 필드는 x 644 + 64 = 708부터 y 24..47,
+# 글자는 필드 왼쪽 8 = 화면 x 716부터, baseline은 필드 위 17 = 화면 y 41, preedit 밑줄은 baseline + 2 = 화면 y 43(1 px). 13 px `/tmp/tkf/`의 폭 51 →
+# `한`의 preedit은 x 767..778(폭 12 — 호스트 검사의 참고 줄 `field underline … x=79..91`과 같은 셈).
+echo "=== (20) Cmd+C copies the selected entry's path; the shell pastes it ==="
+type_text 'mkdir /tmp/tkf/'
+type_keys shift-spc
+type_keys m f s
+type_keys shift-spc
+type_keys ret
+type_text 'touch /tmp/tkf/'
+type_keys shift-spc
+type_keys m f s
+type_keys shift-spc
+type_text '/x.txt'
+type_keys ret
+type_text 'echo h20-(count /tmp/tkf/*/x.txt)'
+type_keys ret
+wait_for_screen 'h20-1' || report_failure "(20) the shell did not make /tmp/tkf/한/x.txt"
+type_text 'tars-files /tmp/tkf > /tmp/tk6.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' 6 || report_failure "(20) tars-files did not open a sixth column"
+ID6="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+' | tail -n 1 | sed 's/.*id=//')"
+wait_for_log "terminal: wl> commit id=${ID6} buf=616x752 " || report_failure "(20) tars-files never committed a 616x752 buffer"
+sleep 1.5
+type_keys alt-c
+wait_for_log "terminal: wl> selection from=${ID6} mime=text/plain;charset=utf-8" ||
+  report_failure "(20) Cmd+C in tars-files set no selection (no 'wl> selection from=${ID6} mime=text/plain;charset=utf-8')"
+wait_for_log 'terminal: clip> len=10 text=/tmp/tkf/a' || report_failure "(20) the path did not reach the shell's clipboard (no 'clip> len=10 text=/tmp/tkf/a')"
+type_keys alt-bracket_left
+wait_for_log "terminal: wl> configure id=${ID6} w=616 h=752 act=0" || report_failure "(20) Cmd+[ did not take the focus away from tars-files"
+PASTES="$(count_log 'terminal: clip> paste len=10 bracketed=1')"
+type_text 'echo '
+type_keys alt-v
+wait_for_count 'terminal: clip> paste len=10 bracketed=1' $((PASTES + 1)) || report_failure "(20) Cmd+V in the shell did not paste the 10 bytes"
+type_keys ret
+wait_for_screen '\| /tmp/tkf/a( \||$)' || report_failure "(20) the shell did not print /tmp/tkf/a on its own line"
+type_keys alt-bracket_right
+wait_for_count "terminal: wl> configure id=${ID6} w=616 h=752 act=1" 2 || report_failure "(20) Cmd+] did not give the focus back to tars-files"
+sleep 1
+echo "(20): Cmd+C put /tmp/tkf/a on the clipboard and the shell's Cmd+V printed it"
+
+echo "=== (21) Cmd+L, a typed path and Enter rebuild the columns ==="
+type_keys alt-l
+wait_for_log "terminal: wl> ti enable to=${ID6}([^0-9]|$)" || report_failure "(21) Cmd+L did not enable text input (no 'wl> ti enable to=${ID6}')"
+KEYS="$(count_log "terminal: wl> key code=[0-9]+ state=1 to=${ID6}([^0-9]|$)")"
+type_text '/a/b'
+wait_for_count "terminal: wl> key code=[0-9]+ state=1 to=${ID6}([^0-9]|$)" $((KEYS + 4)) || report_failure "(21) the four keys of /a/b did not reach tars-files as keys"
+type_keys ret
+wait_for_log "terminal: wl> ti disable to=${ID6}([^0-9]|$)" || report_failure "(21) Enter did not close the bar (no 'wl> ti disable to=${ID6}')"
+sleep 1.5
+SHOT21="${SCREENS_DIR}/files-path.ppm"
+screendump "$SHOT21" || report_failure "(21) screendump did not write ${SHOT21}"
+# /tmp/tkf · /tmp/tkf/a · /tmp/tkf/a/b, scroll 201: a(0, b)는 x 644..843 — b(행 1)가 흐린 선택, b(c, x.txt)는 x 845..1044 — 행 0이 포커스 선택.
+want_box "(21) col1 row 1 (b) is the unfocused selection" "$SHOT21" 700 46 100 20 "$TK_INACTIVE"
+want_box "(21) col2 row 0 (c) is the focused selection" "$SHOT21" 901 22 100 20 "$TK_ACCENT"
+want_box "(21) the bar is gone: col1 row 0 (0) at y 22" "$SHOT21" 700 22 100 20 "$TK_BG"
+echo "(21): /tmp/tkf + /a/b opened three columns with b selected on the way, the bar closed"
+
+echo "=== (22) Hangul in the path field: the preedit is underlined, the commit is body text ==="
+type_keys alt-l
+wait_for_count "terminal: wl> ti enable to=${ID6}([^0-9]|$)" 2 || report_failure "(22) Cmd+L did not enable text input again"
+type_keys alt-a
+type_text '/tmp/tkf/'
+ONS="$(count_log 'terminal: hangul> on=true')"
+type_keys shift-spc
+wait_for_count 'terminal: hangul> on=true' $((ONS + 1)) || report_failure "(22) Shift+Space in the field did not turn hangul on"
+# 먹은 키는 한글을 켠 뒤부터 센다 — 앞의 `/tmp/tkf/`가 m(50) · f(33)을 영문 키로 이미 보냈다.
+EATEN0="$(count_log "terminal: wl> key code=(50|33|31) state=1 to=${ID6}([^0-9]|$)")"
+type_keys m f s
+wait_for_log "terminal: wl> ime to=${ID6} commit=\(none\) preedit=한" || report_failure "(22) m f s did not compose 한 (no 'wl> ime to=${ID6} commit=(none) preedit=한')"
+sleep 1
+SHOT22A="${SCREENS_DIR}/files-preedit.ppm"
+screendump "$SHOT22A" || report_failure "(22) screendump did not write ${SHOT22A}"
+under="$(ppm_ink "$SHOT22A" 767 43 12 1)"
+[ "$under" = "bg=${TK_TEXT} ink=0" ] || report_failure "(22) the preedit underline (767,43 12x1) is not all ${TK_TEXT} (${under})"
+got="$(ppm_ink "$SHOT22A" 767 44 12 1)"
+[ "$got" != "bg=${TK_TEXT} ink=0" ] || report_failure "(22) the row under the underline (767,44) is also text colour — not a 1 px line"
+got="$(ppm_ink "$SHOT22A" 767 30 12 12)"
+case "$got" in *" ink=0") report_failure "(22) no glyph above the underline (767,30 12x12) (${got})" ;; esac
+OFFS="$(count_log 'terminal: hangul> on=false')"
+type_keys shift-spc
+wait_for_log "terminal: wl> ime to=${ID6} commit=한 preedit=\(none\)" || report_failure "(22) Shift+Space did not commit 한 to the window"
+wait_for_count 'terminal: hangul> on=false' $((OFFS + 1)) || report_failure "(22) Shift+Space did not turn hangul off"
+sleep 1
+SHOT22B="${SCREENS_DIR}/files-commit.ppm"
+screendump "$SHOT22B" || report_failure "(22) screendump did not write ${SHOT22B}"
+got="$(ppm_ink "$SHOT22B" 767 43 11 1)"
+[ "$got" != "bg=${TK_TEXT} ink=0" ] || report_failure "(22) the underline is still there after the commit (767,43 11x1: ${got})"
+got="$(ppm_ink "$SHOT22B" 767 30 12 12)"
+case "$got" in *" ink=0") report_failure "(22) 한 is gone after the commit (767,30 12x12) (${got})" ;; esac
+type_keys ret
+wait_for_count "terminal: wl> ti disable to=${ID6}([^0-9]|$)" 2 || report_failure "(22) Enter did not close the bar"
+sleep 1.5
+SHOT22C="${SCREENS_DIR}/files-hangul.ppm"
+screendump "$SHOT22C" || report_failure "(22) screendump did not write ${SHOT22C}"
+# /tmp/tkf · /tmp/tkf/한, scroll 0: 한은 첫 열 행 2(흐린 선택), 한/의 x.txt는 둘째 열 행 0(포커스 선택).
+want_box "(22) col0 row 2 (한) is the unfocused selection" "$SHOT22C" 700 70 100 20 "$TK_INACTIVE"
+want_box "(22) col1 row 0 (x.txt) is the focused selection" "$SHOT22C" 901 22 100 20 "$TK_ACCENT"
+EATEN="$(count_log "terminal: wl> key code=(50|33|31) state=1 to=${ID6}([^0-9]|$)")"
+[ "$EATEN" -eq "$EATEN0" ] || report_failure "(22) $((EATEN - EATEN0)) eaten key press(es) (m f s) also went to tars-files as keys"
+echo "(22): 한 composed under a 1 px underline, committed as body text, and Enter opened /tmp/tkf/한"
+
+echo "=== (23) a copy in the shell pastes into the path field ==="
+type_keys alt-bracket_left
+wait_for_count "terminal: wl> configure id=${ID6} w=616 h=752 act=0" 2 || report_failure "(23) Cmd+[ did not take the focus away from tars-files"
+type_text 'echo /tmp/tkf/a/b'
+type_keys ret
+wait_for_screen '\| /tmp/tkf/a/b( \||$)' || report_failure "(23) the shell did not print /tmp/tkf/a/b"
+type_keys alt-shift-c
+type_keys k shift-v y
+wait_for_log 'terminal: clip> len=12 text=/tmp/tkf/a/b' || report_failure "(23) copy mode did not copy /tmp/tkf/a/b"
+type_keys alt-bracket_right
+wait_for_count "terminal: wl> configure id=${ID6} w=616 h=752 act=1" 3 || report_failure "(23) Cmd+] did not give the focus back to tars-files"
+wait_for_log "terminal: wl> offer to=${ID6} len=12" || report_failure "(23) tars-files got no offer of the shell's copy"
+type_keys alt-l
+wait_for_count "terminal: wl> ti enable to=${ID6}([^0-9]|$)" 3 || report_failure "(23) Cmd+L did not enable text input a third time"
+type_keys alt-a
+type_keys alt-v
+wait_for_log "terminal: wl> receive to=${ID6} mime=text/plain;charset=utf-8 len=12 first=12" ||
+  report_failure "(23) Cmd+V in the field did not receive the 12 bytes"
+type_keys ret
+wait_for_count "terminal: wl> ti disable to=${ID6}([^0-9]|$)" 3 || report_failure "(23) Enter did not close the bar"
+sleep 1
+type_keys alt-q
+wait_for_log "terminal: wl> close id=${ID6}" || report_failure "Cmd+Q sent no 'wl> close id=${ID6}' to tars-files"
+wait_for_log "terminal: wl> unmap id=${ID6} ws=1 slot=1" || report_failure "tars-files' fourth slot was not removed"
+sleep 2
+echo "(23): the shell's copy /tmp/tkf/a/b pasted into the field and Enter opened it"
+
 # ── tars-files의 로그를 꺼낸다 ───────────────────────────────────────────
 type_text 'echo tk3begin > /dev/console'
 type_keys ret
-type_text 'cat /tmp/tk3.log /tmp/tk4.log /tmp/tk5.log > /dev/console'
+type_text 'cat /tmp/tk3.log /tmp/tk4.log /tmp/tk5.log /tmp/tk6.log > /dev/console'
 type_keys ret
 got_rss=0
 for _ in $(seq 1 150); do
-  if [ "$(tr -d '\r' < "$LOG" | sed -n '/^tk3begin$/,$p' | grep -acE '^tk> rss vmrss_kb=[0-9]+ ')" -ge 3 ]; then got_rss=1; break; fi
+  if [ "$(tr -d '\r' < "$LOG" | sed -n '/^tk3begin$/,$p' | grep -acE '^tk> rss vmrss_kb=[0-9]+ ')" -ge 4 ]; then got_rss=1; break; fi
   sleep 0.1
 done
-[ "$got_rss" = 1 ] || report_failure "tars-files' logs did not come out on the serial (fewer than three 'tk> rss' after 'tk3begin')"
+[ "$got_rss" = 1 ] || report_failure "tars-files' logs did not come out on the serial (fewer than four 'tk> rss' after 'tk3begin')"
 TK3="$(tr -d '\r' < "$LOG" | sed -n '/^tk3begin$/,$p' | grep -a '^tk> ')"
 TK3A="$(printf '%s\n' "$TK3" | awk '/^tk> files path=\/tmp\/tkb$/ {exit} {print}')"
 TK3B="$(printf '%s\n' "$TK3" | sed -n '/^tk> files path=\/tmp\/tkb$/,$p' | awk '/^tk> files path=\/tmp\/tkl$/ {exit} {print}')"
-TK5="$(printf '%s\n' "$TK3" | sed -n '/^tk> files path=\/tmp\/tkl$/,$p')"
+TK5="$(printf '%s\n' "$TK3" | awk '/^tk> files path=\/tmp\/tkl$/ {f=1} f && /^tk> files path=\/tmp\/tkf$/ {exit} f {print}')"
+TK6="$(printf '%s\n' "$TK3" | awk 'f && /^tk> files path=\/tmp\/tkf$/ {g=1} /^tk> files path=\/tmp\/tkl$/ {f=1} g {print}')"
 has3() {
   printf '%s\n' "$TK3A" | grep -aE -- "$1" > /dev/null || report_failure "$2: no '$1' in tars-files' log"
 }
@@ -819,6 +957,29 @@ printf '%s\n' "$TK5" | grep -aE '^tk> column i=0 path=/tmp/tkl count=2 sel=0 nam
 printf '%s\n' "$TK5" | grep -aE '^tk> column i=0 path=/tmp/tkl count=2 sel=1 name=long-file-name-0123456789-abcdefghij-tail[.]txt shown=long-[a-z0-9-]*…[a-z0-9-]*-tail[.]txt$' > /dev/null ||
   report_failure "(19) no 'tk> column … sel=1 name=long-file-… shown=long-…-tail.txt' (head … tail)"
 echo "(15-17 log): files · load · column · columns · focus · refresh lines match; ${D3} draws = ${C3} commits"
+has6() {
+  printf '%s\n' "$TK6" | grep -aE -- "$1" > /dev/null || report_failure "$2: no '$1' in tars-files' log"
+}
+has6 '^tk> copy path=/tmp/tkf/a$' "(20)"
+has6 '^tk> copy len=10 serial=[0-9]+$' "(20)"
+has6 '^tk> send mime=text/plain;charset=utf-8 len=10 us=[0-9]+$' "(20)"
+has6 '^tk> bar open$' "(21)"
+has6 '^tk> field text=/tmp/tkf/a/b action=enter$' "(21)"
+has6 '^tk> columns n=3 focus=2 scroll=201$' "(21)"
+has6 '^tk> column i=1 path=/tmp/tkf/a count=2 sel=1 name=b shown=b$' "(21)"
+has6 '^tk> ime commit= preedit=한 serial=[0-9]+ match=1$' "(22)"
+has6 '^tk> ime commit=한 preedit= serial=[0-9]+ match=1$' "(22)"
+has6 '^tk> field text=/tmp/tkf/한 action=enter$' "(22)"
+has6 '^tk> columns n=2 focus=1 scroll=0$' "(22)"
+has6 '^tk> column i=0 path=/tmp/tkf count=4 sel=2 name=한 shown=한$' "(22)"
+has6 '^tk> paste len=12 us=[0-9]+$' "(23)"
+has6 '^tk> field text=/tmp/tkf/a/b action=enter$' "(23)"
+MISMATCH6="$(printf '%s\n' "$TK6" | grep -acE '^tk> ime .* match=0$')"
+[ "$MISMATCH6" -eq 0 ] || report_failure "(22) ${MISMATCH6} ime done(s) with a serial that does not match the commits"
+D6="$(printf '%s\n' "$TK6" | grep -acE '^tk> draw ')"
+C6="$(printf '%s\n' "$TK6" | grep -acE '^tk> commit$')"
+[ "$D6" -eq "$C6" ] || report_failure "tars-files (bar) drew ${D6} times but committed ${C6}"
+echo "(20-23 log): copy · send · bar · field · ime (match=1) · columns · paste lines match; ${D6} draws = ${C6} commits"
 echo "(19 log): $(printf '%s\n' "$TK5" | grep -aE '^tk> column ' | sed 's/.* shown=/shown=/' | tr '\n' ' ')"
 echo "(18): ${FILES_N} entries in ${CHUNKS18} chunks, first chunk at ${FIRST18} us, first painted at ${PAINT18} us, all at ${ALL18} us"
 # 측정(참고 — 판정 아님, measurements 110).
@@ -827,10 +988,13 @@ printf '%s\n' "$TK3" | grep -aE '^tk> (load |rss |columns )'
 echo "reference: tars-files draws $(printf '%s\n' "$TK3A" | grep -aE '^tk> draw ' | us_summary)"
 echo "reference: tars-files /tmp/tkl (elided names) draws $(printf '%s\n' "$TK5" | grep -aE '^tk> draw ' | us_summary)"
 printf '%s\n' "$TK5" | grep -aE '^tk> draw '
+echo "--- reference: tars-files with the path bar (TK-M4 phase B) ---"
+printf '%s\n' "$TK6" | grep -aE '^tk> (draw|ime|ti|bar|field|copy|send|paste|offer|columns|cancelled) '
+echo "reference: field-only draws (the field rectangle 64,4,536,24) $(printf '%s\n' "$TK6" | grep -aE '^tk> draw .* dirty=64,4,536,24 ' | us_summary)"
 printf '%s\n' "$TK3A" | grep -aE '^tk> (draw|columns|refresh) '
 
 # ── render verify ─────────────────────────────────────────────────────
 MISMATCH="$(count_log 'terminal: verify> mismatch')"
 [ "$MISMATCH" -eq 0 ] || report_failure "render verify mismatch lines: ${MISMATCH}"
 
-echo "PASS: TK-M4 (phase A) — tars-tk-demo binds tars_menu_v1 (native), opens as a 616x752 column, draws a rounded rectangle (z2d) with antialiased corners and antialiased Pretendard text, redraws centred at 1240x752 on Cmd+R, animates a face's opacity (mid colour between, end colour after) with only the face's rectangle blitted, commits only when it draws (2 + ${N} draws and commits, none while idle), and ends by itself on Cmd+Q; tars-tk-demo --list 100000 moves list1's highlight to row 10 after ten downs, End shows the last row and the bar at the bottom, a click selects row 4 and the wheel scrolls three rows, Tab and Shift+Tab move the focus between the lists, and holding down repeats ${REPEATS} time(s) on the client; tars-files lists /tmp/tkf with directories first and hidden names out, -> -> <- leaves three columns with the focus on the second (scroll 201), re-reads on focus and keeps b selected after a/0 appears, and streams ${FILES_N} entries in ${CHUNKS18} chunks (painted at ${PAINT18} us of ${ALL18} us), and elides a long directory and a long file name in the middle so they stop short of the › and the bar"
+echo "PASS: TK-M4 (phase B) — tars-tk-demo binds tars_menu_v1 (native), opens as a 616x752 column, draws a rounded rectangle (z2d) with antialiased corners and antialiased Pretendard text, redraws centred at 1240x752 on Cmd+R, animates a face's opacity (mid colour between, end colour after) with only the face's rectangle blitted, commits only when it draws (2 + ${N} draws and commits, none while idle), and ends by itself on Cmd+Q; tars-tk-demo --list 100000 moves list1's highlight to row 10 after ten downs, End shows the last row and the bar at the bottom, a click selects row 4 and the wheel scrolls three rows, Tab and Shift+Tab move the focus between the lists, and holding down repeats ${REPEATS} time(s) on the client; tars-files lists /tmp/tkf with directories first and hidden names out, -> -> <- leaves three columns with the focus on the second (scroll 201), re-reads on focus and keeps b selected after a/0 appears, and streams ${FILES_N} entries in ${CHUNKS18} chunks (painted at ${PAINT18} us of ${ALL18} us), elides a long directory and a long file name in the middle so they stop short of the › and the bar, copies the selected path to the shell's clipboard on Cmd+C, and opens the path bar on Cmd+L where a typed path, a Hangul path (preedit underlined, then committed) and a pasted path rebuild the columns"

@@ -32,6 +32,8 @@ Wayland 앱은 셸에서 그냥 띄웁니다(`WAYLAND_DISPLAY`가 잡혀 있습�
 `tars-wl-test --color 3366CC &`는 한 색 창을 띄우고 받은 키 · 포인터를 찍는 시험입니다. gpu 묶음이 있으면
 `tars-gpu-demo --window 640x400 &`가 SDL3 창으로 같은 자리에 뜹니다.
 `tars-files [경로] &`는 파일 관리자입니다 — `↑` `↓`로 고르고 `→`(또는 `Enter`)로 디렉터리를 오른쪽 열에 열고 `←`로 돌아옵니다. 창에 다시 오면 목록을 새로 읽습니다.
+`Cmd+C`는 고른 항목의 경로를 클립보드에 넣고(셸에서 `Cmd+V`), `Cmd+L`은 창 위에 경로 칸을 엽니다 — 경로를 치고 `Enter`면 그 자리로 열이 다시 서고 `Esc`면 닫힙니다.
+경로 칸에서는 한글(`Shift+Space`)을 칠 수 있고, `←` `→`(`Shift`로 선택) · `Opt+←` `→`(낱말) · `Ctrl+A` `Ctrl+E` · `Cmd+A` · `Cmd+C` `X` `V` · `Cmd+Z`가 됩니다.
 `tars-doom &`는 둠(Freedoom Phase 1, doom 묶음)입니다 — 화살표로 걷고 `Ctrl` 쏘기 · `Space` 문 열기 · `Shift` 달리기 · `,` `.` 옆걸음 · `1`~`7` 무기 · `Esc` 메뉴, `Cmd+Q`로 끝냅니다.
 
 화면을 직접 그리는 프로그램(`/dev/dri/card0`을 여는 것)은 `tars-fullscreen <명령>`으로 띄웁니다. 그 프로그램이 끝나면 셸 화면이

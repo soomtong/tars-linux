@@ -71,12 +71,16 @@ pub fn build(b: *std.Build) void {
     });
     scanner.addCustomProtocol(b.path("../terminal/vendor/wayland/xdg-shell.xml"));
     scanner.addCustomProtocol(b.path("../terminal/protocol/tars-menu-v1.xml"));
+    // 텍스트 입력 · 클립보드(TK-M4) — 서버와 같은 판(terminal/build.zig).
+    scanner.addCustomProtocol(b.path("../terminal/vendor/wayland/text-input-unstable-v3.xml"));
     scanner.generate("wl_compositor", 6);
     scanner.generate("wl_shm", 1);
     scanner.generate("wl_output", 4);
     scanner.generate("wl_seat", 7);
     scanner.generate("xdg_wm_base", 5);
     scanner.generate("tars_menu_manager_v1", 1);
+    scanner.generate("zwp_text_input_manager_v3", 1);
+    scanner.generate("wl_data_device_manager", 2);
     const wayland = b.createModule(.{ .root_source_file = scanner.result });
 
     // libwayland-client는 컨테이너의 x86_64 sysroot에 있다(terminal/build.zig의 같은 줄 — WY design 확인 1).

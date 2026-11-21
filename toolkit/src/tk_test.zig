@@ -24,6 +24,10 @@
 //!    조각 병합 = 한 번 정렬, 안정 선택 표 · 스크롤, 첫 로딩의 선택(확정 10).
 //! 15 텍스트 놓기(TK-M4 단계 A) — 클러스터(잘못된 바이트 · 결합 표시 · L V T · 홀로 선 자모 · 4바이트), 대체의 폭이 측정 = 그리기, 캐럿 x 왕복,
 //!    부분 폭 = 따로 잰 폭, 실제 글꼴에서 `measure` = 끝 펜 · NFD = NFC의 픽셀, 가운데 생략, 줄 나누기, 글자 키 표 = 서버 키맵, 긴 이름 행의 부분 = 통째.
+//! 16 텍스트 필드 · text-input · 클립보드 · 경로(TK-M4 단계 B) — 필드 모델 표(입력 · 클러스터 · 낱말 · 선택 · 되돌리기 맞바꿈 · 붙여넣기 첫 줄 · IME 적용 ·
+//!    포커스 잃음 · 4096 한도 · 스크롤), ime 상태 기계(enter 전후 · leave · serial 불일치 · 100번 왕복), mime 고르기, 경로 해석 · 열 경로, 필드 뷰(키 표로
+//!    타이핑 · Cmd+A/C/X/V/Z · Ctrl+A/E · Enter · Esc · unhandled · IME 라우팅 · ime 훅), 필드 그림(밑줄 행 · 확정 뒤 · 캐럿 · 링 · 선택 · 부분 = 통째),
+//!    `ColumnView.setColumns`.
 
 const std = @import("std");
 const theme = @import("theme");
@@ -219,6 +223,12 @@ pub fn main(init: std.process.Init) !u8 {
     try modelTests(alloc);
     try layoutTests(io, alloc, &f13, &lut1);
     keyCharTests();
+    fieldModelTests();
+    imeTests();
+    clipTests();
+    pathTests();
+    try fieldTests(io, alloc, font, &f13, &lut1);
+    try setColumnsTests(alloc, &f13);
 
     if (failures != 0) {
         std.debug.print("tk_test: {d} failure(s)\n", .{failures});
@@ -2178,4 +2188,392 @@ fn keyCharTests() void {
     check(input.charFor(30, .{ .ctrl = true }) == null and input.charFor(30, .{ .alt = true }) == null and input.charFor(30, .{ .super = true }) == null, "Ctrl/Alt/Super+a are commands, not text", .{});
     check(input.charFor(14, none) == null and input.charFor(28, none) == null and input.charFor(15, none) == null and input.charFor(1, none) == null and input.charFor(55, none) == null and input.charFor(103, none) == null, "Backspace Enter Tab Esc KP* Up give no text", .{});
     check(input.keyFromCode(14) == .backspace and input.keyFromCode(111) == .delete and input.repeats(14) and input.repeats(111), "evdev 14 backspace, 111 delete, both repeat", .{});
+}
+
+// ── 16 텍스트 필드 · text-input · 클립보드 · 경로 바(TK-M4 단계 B) ───────────────
+
+const TF = kit.textfield;
+const ImeSm = @import("window/ime.zig").Ime;
+const clipm = @import("window/clip.zig");
+
+fn mtext(m: *const TF.Model) []const u8 {
+    return m.text();
+}
+
+fn fieldModelTests() void {
+    var m: TF.Model = .{};
+    m.setText("/tmp/tkf");
+    check(std.mem.eql(u8, m.text(), "/tmp/tkf") and m.caret == 8 and m.anchor == 8 and !m.has_undo, "setText: caret at the end, no selection, no undo", .{});
+    m.insert("/");
+    m.insert("a");
+    check(std.mem.eql(u8, m.text(), "/tmp/tkf/a") and m.caret == 10, "typing inserts at the caret", .{});
+    _ = m.undo();
+    check(std.mem.eql(u8, m.text(), "/tmp/tkf") and m.caret == 8, "Cmd+Z undoes the whole typing run (one group)", .{});
+    _ = m.undo();
+    check(std.mem.eql(u8, m.text(), "/tmp/tkf/a") and m.caret == 10, "Cmd+Z again redoes it (swap)", .{});
+    m.step(false, false, false);
+    m.step(false, false, true);
+    check(m.caret == 8 and m.anchor == 9 and std.mem.eql(u8, m.selected(), "/"), "<- then Shift+<- selects one cluster back", .{});
+    m.step(true, false, false);
+    check(m.caret == 9 and m.selection() == null, "-> with a selection collapses to its end", .{});
+    m.moveTo(0, false);
+    m.step(true, true, false);
+    check(m.caret == 4, "Opt+-> from 0 skips '/' then the word tmp (caret 4)", .{});
+    m.step(true, true, false);
+    check(m.caret == 8, "Opt+-> again: tkf (caret 8)", .{});
+    m.moveTo(m.len, false);
+    m.step(false, true, false);
+    check(m.caret == 9, "Opt+<- from the end: the word a starts at 9", .{});
+    m.moveTo(m.len, false);
+    m.backspace(true);
+    check(std.mem.eql(u8, m.text(), "/tmp/tkf/"), "Opt+Backspace deletes the word before the caret", .{});
+    m.backspace(false);
+    m.backspace(false);
+    check(std.mem.eql(u8, m.text(), "/tmp/tk"), "Backspace twice", .{});
+    _ = m.undo();
+    check(std.mem.eql(u8, m.text(), "/tmp/tkf/a"), "the deletes (word + two) are one group: undo restores /tmp/tkf/a", .{});
+    // 한글 · NFD 클러스터: Backspace 하나가 클러스터 하나.
+    m.setText("가\u{1112}\u{1161}\u{11AB}");
+    m.backspace(false);
+    check(std.mem.eql(u8, m.text(), "가"), "Backspace removes an NFD syllable (9 bytes) as one cluster", .{});
+    m.moveTo(0, false);
+    m.deleteForward();
+    check(m.len == 0, "Delete removes 가", .{});
+    // 전체 선택 · 바꾸기 · 붙여넣기 첫 줄.
+    m.setText("abc");
+    m.selectAll();
+    check(std.mem.eql(u8, m.selected(), "abc"), "Cmd+A selects all", .{});
+    m.insert("x");
+    check(std.mem.eql(u8, m.text(), "x"), "typing over a selection replaces it", .{});
+    m.selectAll();
+    m.paste("/one\nsecond line");
+    check(std.mem.eql(u8, m.text(), "/one") and m.caret == 4, "paste keeps the first line and replaces the selection", .{});
+    check(std.mem.eql(u8, TF.firstLine("a\r\nb"), "a") and std.mem.eql(u8, TF.firstLine("ab"), "ab"), "firstLine cuts at CR or LF", .{});
+    m.selectAll();
+    m.deleteSelection();
+    check(m.len == 0, "cut (delete selection) leaves nothing", .{});
+    // IME(text-input-v3 순서).
+    m.setText("/tmp/tkf/");
+    m.ime("", "ㅎ");
+    check(std.mem.eql(u8, m.text(), "/tmp/tkf/") and std.mem.eql(u8, m.preedit(), "ㅎ"), "a preedit does not touch the buffer", .{});
+    m.ime("", "한");
+    m.ime("한", "ㄱ");
+    check(std.mem.eql(u8, m.text(), "/tmp/tkf/한") and std.mem.eql(u8, m.preedit(), "ㄱ") and m.caret == m.len, "one done with commit 한 + preedit ㄱ: 한 in the buffer, ㄱ composing", .{});
+    m.ime("ㄱ", "");
+    check(std.mem.eql(u8, m.text(), "/tmp/tkf/한ㄱ") and m.pre_len == 0, "commit ㄱ with an empty preedit ends the composition", .{});
+    m.selectAll();
+    m.ime("", "ㅁ");
+    check(m.len == 0 and std.mem.eql(u8, m.preedit(), "ㅁ"), "the first preedit over a selection deletes the selection", .{});
+    check(m.commitPreedit() and std.mem.eql(u8, m.text(), "ㅁ") and m.pre_len == 0 and !m.commitPreedit(), "losing the focus commits the preedit into the body (once)", .{});
+    // 넘침: 4096에서 자른다(클러스터 경계).
+    var big: [TF.MAX_TEXT + 10]u8 = undefined;
+    @memset(&big, 'a');
+    m.setText(&big);
+    check(m.len == TF.MAX_TEXT, "setText cuts at 4096 bytes", .{});
+    m.moveTo(TF.MAX_TEXT - 1, false);
+    m.insert("한");
+    check(m.len == TF.MAX_TEXT, "a full buffer takes nothing (no half code point)", .{});
+    // 가로 스크롤: 캐럿이 보이게 최소만.
+    check(TF.TextField.scrollFor(0, 50, 300, 100) == 0 and TF.TextField.scrollFor(0, 150, 300, 100) == 51 and TF.TextField.scrollFor(60, 20, 300, 100) == 20 and TF.TextField.scrollFor(200, 80, 80, 100) == 0, "scrollFor: stays, follows right (51), follows left (20), clamps when the text shrinks", .{});
+}
+
+fn imeTests() void {
+    var s: ImeSm = .{};
+    check(s.setWant(true) == null and s.want, "want before enter: nothing to send yet", .{});
+    check(s.enter().? == true, "enter while wanted: enable", .{});
+    s.sent();
+    check(s.setWant(true) == null, "the same want again: nothing", .{});
+    s.preedit("한");
+    const d1 = s.done(1);
+    check(std.mem.eql(u8, d1.preedit, "한") and d1.commit.len == 0 and d1.match, "done(1) after one commit: preedit 한, match", .{});
+    s.commitString("한");
+    s.preedit("ㄱ");
+    const d2 = s.done(1);
+    check(std.mem.eql(u8, d2.commit, "한") and std.mem.eql(u8, d2.preedit, "ㄱ"), "commit + preedit in one done", .{});
+    const d3 = s.done(1);
+    check(d3.commit.len == 0 and d3.preedit.len == 0, "done resets the pending (empty strings)", .{});
+    check(s.setWant(false).? == false, "want off while entered: disable", .{});
+    s.sent();
+    const d4 = s.done(1);
+    check(!d4.match and d4.serial == 1 and s.commits == 2, "a stale serial still applies, match 0", .{});
+    s.preedit("x");
+    s.leave();
+    check(s.setWant(true) == null and s.pre_len == 0, "after leave: pending dropped, want is held until the next enter", .{});
+    check(s.enter().? == true, "the next enter enables again (the server resets on enter)", .{});
+    s.sent();
+    var s2: ImeSm = .{};
+    check(s2.enter() == null, "enter while not wanted: nothing (the server starts disabled)", .{});
+    var round: u32 = 0;
+    var ok = true;
+    while (round < 100) : (round += 1) {
+        if (s2.setWant(round % 2 == 0)) |_| s2.sent();
+        ok = ok and s2.done(s2.commits).match;
+    }
+    check(ok and s2.commits == 100, "100 enable/disable rounds: every done(commits) matches", .{});
+}
+
+fn clipTests() void {
+    check(clipm.pick(clipm.bit("TEXT") | clipm.bit("text/plain")).?.ptr == clipm.MIMES[1].ptr, "pick prefers text/plain over TEXT", .{});
+    check(std.mem.eql(u8, clipm.pick(0xF).?, "text/plain;charset=utf-8") and clipm.pick(0) == null and clipm.bit("image/png") == 0, "pick: utf-8 first, nothing for none, unknown mimes ignored", .{});
+    check(std.mem.eql(u8, clipm.pick(clipm.bit("UTF8_STRING")).?, "UTF8_STRING"), "pick UTF8_STRING alone", .{});
+}
+
+fn pathTests() void {
+    var b: [4096]u8 = undefined;
+    const Case = struct { t: []const u8, want: []const u8 };
+    const cases = [_]Case{
+        .{ .t = "/tmp/tkf/a/b", .want = "/tmp/tkf/a/b" },
+        .{ .t = "/tmp//tkf/./a/", .want = "/tmp/tkf/a" },
+        .{ .t = "/tmp/tkf/a/..", .want = "/tmp/tkf" },
+        .{ .t = "/../..", .want = "/" },
+        .{ .t = "a/b", .want = "/tmp/tkf/a/b" },
+        .{ .t = "..", .want = "/tmp" },
+        .{ .t = "~", .want = "/root" },
+        .{ .t = "~/x/", .want = "/root/x" },
+        .{ .t = "  /tmp  ", .want = "/tmp" },
+        .{ .t = "/tmp/tkf/한", .want = "/tmp/tkf/한" },
+    };
+    var all = true;
+    for (cases) |c| {
+        const got = fm.resolvePath(&b, c.t, "/tmp/tkf", "/root") catch "ERR";
+        if (!std.mem.eql(u8, got, c.want)) {
+            all = false;
+            std.debug.print("tk_test: resolvePath {s} -> {s} (want {s})\n", .{ c.t, got, c.want });
+        }
+    }
+    check(all, "resolvePath: absolute · // · . · trailing / · .. · past the root · relative · ~ · spaces · Hangul ({d} cases)", .{cases.len});
+    check(if (fm.resolvePath(&b, "  ", "/", null)) |_| false else |e| e == error.Empty, "an empty path is error.Empty", .{});
+    check(if (fm.resolvePath(&b, "~", "/", null)) |_| false else |e| e == error.NoHome, "~ without HOME is error.NoHome", .{});
+    var out: [32][]const u8 = undefined;
+    const p1 = fm.columnPaths("/tmp/tkf", "/tmp/tkf/a/b", &out) catch &.{};
+    check(p1.len == 3 and std.mem.eql(u8, p1[0], "/tmp/tkf") and std.mem.eql(u8, p1[1], "/tmp/tkf/a") and std.mem.eql(u8, p1[2], "/tmp/tkf/a/b"), "columnPaths inside the start: /tmp/tkf, /a, /a/b", .{});
+    const p2 = fm.columnPaths("/tmp/tkf", "/tmp/tkf", &out) catch &.{};
+    check(p2.len == 1 and std.mem.eql(u8, p2[0], "/tmp/tkf"), "columnPaths of the start itself: one column", .{});
+    const p3 = fm.columnPaths("/tmp/tkf", "/usr/bin", &out) catch &.{};
+    check(p3.len == 3 and std.mem.eql(u8, p3[0], "/") and std.mem.eql(u8, p3[1], "/usr") and std.mem.eql(u8, p3[2], "/usr/bin"), "columnPaths outside the start: from /", .{});
+    const p4 = fm.columnPaths("/tmp/tkf", "/tmp/tkfx", &out) catch &.{};
+    check(p4.len == 3 and std.mem.eql(u8, p4[0], "/"), "/tmp/tkfx is not inside /tmp/tkf (from /)", .{});
+    const p5 = fm.columnPaths("/", "/tmp", &out) catch &.{};
+    const p6 = fm.columnPaths("/x", "/", &out) catch &.{};
+    check(p5.len == 2 and std.mem.eql(u8, p5[1], "/tmp") and p6.len == 1 and std.mem.eql(u8, p6[0], "/"), "columnPaths: start / -> /, /tmp; target / -> one column", .{});
+    var deep_buf: [200]u8 = undefined;
+    var n: usize = 0;
+    for (0..40) |_| {
+        deep_buf[n] = '/';
+        deep_buf[n + 1] = 'd';
+        n += 2;
+    }
+    check(if (fm.columnPaths("/", deep_buf[0..n], &out)) |_| false else |e| e == error.TooDeep, "41 columns is error.TooDeep (pool 32)", .{});
+    check(std.mem.eql(u8, fm.basename("/tmp/tkf/a"), "a") and std.mem.eql(u8, fm.dirname("/tmp/tkf/a"), "/tmp/tkf") and std.mem.eql(u8, fm.dirname("/a"), "/"), "basename · dirname", .{});
+}
+
+/// 필드 하나와 루트(검사 판 W × H). ime 훅 · 클립보드 delegate를 센다.
+const FieldEnv = struct {
+    tree: ca.Tree,
+    alloc: std.mem.Allocator,
+    root_layer: *ca.Layer = undefined,
+    root_view: kit.View = undefined,
+    root: kit.Root = undefined,
+    field: TF.TextField = undefined,
+    other: kit.List = undefined,
+    other_src: CountSource = undefined,
+    face: ?text.Face = null,
+    ime_on: bool = false,
+    ime_calls: u32 = 0,
+    copied: [64]u8 = undefined,
+    copied_len: usize = 0,
+    clip_text: []const u8 = "",
+    actions: u32 = 0,
+    last_action: TF.Action = .escape,
+
+    fn init(self: *FieldEnv, alloc: std.mem.Allocator, font: []const u8, face13: *text.Face) !void {
+        self.* = .{ .tree = ca.Tree.init(alloc), .alloc = alloc };
+        self.face = try text.Face.init(alloc, font, 13);
+        const t = &self.tree;
+        self.root_layer = try t.create(.{ .frame = .{ .x = 0, .y = 0, .w = W, .h = H }, .background = theme.TK_BG });
+        t.setRoot(self.root_layer);
+        self.root_view = .{ .layer = self.root_layer, .vtable = &ROOT_VT, .ctx = self, .name = "root" };
+        self.root = kit.Root.init(t);
+        self.root.setView(&self.root_view);
+        self.root.ime_hook = .{ .ctx = self, .on = onIme };
+        try self.field.init(t, "field", &self.face);
+        self.field.delegate = .{ .ctx = self, .action = onAction, .copy = onCopy, .paste = onPaste };
+        self.field.view.layer.setFrame(.{ .x = 20, .y = 30, .w = 150, .h = 24 });
+        try self.root_layer.addChild(self.field.view.layer);
+        try self.root_view.addChild(alloc, &self.field.view);
+        self.other_src = .{ .n = 3, .face = face13 };
+        try self.other.init(t, "other", self.other_src.source(), 0);
+        self.other.view.layer.setFrame(.{ .x = 0, .y = 70, .w = 200, .h = 50 });
+        self.other.sync();
+        try self.root_layer.addChild(self.other.view.layer);
+        try self.root_view.addChild(alloc, &self.other.view);
+        self.root.handle(.{ .focus = true });
+        _ = t.takeDirty();
+    }
+    fn deinit(self: *FieldEnv) void {
+        self.other.deinit(self.alloc);
+        self.field.view.deinit(self.alloc);
+        self.root_view.deinit(self.alloc);
+        if (self.face) |*f| f.deinit();
+        self.tree.deinit();
+    }
+    fn onIme(ctx: *anyopaque, on: bool) void {
+        const self: *FieldEnv = @ptrCast(@alignCast(ctx));
+        self.ime_on = on;
+        self.ime_calls += 1;
+    }
+    fn onAction(ctx: *anyopaque, _: *TF.TextField, a: TF.Action) void {
+        const self: *FieldEnv = @ptrCast(@alignCast(ctx));
+        self.actions += 1;
+        self.last_action = a;
+    }
+    fn onCopy(ctx: *anyopaque, bytes: []const u8) void {
+        const self: *FieldEnv = @ptrCast(@alignCast(ctx));
+        const n = @min(bytes.len, self.copied.len);
+        @memcpy(self.copied[0..n], bytes[0..n]);
+        self.copied_len = n;
+    }
+    fn onPaste(ctx: *anyopaque, buf: []u8) ?[]const u8 {
+        const self: *FieldEnv = @ptrCast(@alignCast(ctx));
+        @memcpy(buf[0..self.clip_text.len], self.clip_text);
+        return buf[0..self.clip_text.len];
+    }
+    fn key(self: *FieldEnv, code: u32, mods: input.Mods) void {
+        self.root.handle(keyEv(code, mods));
+    }
+    fn typeText(self: *FieldEnv, s: []const u8) void {
+        for (s) |ch| {
+            var code: u32 = 0;
+            var shift = false;
+            for (input.US_CHARS, 0..) |pair, i| {
+                if (pair[0] == ch) {
+                    code = @intCast(i);
+                    break;
+                }
+                if (pair[1] == ch) {
+                    code = @intCast(i);
+                    shift = true;
+                    break;
+                }
+            }
+            self.key(code, .{ .shift = shift });
+        }
+    }
+};
+
+fn fieldTests(io: std.Io, alloc: std.mem.Allocator, font: []const u8, face13: *text.Face, lut: *const [256]u8) !void {
+    var env: FieldEnv = undefined;
+    try env.init(alloc, font, face13);
+    defer env.deinit();
+    const f = &env.field;
+    check(!env.ime_on and env.ime_calls == 0, "no text input before the field has the focus", .{});
+    _ = env.root.setFirstResponder(&f.view);
+    check(env.ime_on and env.ime_calls == 1 and f.focused, "the field as first responder turns text input on (one hook call)", .{});
+    f.setText("/tmp/tkf");
+    env.typeText("/A b");
+    check(std.mem.eql(u8, f.text(), "/tmp/tkf/A b"), "typed through the key table: Shift+a is A, space is a space ({s})", .{f.text()});
+    env.key(input.KEY_BACKSPACE, .{});
+    env.key(input.KEY_HOME, .{});
+    env.key(input.KEY_RIGHT, .{ .shift = true });
+    env.key(46, .{ .super = true });
+    check(env.copied_len == 1 and env.copied[0] == '/', "Home, Shift+->, Cmd+C copies '/'", .{});
+    env.key(30, .{ .super = true });
+    env.key(45, .{ .super = true });
+    check(f.text().len == 0 and env.copied_len == 11, "Cmd+A, Cmd+X cuts everything (11 bytes)", .{});
+    env.clip_text = "/tmp/tkf/a\n";
+    env.key(47, .{ .super = true });
+    check(std.mem.eql(u8, f.text(), "/tmp/tkf/a"), "Cmd+V pastes the first line", .{});
+    env.key(44, .{ .super = true });
+    check(f.text().len == 0, "Cmd+Z undoes the paste", .{});
+    env.key(44, .{ .super = true });
+    env.key(30, .{ .ctrl = true });
+    check(f.model.caret == 0 and std.mem.eql(u8, f.text(), "/tmp/tkf/a"), "Cmd+Z again redoes, Ctrl+A goes to the start (not select all)", .{});
+    env.key(18, .{ .ctrl = true });
+    check(f.model.caret == f.model.len, "Ctrl+E goes to the end", .{});
+    env.key(input.KEY_ENTER, .{});
+    check(env.actions == 1 and env.last_action == .enter, "Enter goes to the delegate", .{});
+    env.key(input.KEY_ESC, .{});
+    check(env.actions == 2 and env.last_action == .escape, "Esc goes to the delegate", .{});
+    var un: KitLog = .{};
+    env.root.unhandled = .{ .ctx = &un, .on = KitLog.onUnhandled };
+    env.key(38, .{ .super = true });
+    check(un.unhandled == 1, "Cmd+L is not the field's: it reaches unhandled", .{});
+    // IME 이벤트: first responder에.
+    f.setText("/tmp/tkf/");
+    env.root.handle(.{ .ime = .{ .commit = "", .preedit = "한" } });
+    check(std.mem.eql(u8, f.model.preedit(), "한") and std.mem.eql(u8, f.text(), "/tmp/tkf/"), "an ime event reaches the field: preedit 한", .{});
+
+    // 그림: 밑줄 행 · 확정 뒤 · 캐럿 · 선택.
+    const pixels = try alloc.alloc(u32, W * H);
+    defer alloc.free(pixels);
+    const ref = try alloc.alloc(u32, W * H);
+    defer alloc.free(ref);
+    const scratch = try alloc.alloc(u32, W * H);
+    defer alloc.free(scratch);
+    try render(io, alloc, &env.tree, pixels, scratch, WHOLE, lut);
+    const face = &env.face.?;
+    const base: i32 = 30 + @as(i32, @intFromFloat(@round((24 + face.ascent - face.descent) / 2)));
+    const pad: f32 = 20 + 8;
+    const pre_x0: u32 = @intFromFloat(@round(pad + face.measure("/tmp/tkf/")));
+    const pre_x1: u32 = @intFromFloat(@round(pad + face.measure("/tmp/tkf/") + face.measure("한")));
+    const uy: u32 = @intCast(base + 2);
+    var under: u32 = 0;
+    var x = pre_x0;
+    while (x < pre_x1) : (x += 1) under += @intFromBool(px(pixels, x, uy) == theme.TK_TEXT);
+    check(under == pre_x1 - pre_x0 and px(pixels, pre_x0, uy + 1) != theme.TK_TEXT, "preedit underline: row baseline+2 = {d}, x {d}..{d} all TK_TEXT, the row below is not", .{ uy, pre_x0, pre_x1 });
+    std.debug.print("tk_test: reference field underline y={d} x={d}..{d} (field at 20,30 150x24, pad 8)\n", .{ uy, pre_x0, pre_x1 });
+    env.root.handle(.{ .ime = .{ .commit = "한", .preedit = "" } });
+    try render(io, alloc, &env.tree, pixels, scratch, WHOLE, lut);
+    under = 0;
+    x = pre_x0;
+    while (x + 1 < pre_x1) : (x += 1) under += @intFromBool(px(pixels, x, uy) == theme.TK_TEXT);
+    var ink: u32 = 0;
+    var yy: u32 = @intCast(base - 12);
+    while (yy < @as(u32, @intCast(base))) : (yy += 1) {
+        x = pre_x0;
+        while (x < pre_x1) : (x += 1) ink += @intFromBool(px(pixels, x, yy) != theme.TK_SURFACE);
+    }
+    check(std.mem.eql(u8, f.text(), "/tmp/tkf/한") and under < 3 and ink > 10, "after the commit: 한 in the body, no underline ({d} text pixels on the row — glyph only), glyph ink {d}", .{ under, ink });
+    const caret_x: u32 = @intFromFloat(@round(pad + face.measure("/tmp/tkf/한")));
+    check(px(pixels, caret_x, @intCast(base - 4)) == theme.TK_TEXT, "the caret (1 px TK_TEXT) at x {d}", .{caret_x});
+    check(px(pixels, 60, 30) == theme.TK_ACCENT and px(pixels, 60, 31) == theme.TK_ACCENT and px(pixels, 60, 32) == theme.TK_SURFACE and px(pixels, 20, 42) == theme.TK_ACCENT, "focus ring: 2 px accent on the top edge (y 30 31), surface at y 32, accent on the left edge", .{});
+    // 부분 = 통째: 필드 한 글자 입력의 더티만 다시 그린 판 = 새로 통째.
+    _ = env.tree.takeDirty();
+    env.typeText("x");
+    const d = env.tree.takeDirty();
+    check(d != null and Rect.eql(d.?, .{ .x = 20, .y = 30, .w = 150, .h = 24 }), "typing dirties only the field rectangle", .{});
+    try render(io, alloc, &env.tree, pixels, scratch, d.?, lut);
+    try render(io, alloc, &env.tree, ref, scratch, WHOLE, lut);
+    check(std.mem.eql(u32, pixels, ref), "partial redraw of the field = whole", .{});
+    // 선택 색 · 포커스를 잃으면 preedit을 본문에, text input 끔.
+    env.key(30, .{ .super = true });
+    try render(io, alloc, &env.tree, pixels, scratch, WHOLE, lut);
+    check(px(pixels, @intFromFloat(@round(pad + 1)), @intCast(base - 2)) != theme.TK_SURFACE, "Cmd+A paints the selection behind the text", .{});
+    env.key(input.KEY_END, .{});
+    env.root.handle(.{ .ime = .{ .commit = "", .preedit = "ㄱ" } });
+    _ = env.root.setFirstResponder(&env.other.view);
+    check(std.mem.eql(u8, f.text(), "/tmp/tkf/한xㄱ") and f.model.pre_len == 0 and !env.ime_on and env.ime_calls == 2, "focus to the list: the preedit ㄱ goes into the body, text input off", .{});
+    // 레이어를 숨기면 포커스를 못 받는다.
+    f.view.layer.setHidden(true);
+    check(!env.root.setFirstResponder(&f.view), "a hidden field does not take the focus", .{});
+}
+
+fn setColumnsTests(alloc: std.mem.Allocator, face: *text.Face) !void {
+    var env: ColEnv = undefined;
+    try env.init(alloc, face, false);
+    defer env.deinit();
+    const cv = &env.cv;
+    env.key(input.KEY_RIGHT);
+    env.key(input.KEY_RIGHT);
+    env.src.cols[1] = .{ .kids = &TREE_A, .face = face };
+    env.src.cols[2] = .{ .kids = &TREE_B, .face = face };
+    const before = env.log.columns;
+    try cv.setColumns(&.{ env.src.cols[0].source(), env.src.cols[1].source() });
+    check(cv.n == 2 and cv.focus == 1 and cv.scroll == 0 and env.log.columns == before + 1, "setColumns(2) from 3 columns: n 2, focus 1, scroll 0, one columns event", .{});
+    try cv.setColumns(&.{ env.src.cols[0].source(), env.src.cols[1].source(), env.src.cols[2].source() });
+    check(cv.n == 3 and cv.focus == 2 and cv.scroll == 201, "setColumns(3): n 3, focus 2, scroll 201", .{});
+    cv.focusFirst();
+    check(std.mem.eql(u8, env.firstName(), "col2"), "focusFirst after setColumns: col2", .{});
+    try cv.setColumns(&.{env.src.cols[0].source()});
+    check(cv.n == 1 and cv.focus == 0 and cv.list(0).selected == 0, "setColumns(1): back to one column, selection 0", .{});
 }

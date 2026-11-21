@@ -225,3 +225,92 @@ pub fn join(buf: []u8, dir: []const u8, name: []const u8) ![]const u8 {
     if (std.mem.eql(u8, dir, "/")) return std.fmt.bufPrint(buf, "/{s}", .{name});
     return std.fmt.bufPrint(buf, "{s}/{s}", .{ dir, name });
 }
+
+// ── 경로 입력(TK-M4 plan 확정 14) ────────────────────────────────────
+
+pub const PathError = error{ Empty, NoHome, TooLong, TooDeep };
+
+/// 경로 필드의 글을 절대 경로로: `~` · `~/…`는 `home`, `/`로 시작하면 그대로, 아니면 `base`(포커스 열) 기준. `.` · 빈 성분 · 겹친 `/`는
+/// 버리고 `..`는 하나 올라간다(뿌리에서는 그대로). 끝 `/`는 뗀다(뿌리는 `/`). 앞뒤 공백은 뗀다. `buf`에 쓴다.
+pub fn resolvePath(buf: []u8, text: []const u8, base: []const u8, home: ?[]const u8) PathError![]const u8 {
+    const t = std.mem.trim(u8, text, " \t");
+    if (t.len == 0) return error.Empty;
+    var raw_buf: [8192]u8 = undefined;
+    var raw: []const u8 = undefined;
+    if (t[0] == '~' and (t.len == 1 or t[1] == '/')) {
+        const h = home orelse return error.NoHome;
+        raw = std.fmt.bufPrint(&raw_buf, "{s}/{s}", .{ h, t[1..] }) catch return error.TooLong;
+    } else if (t[0] == '/') {
+        raw = t;
+    } else {
+        raw = std.fmt.bufPrint(&raw_buf, "{s}/{s}", .{ base, t }) catch return error.TooLong;
+    }
+    var parts: [512][]const u8 = undefined;
+    var n: usize = 0;
+    var it = std.mem.splitScalar(u8, raw, '/');
+    while (it.next()) |p| {
+        if (p.len == 0 or std.mem.eql(u8, p, ".")) continue;
+        if (std.mem.eql(u8, p, "..")) {
+            if (n > 0) n -= 1;
+            continue;
+        }
+        if (n >= parts.len) return error.TooDeep;
+        parts[n] = p;
+        n += 1;
+    }
+    if (n == 0) {
+        if (buf.len < 1) return error.TooLong;
+        buf[0] = '/';
+        return buf[0..1];
+    }
+    var len: usize = 0;
+    for (parts[0..n]) |p| {
+        if (len + 1 + p.len > buf.len) return error.TooLong;
+        buf[len] = '/';
+        @memcpy(buf[len + 1 .. len + 1 + p.len], p);
+        len += 1 + p.len;
+    }
+    return buf[0..len];
+}
+
+/// 열을 다시 세울 경로들(정규화된 절대 경로 `target`의 조상들): `target`이 `start`(열 0의 경로)이거나 그 안이면 `start`부터, 아니면 `/`부터
+/// 성분마다 하나. 조각은 `target`(또는 `/` 글자)을 가리킨다. 32(열 풀)를 넘으면 `error.TooDeep`.
+pub fn columnPaths(start: []const u8, target: []const u8, out: [][]const u8) PathError![]const []const u8 {
+    const inside = std.mem.eql(u8, start, "/") or std.mem.eql(u8, target, start) or
+        (std.mem.startsWith(u8, target, start) and target.len > start.len and target[start.len] == '/');
+    var n: usize = 0;
+    var from: usize = undefined;
+    if (inside and !std.mem.eql(u8, start, "/")) {
+        out[0] = target[0..start.len];
+        from = start.len;
+    } else {
+        out[0] = "/";
+        from = 0;
+    }
+    n = 1;
+    if (std.mem.eql(u8, target, "/")) return out[0..1];
+    var i = from + 1;
+    while (i <= target.len) : (i += 1) {
+        if (i == target.len or target[i] == '/') {
+            if (i > from + 1 or (from == 0 and i > 1)) {
+                if (n >= out.len) return error.TooDeep;
+                out[n] = target[0..i];
+                n += 1;
+            }
+            from = i;
+        }
+    }
+    return out[0..n];
+}
+
+/// 경로의 마지막 성분(`/`면 빈 글).
+pub fn basename(path: []const u8) []const u8 {
+    const k = std.mem.lastIndexOfScalar(u8, path, '/') orelse return path;
+    return path[k + 1 ..];
+}
+
+/// 경로의 부모(`/a`의 부모는 `/`, `/`의 부모는 `/`).
+pub fn dirname(path: []const u8) []const u8 {
+    const k = std.mem.lastIndexOfScalar(u8, path, '/') orelse return path;
+    return if (k == 0) "/" else path[0..k];
+}
