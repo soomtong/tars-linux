@@ -20,6 +20,8 @@ pub const Kind = enum(u8) { dir, file };
 pub const Entry = struct {
     name: []const u8,
     kind: Kind,
+    /// 심볼릭 링크다(`kind`는 따라간 뒤의 것). 검색의 걷기가 링크를 따라 내려가지 않게(TK-M4 plan 확정 20). 정렬 · 찾기는 안 본다.
+    link: bool = false,
 };
 
 /// 소스가 주는 날 항목 하나(이름은 다음 `next`까지만 산다).
@@ -313,4 +315,30 @@ pub fn basename(path: []const u8) []const u8 {
 pub fn dirname(path: []const u8) []const u8 {
     const k = std.mem.lastIndexOfScalar(u8, path, '/') orelse return path;
     return if (k == 0) "/" else path[0..k];
+}
+
+// ── 필터(TK-M4 plan 확정 19) ──────────────────────────────────────
+
+/// 이름에 `q`가 들어 있는가(ASCII는 대소문자 무시, 그 밖은 바이트). 빈 `q`는 늘 참.
+pub fn nameMatches(name: []const u8, q: []const u8) bool {
+    if (q.len == 0) return true;
+    if (q.len > name.len) return false;
+    var i: usize = 0;
+    while (i + q.len <= name.len) : (i += 1) {
+        var ok = true;
+        for (q, 0..) |c, k| {
+            if (std.ascii.toLower(c) != std.ascii.toLower(name[i + k])) {
+                ok = false;
+                break;
+            }
+        }
+        if (ok) return true;
+    }
+    return false;
+}
+
+/// `entries` 가운데 이름에 `q`가 든 것만 `out`에(순서 그대로 — 정렬된 채로 남는다).
+pub fn filterInto(alloc: std.mem.Allocator, entries: []const Entry, q: []const u8, out: *std.ArrayList(Entry)) !void {
+    out.clearRetainingCapacity();
+    for (entries) |e| if (nameMatches(e.name, q)) try out.append(alloc, e);
 }

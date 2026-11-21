@@ -14,13 +14,18 @@
 //! 경로면 바를 열어 둔 채 `tk> path error=`. Esc는 닫기. 필드가 포커스인 동안 text-input이 켜진다(한글 — design 결정 8). `Cmd+C`(필드가 아닐 때)는
 //! 포커스 열의 선택 항목 경로를 클립보드로(R-FM-8).
 //!
+//! 필터 · 검색(TK-M4 plan 확정 18~20): 바 하나를 세 모드가 같이 쓴다(이름표 "경로" · "필터" · "검색"). `Cmd+F`는 포커스 열을 이름 부분 일치로 거르고(`Col.filtered`
+//! — 리스트가 그것을 본다, 선택은 이름으로 따라감, Enter는 바만 닫고 Esc는 풂, 갱신은 필터를 지킴), `Cmd+K`는 열 0의 경로 아래를 idle 조각으로 걸어(`search.zig`)
+//! 열 자리를 덮는 결과 리스트에 상위 100을 보인다(`↑` `↓`는 필드가 넘겨 앱이 고르고, Enter는 경로 바의 Enter와 같은 길).
+//!
 //! 인자: `tars-files [경로]` — 없으면 `$HOME`, 그것도 없으면 `/`.
 //!
 //! 줄(plan 확정 14): `tk> files path=` · `tk> load path= n= chunks= first_us= paint_us= all_us= read_us= merge_us= state=done|cancelled|error` ·
 //! `tk> columns n= focus= scroll=` · `tk> column i= path= count= sel= name=`(열의 선택이 키 · 클릭으로 바뀔 때와 첫 로딩이 끝날 때) ·
 //! `tk> refresh path= name= before= after=`(사라졌으면 ` gone=1`) · 끝날 때 `tk> rss vmrss_kb= vmhwm_kb=`. 창 층의 줄(`configure` · `draw` ·
 //! `commit` · `key` · `focus`)은 그대로. TK-M4: `tk> column … shown=`, `tk> bar open|close`, `tk> field text= action=enter|escape`,
-//! `tk> path error= text=`, `tk> copy path=`(경로 복사 — 그 뒤 창 층의 `tk> copy len= serial=`).
+//! `tk> path error= text=`, `tk> copy path=`(경로 복사 — 그 뒤 창 층의 `tk> copy len= serial=`), `tk> bar mode=filter|search`,
+//! `tk> filter text= n=`, `tk> search walked= ms= capped= results=`(걷기 끝) · `tk> search query= walked= results= score_us=` · `tk> search open=`.
 
 const std = @import("std");
 const linux = std.os.linux;
@@ -28,6 +33,7 @@ const tk = @import("tk");
 const tokens = tk.tokens;
 const kit = tk.kit;
 const model = @import("model.zig");
+const search_mod = @import("search.zig");
 const dir_mod = @import("dir.zig");
 const Dir = dir_mod.Dir;
 
@@ -94,13 +100,28 @@ const Col = struct {
     want_buf: [256]u8 = undefined,
     want_len: usize = 0,
     want_kind: model.Kind = .dir,
+    /// 필터(`Cmd+F`, TK-M4 plan 확정 19): 글이 있으면 리스트는 `filtered`(이름에 그 글이 든 항목 — 순서 그대로)를 본다.
+    filter_buf: [256]u8 = undefined,
+    filter_len: usize = 0,
+    filtered: std.ArrayList(model.Entry) = .empty,
 
     fn path(self: *const Col) []const u8 {
         return self.path_buf[0..self.path_len];
     }
 
+    /// 리스트가 보이는 항목 — 필터가 걸렸으면 거른 것.
     fn entries(self: *const Col) []const model.Entry {
+        if (self.filter_len > 0) return self.filtered.items;
+        return self.all();
+    }
+
+    /// 거르기 전의 항목 전부.
+    fn all(self: *const Col) []const model.Entry {
         return if (self.shown) |l| l.items() else &.{};
+    }
+
+    fn filterText(self: *const Col) []const u8 {
+        return self.filter_buf[0..self.filter_len];
     }
 
     fn listSource(self: *Col) kit.ListSource {
@@ -169,6 +190,14 @@ const App = struct {
     bar_label: *tk.Layer = undefined,
     field: kit.TextField = undefined,
     bar_open: bool = false,
+    /// 바의 모드(TK-M4 plan 확정 18) — 경로 · 필터 · 검색이 바 하나를 같이 쓴다.
+    mode: Mode = .path,
+    /// 필터가 걸리는 열(`Cmd+F`를 누른 때의 포커스 열).
+    filter_col: usize = 0,
+    /// 검색(`Cmd+K`)과 그 결과 리스트(열 자리를 덮는다).
+    search: ?search_mod.Search = null,
+    search_said: bool = false,
+    results: kit.List = undefined,
     home: ?[]const u8 = null,
     /// 지금 창 크기(논리).
     width: f32 = 0,
@@ -213,10 +242,13 @@ const App = struct {
         self.bar = try t.create(.{ .background = tokens.color.bg, .masks = true, .hidden = true });
         self.bar_label = try t.create(.{ .content = .{ .ctx = self, .draw = drawBarLabel } });
         try self.field.init(t, "field", &self.small);
-        self.field.delegate = .{ .ctx = self, .action = fieldAction, .copy = fieldCopy, .paste = fieldPaste };
+        self.field.delegate = .{ .ctx = self, .action = fieldAction, .copy = fieldCopy, .paste = fieldPaste, .changed = fieldChanged };
         try self.bar.addChild(self.bar_label);
         try self.bar.addChild(self.field.view.layer);
         try self.root.addChild(self.bar);
+        try self.results.init(t, "results", .{ .ctx = self, .count = resultCount, .drawRow = drawResult }, ANIM_MS);
+        self.results.view.layer.setHidden(true);
+        try self.root.addChild(self.results.view.layer);
         try self.root_view.addChild(self.alloc, &self.field.view);
         self.kit_root.unhandled = .{ .ctx = self, .on = unhandled };
         self.cv.focusFirst();
@@ -229,6 +261,9 @@ const App = struct {
         self.split.deinit(self.alloc);
         self.root_view.deinit(self.alloc);
         self.field.view.deinit(self.alloc);
+        self.results.deinit(self.alloc);
+        if (self.search) |*x| x.deinit();
+        for (&self.cols) |*c| c.filtered.deinit(self.alloc);
     }
 
     fn setPath(c: *Col, p: []const u8) void {
@@ -253,6 +288,7 @@ const App = struct {
         c.merge_us = 0;
         if (!refresh) {
             self.freeShown(c);
+            self.clearFilter(c);
             c.shown = l;
             c.touched = false;
             c.failed = false;
@@ -285,6 +321,7 @@ const App = struct {
     }
 
     fn freeShown(self: *App, c: *Col) void {
+        c.filtered.clearRetainingCapacity();
         const l = c.shown orelse return;
         if (c.loading == l) c.loading = null;
         l.deinit();
@@ -292,10 +329,27 @@ const App = struct {
         c.shown = null;
     }
 
+    /// 필터를 지운다(열이 다른 경로로 다시 쓰이거나 버려질 때 — 확정 19).
+    fn clearFilter(self: *App, c: *Col) void {
+        _ = self;
+        c.filter_len = 0;
+        c.filtered.clearRetainingCapacity();
+    }
+
+    /// 필터 글로 `filtered`를 다시 짓는다(보이는 목록이 바뀔 때마다).
+    fn rebuildFilter(self: *App, c: *Col) void {
+        if (c.filter_len == 0) {
+            c.filtered.clearRetainingCapacity();
+            return;
+        }
+        model.filterInto(self.alloc, c.all(), c.filterText(), &c.filtered) catch c.filtered.clearRetainingCapacity();
+    }
+
     /// 열을 비운다(취소 · 목록을 놓음).
     fn dropCol(self: *App, c: *Col) void {
         self.cancel(c);
         self.freeShown(c);
+        self.clearFilter(c);
         c.failed = false;
         c.touched = false;
     }
@@ -315,9 +369,11 @@ const App = struct {
     /// 창 층의 idle — 조각 하나. 읽을 것이 남았으면 참.
     fn idle(ctx: *anyopaque) bool {
         const self: *App = @ptrCast(@alignCast(ctx));
-        const c = self.pick() orelse return false;
-        self.step(c);
-        return self.pick() != null;
+        if (self.pick()) |c| {
+            self.step(c);
+            return true;
+        }
+        return self.searchStep();
     }
 
     fn step(self: *App, c: *Col) void {
@@ -349,7 +405,8 @@ const App = struct {
                 self.finish(c, .failed);
                 return;
             };
-            const after = model.follow(before, l.items(), list.viewH(), kit.List.rowH());
+            self.rebuildFilter(c);
+            const after = model.follow(before, c.entries(), list.viewH(), kit.List.rowH());
             list.restore(after.index orelse 0, after.offset);
             self.updateOverlay(c);
         }
@@ -397,13 +454,15 @@ const App = struct {
         }
         const list = self.cv.list(c.index);
         const b = self.beforeOf(c, list, true);
-        const after = model.follow(b, l.items(), list.viewH(), kit.List.rowH());
         var name_buf: [256]u8 = undefined;
         const name = if (b.sel) |e| e.name[0..@min(e.name.len, name_buf.len)] else "-";
         @memcpy(name_buf[0..name.len], name);
         const was_dir = if (b.sel) |e| e.kind == .dir else false;
+        // 바꿔 끼우고 필터를 새 목록으로 다시 거른 뒤 따라간다(갱신은 필터를 지킨다 — 확정 19). 옛 이름은 옛 목록을 놓기 전까지 산다.
         const old = c.shown;
         c.shown = l;
+        self.rebuildFilter(c);
+        const after = model.follow(b, c.entries(), list.viewH(), kit.List.rowH());
         list.restore(after.index orelse 0, after.offset);
         if (old) |o| {
             o.deinit();
@@ -567,6 +626,10 @@ const App = struct {
             self.bar_label.setFrame(.{ .x = LABEL_X, .y = 0, .w = FIELD_X - LABEL_X, .h = bh });
             self.field.view.layer.setFrame(.{ .x = FIELD_X, .y = (bh - tokens.size.field) / 2, .w = @max(0, W - FIELD_X - FIELD_RIGHT), .h = tokens.size.field });
             self.split.layout(.{ .x = 0, .y = bh, .w = W, .h = @max(0, H - bh) });
+            if (self.mode == .search) {
+                self.results.view.layer.setFrame(.{ .x = 0, .y = bh, .w = self.cv.view.layer.frame.w, .h = @max(0, H - bh) });
+                self.results.sync();
+            }
         } else {
             self.split.layout(.{ .x = 0, .y = 0, .w = W, .h = H });
         }
@@ -578,23 +641,42 @@ const App = struct {
         const self = me(ctx);
         const f = if (self.small) |*x| x else return;
         const base: i32 = @intFromFloat(@round((size[1] + f.ascent - f.descent) / 2));
-        _ = try p.drawGlyphs(f, 0, base, "경로", tokens.color.text_dim, alpha);
+        _ = try p.drawGlyphs(f, 0, base, self.mode.label(), tokens.color.text_dim, alpha);
     }
 
-    /// `Cmd+L`: 바를 열고 포커스 열의 경로로 채운다(캐럿은 끝).
-    fn openBar(self: *App) void {
-        self.field.setText(self.cols[self.cv.focus].path());
+    /// 바를 연다(`Cmd+L` 경로 · `Cmd+F` 필터 · `Cmd+K` 검색 — plan 확정 18). 경로는 포커스 열의 경로로 채우고(캐럿은 끝), 필터는 그 열에 남은 글로,
+    /// 검색은 빈 글로 걷기를 시작한다. 열린 바에서 다른 모드 키는 모드를 바꾸고 필드를 비운다.
+    fn openBar(self: *App, mode: Mode) void {
+        const switching = self.bar_open and self.mode != mode;
+        if (self.bar_open and self.mode == .search and mode != .search) self.stopSearch();
+        if (!self.bar_open or switching or mode == .path) {
+            self.mode = mode;
+            switch (mode) {
+                .path => self.field.setText(self.cols[self.cv.focus].path()),
+                .filter => {
+                    self.filter_col = self.cv.focus;
+                    self.field.setText(if (switching) "" else self.cols[self.filter_col].filterText());
+                },
+                .search => {
+                    self.field.setText("");
+                    self.startSearch();
+                },
+            }
+            self.bar_label.setNeedsDisplay();
+            if (mode != .path) tk.window.say("bar mode={s}", .{@tagName(mode)});
+        }
         if (!self.bar_open) {
             self.bar_open = true;
             self.bar.setHidden(false);
-            self.relayout();
             tk.window.say("bar open", .{});
         }
+        self.relayout();
         _ = self.kit_root.setFirstResponder(&self.field.view);
     }
 
     fn closeBar(self: *App) void {
         if (!self.bar_open) return;
+        if (self.mode == .search) self.stopSearch();
         self.cv.focusFirst();
         self.bar_open = false;
         self.bar.setHidden(true);
@@ -606,10 +688,131 @@ const App = struct {
     fn fieldAction(ctx: *anyopaque, field: *kit.TextField, a: kit.textfield.Action) void {
         const self = me(ctx);
         tk.window.say("field text={s} action={s}", .{ field.text(), @tagName(a) });
-        switch (a) {
-            .escape => self.closeBar(),
-            .enter => self.submitPath(),
+        switch (self.mode) {
+            .path => switch (a) {
+                .escape => self.closeBar(),
+                .enter => self.submitPath(),
+            },
+            // Enter는 바만 닫고 필터는 남긴다, Esc는 필터를 풀고 닫는다(확정 19).
+            .filter => {
+                if (a == .escape) self.applyFilter(self.filter_col, "");
+                self.closeBar();
+            },
+            .search => switch (a) {
+                .escape => self.closeBar(),
+                .enter => self.openResult(),
+            },
         }
+    }
+
+    /// 필드의 글이 바뀌었다 — 필터 · 검색은 타이핑마다 다시 건다.
+    fn fieldChanged(ctx: *anyopaque, field: *kit.TextField) void {
+        const self = me(ctx);
+        if (!self.bar_open) return;
+        switch (self.mode) {
+            .path => {},
+            .filter => self.applyFilter(self.filter_col, field.text()),
+            .search => self.searchQuery(field.text()),
+        }
+    }
+
+    // ── 필터(TK-M4 plan 확정 19) ───────────────────────────────────
+
+    /// 열 `i`에 필터 글 `text`를 건다(빈 글이면 푼다). 선택은 이름으로 따라가고, 다른 항목이 되면 오른쪽 열을 버린다.
+    fn applyFilter(self: *App, i: usize, text: []const u8) void {
+        if (!self.active(i)) return;
+        const c = &self.cols[i];
+        const list = self.cv.list(i);
+        const b = self.beforeOf(c, list, true);
+        const was_dir = if (b.sel) |e| e.kind == .dir else false;
+        const n = @min(text.len, c.filter_buf.len);
+        @memcpy(c.filter_buf[0..n], text[0..n]);
+        c.filter_len = n;
+        self.rebuildFilter(c);
+        const after = model.follow(b, c.entries(), list.viewH(), kit.List.rowH());
+        list.restore(after.index orelse 0, after.offset);
+        if (was_dir and after.gone and self.cv.n > i + 1) self.cv.truncate(i + 1);
+        self.updateOverlay(c);
+        self.preview.setNeedsDisplay();
+        tk.window.say("filter text={s} n={d}", .{ c.filterText(), c.entries().len });
+    }
+
+    // ── 검색(TK-M4 plan 확정 20) ───────────────────────────────────
+
+    fn clockMs(_: *anyopaque) u64 {
+        return nowNs() / std.time.ns_per_ms;
+    }
+
+    fn startSearch(self: *App) void {
+        self.stopSearch();
+        const w = search_mod.Walker.init(self.alloc, self.source(), .{ .ctx = self, .now_ms = clockMs }, self.cols[0].path());
+        self.search = search_mod.Search.init(self.alloc, w);
+        self.search_said = false;
+        self.results.reset(.{ .ctx = self, .count = resultCount, .drawRow = drawResult });
+        self.results.view.layer.setHidden(false);
+    }
+
+    fn stopSearch(self: *App) void {
+        if (self.search) |*x| x.deinit();
+        self.search = null;
+        self.results.view.layer.setHidden(true);
+    }
+
+    /// 걷기 한 조각(창 층의 idle). 새 항목을 지금 질의로 본다. 걷기가 끝나면 줄 하나.
+    fn searchStep(self: *App) bool {
+        const sr = if (self.search) |*x| x else return false;
+        const before = sr.top_n;
+        const more = sr.walker.step();
+        const old_scanned = sr.scanned;
+        sr.scanNew() catch {};
+        if (sr.top_n != before or (sr.scanned != old_scanned and sr.query_len > 0)) self.results.reload();
+        if (!more and !self.search_said) {
+            self.search_said = true;
+            tk.window.say("search walked={d} ms={d} capped={d} results={d}", .{ sr.walker.items.items.len, sr.walker.ms, @intFromBool(sr.walker.capped), sr.top_n });
+        }
+        return more;
+    }
+
+    fn searchQuery(self: *App, text: []const u8) void {
+        const sr = if (self.search) |*x| x else return;
+        const t0 = nowNs();
+        sr.setQuery(text) catch {};
+        const us = (nowNs() - t0) / std.time.ns_per_us;
+        self.results.restore(0, 0);
+        tk.window.say("search query={s} walked={d} results={d} score_us={d}", .{ sr.query(), sr.walker.items.items.len, sr.top_n, us });
+    }
+
+    fn resultCount(ctx: *anyopaque) usize {
+        const self = me(ctx);
+        return if (self.search) |*x| x.top_n else 0;
+    }
+
+    fn drawResult(ctx: *anyopaque, p: *tk.Painter, index: usize, rect: tk.Rect, state: kit.RowState) anyerror!void {
+        const self = me(ctx);
+        const sr = if (self.search) |*x| x else return;
+        if (index >= sr.top_n) return;
+        const f = &self.small.?;
+        const s: f32 = @floatFromInt(self.scale);
+        const rel = sr.walker.path(sr.top[index].item);
+        const base: i32 = rect.y + @as(i32, @intFromFloat(@round((@as(f32, @floatFromInt(rect.h)) + f.ascent - f.descent) / 2)));
+        const x0: f32 = @floatFromInt(rect.x);
+        var buf: [NAME_BUF]u8 = undefined;
+        var sc: [NAME_STOPS]tk.layout.Stop = undefined;
+        const w = nameWidth(f, s, @floatFromInt(rect.w), false);
+        const shown = tk.layout.elideMiddle(f.metrics(), rel, w, &sc, &buf) catch rel;
+        _ = try p.drawGlyphs(f, x0 + LABEL_X * s, base, shown, tokens.color.text, state.alpha);
+    }
+
+    /// 검색의 Enter: 고른 결과를 경로 바의 Enter와 같은 길로(파일이면 부모까지 열고 선택).
+    fn openResult(self: *App) void {
+        const sr = if (self.search) |*x| x else return;
+        if (sr.top_n == 0) return;
+        const hit = sr.top[@min(self.results.selected, sr.top_n - 1)];
+        const it = sr.walker.items.items[hit.item];
+        var tbuf: [8192]u8 = undefined;
+        const target = model.join(&tbuf, sr.walker.root(), sr.walker.path(hit.item)) catch return;
+        tk.window.say("search open={s}", .{target});
+        self.openTarget(target, it.kind);
     }
 
     /// 경로 바의 Enter(plan 확정 14).
@@ -623,6 +826,11 @@ const App = struct {
             tk.window.say("path error=NotFound text={s}", .{target});
             return;
         };
+        self.openTarget(target, kind);
+    }
+
+    /// 경로 `target`(정규화된 절대 경로, 종류 `kind`)으로 열을 다시 세운다 — 바를 닫는다(검색이면 걷기도 멈춘다 — `target`은 부르는 쪽의 칸이어야 한다).
+    fn openTarget(self: *App, target: []const u8, kind: model.Kind) void {
         const dir_path = if (kind == .dir) target else model.dirname(target);
         var pbuf: [MAX][]const u8 = undefined;
         const paths = model.columnPaths(self.cols[0].path(), dir_path, &pbuf) catch |e| {
@@ -678,13 +886,22 @@ const App = struct {
         if (self.win) |w| w.copyText(p);
     }
 
-    /// 체인 끝까지 아무도 안 받은 키(TK-M6의 단축키 표 자리 — 지금은 `Cmd+L` · `Cmd+C`).
+    /// 체인 끝까지 아무도 안 받은 키(TK-M6의 단축키 표 자리 — 지금은 `Cmd+L` · `Cmd+F` · `Cmd+K` · `Cmd+C`, 그리고 검색 중 필드가 넘긴 `↑` `↓`).
     fn unhandled(ctx: *anyopaque, ev: tk.input.KeyEvent) void {
         const self = me(ctx);
         const md = ev.mods;
+        if (self.bar_open and self.mode == .search and md.none() and (ev.key == .up or ev.key == .down)) {
+            const n = self.results.count();
+            if (n == 0) return;
+            const sel = self.results.selected;
+            self.results.select(if (ev.key == .up) sel -| 1 else @min(sel + 1, n - 1));
+            return;
+        }
         if (!md.super or md.ctrl or md.alt or md.shift) return;
         switch (ev.code) {
-            KEY_L => self.openBar(),
+            KEY_L => self.openBar(.path),
+            KEY_F => self.openBar(.filter),
+            KEY_K => self.openBar(.search),
             KEY_C => self.copyPath(),
             else => {},
         }
@@ -729,7 +946,24 @@ const App = struct {
 
 const ROOT_VT: kit.VTable = .{};
 const KEY_C: u32 = 46;
+const KEY_F: u32 = 33;
+const KEY_K: u32 = 37;
 const KEY_L: u32 = 38;
+
+/// 바의 모드(TK-M4 plan 확정 18).
+const Mode = enum {
+    path,
+    filter,
+    search,
+
+    fn label(self: Mode) []const u8 {
+        return switch (self) {
+            .path => "경로",
+            .filter => "필터",
+            .search => "검색",
+        };
+    }
+};
 
 /// 시작 경로: 인자 → `$HOME` → `/`. 끝의 `/`는 뗀다(루트는 그대로).
 fn startPath(arg: ?[]const u8, home: ?[]const u8) []const u8 {

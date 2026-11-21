@@ -7,7 +7,7 @@ cd "$(dirname "$0")" || exit 1
 #
 # 이 게이트가 증명하는 사슬(TK-M0 plan 확정 6의 판정 1~6, TK-M1 plan 확정 10의 판정 7~9 — 7~9는 5와 6 사이에 돈다, TK-M2 plan 확정 15의
 # 판정 10~14 — 9 뒤 같은 부팅에서 둘째 데모 `--list 100000`, TK-M3 plan 확정 15의 판정 15~18 — 14 뒤 같은 부팅에서 `tars-files`,
-# TK-M4 plan 확정 17의 판정 19 — 18 뒤 같은 부팅에서 `tars-files /tmp/tkl`, 판정 20~23 — 19 뒤 같은 부팅에서 넷째 `tars-files /tmp/tkf`):
+# TK-M4 plan 확정 17의 판정 19 — 18 뒤 같은 부팅에서 `tars-files /tmp/tkl`, 판정 20~25 — 19 뒤 같은 부팅에서 넷째 `tars-files /tmp/tkf`):
 #   셸에서 띄운 tars-tk-demo가 tars_menu_manager_v1을 bind하고(원래 모드) 셸 오른쪽 column이 되어 pane 크기(616 × 752)의
 #   configure를 받는다
 #   → 그 크기로 버퍼를 만들어 바탕 · 둥근 사각형(z2d) · 글자(stb_truetype, Pretendard 13 · 14 px)를 그린다 — screendump의
@@ -37,6 +37,8 @@ cd "$(dirname "$0")" || exit 1
 #   → `Cmd+L` · `Cmd+A` · `/tmp/tkf/` · 한/영 · `m f s`: preedit `한`에 1 px 밑줄(덤프), 한/영으로 확정되면 본문(밑줄 없음), Enter로 `/tmp/tkf/한`의 열 —
 #     먹은 키는 키로 안 간다(22 — design의 끝나는 조건)
 #   → 셸에서 복사한 `/tmp/tkf/a/b`를 필드에 `Cmd+V` → Enter(23)
+#   → `Cmd+F` · `m`: 첫 열에 m.txt 한 행(a가 걸러져 오른쪽 열이 버려짐), Esc로 넷과 m.txt 선택(24)
+#   → `Cmd+K` · `xtxt`: 열 자리를 덮는 결과 리스트에 a/b/x.txt · 한/x.txt, Enter로 열 셋 · x.txt 선택(25)
 #   → tars-files 로그: `files` · `load` · `column` · `columns` · `focus` · `refresh` 줄이 위와 맞고, 그린 수 = commit 수
 #
 # 부팅 하나, NIC 없음, 디스크 없음 — 셸은 root(fish), 소켓은 `/run/user/0`. 키보드는 QEMU의 PS/2라 pc로 읽혀 Cmd가 Alt
@@ -899,11 +901,70 @@ wait_for_log "terminal: wl> receive to=${ID6} mime=text/plain;charset=utf-8 len=
 type_keys ret
 wait_for_count "terminal: wl> ti disable to=${ID6}([^0-9]|$)" 3 || report_failure "(23) Enter did not close the bar"
 sleep 1
+echo "(23): the shell's copy /tmp/tkf/a/b pasted into the field and Enter opened it"
+
+# ── 필터 · 검색(TK-M4 단계 C, plan 확정 18~21) — 넷째 앱에 이어서 ─────────────────
+# 23 뒤 열은 /tmp/tkf · a · a/b(포커스 셋째). `←` 둘로 첫 열에 포커스. 바가 열리면 열이 32 내려간다 — 행 i는 화면 y 52 + 24 × i부터.
+echo "=== (24) Cmd+F filters the focused column by name; Esc lifts it ==="
+LEFTS="$(count_log "terminal: wl> key code=105 state=1 to=${ID6}([^0-9]|$)")"
+type_keys left left
+wait_for_count "terminal: wl> key code=105 state=1 to=${ID6}([^0-9]|$)" $((LEFTS + 2)) || report_failure "(24) the two lefts did not reach tars-files"
+sleep 1
+type_keys alt-f
+wait_for_count "terminal: wl> ti enable to=${ID6}([^0-9]|$)" 4 || report_failure "(24) Cmd+F did not open the bar with text input"
+type_text 'm'
+sleep 1.5
+SHOT24="${SCREENS_DIR}/files-filter.ppm"
+screendump "$SHOT24" || report_failure "(24) screendump did not write ${SHOT24}"
+# 첫 열에 m.txt 한 행(선택 — 포커스는 필드라 흐린 색), 그 아래는 빈 행, a가 걸러져 오른쪽 열은 버려졌다(열 하나 — 구분선 844 뒤 바탕).
+want_box "(24) col0 row 0 (m.txt) is the selection, dimmed (the field has the focus)" "$SHOT24" 700 54 100 20 "$TK_INACTIVE"
+got="$(ppm_ink "$SHOT24" 658 54 34 20)"
+case "$got" in *" ink=0") report_failure "(24) col0 row 0's name box has no ink (${got})" ;; esac
+want_box "(24) col0 row 1 is empty (only m.txt matches m)" "$SHOT24" 650 78 180 20 "$TK_BG"
+want_box "(24) no second column (the filter dropped a, its columns went)" "$SHOT24" 901 54 100 20 "$TK_BG"
+type_keys esc
+wait_for_count "terminal: wl> ti disable to=${ID6}([^0-9]|$)" 4 || report_failure "(24) Esc did not close the bar"
+sleep 1.5
+SHOT24B="${SCREENS_DIR}/files-unfilter.ppm"
+screendump "$SHOT24B" || report_failure "(24) screendump did not write ${SHOT24B}"
+# 필터가 풀려 넷(a z 한 m.txt), 선택은 이름으로 m.txt(행 3)를 따라갔고 포커스가 열로 돌아왔다.
+want_box "(24) col0 row 3 (m.txt) is the focused selection after Esc" "$SHOT24B" 700 94 100 20 "$TK_ACCENT"
+for r in 0 1 2; do
+  y=$((22 + 24 * r))
+  got="$(ppm_ink "$SHOT24B" 658 "$y" 34 20)"
+  case "$got" in *" ink=0") report_failure "(24) col0 row ${r} is empty after Esc — the filter is still on (${got})" ;; esac
+done
+echo "(24): Cmd+F m left m.txt alone (dimmed selection, a's columns gone); Esc brought back four rows with m.txt selected"
+
+echo "=== (25) Cmd+K searches names and paths under the first column; Enter opens the result ==="
+type_keys alt-k
+wait_for_count "terminal: wl> ti enable to=${ID6}([^0-9]|$)" 5 || report_failure "(25) Cmd+K did not open the bar with text input"
+type_text 'xtxt'
+sleep 1.5
+SHOT25="${SCREENS_DIR}/files-search.ppm"
+screendump "$SHOT25" || report_failure "(25) screendump did not write ${SHOT25}"
+# 결과 리스트가 열 자리(x 644..1058)를 덮는다: 행 0 a/b/x.txt(선택, 흐린 색) · 행 1 한/x.txt · 행 2 없음.
+want_box "(25) result row 0 is the selection" "$SHOT25" 760 54 100 20 "$TK_INACTIVE"
+for r in 0 1; do
+  y=$((54 + 24 * r))
+  got="$(ppm_ink "$SHOT25" 658 "$y" 60 20)"
+  case "$got" in *" ink=0") report_failure "(25) result row ${r} has no text (${got})" ;; esac
+done
+want_box "(25) result row 2 is empty (two results)" "$SHOT25" 650 102 400 20 "$TK_BG"
+type_keys ret
+wait_for_count "terminal: wl> ti disable to=${ID6}([^0-9]|$)" 5 || report_failure "(25) Enter did not close the bar"
+sleep 1.5
+SHOT25B="${SCREENS_DIR}/files-found.ppm"
+screendump "$SHOT25B" || report_failure "(25) screendump did not write ${SHOT25B}"
+# /tmp/tkf · a · a/b, scroll 201: a 열(x 644..843)의 b(행 1)가 흐린 선택, a/b 열(x 845..1044)의 x.txt(행 1)가 포커스 선택.
+want_box "(25) col1 row 1 (b) is the unfocused selection" "$SHOT25B" 700 46 100 20 "$TK_INACTIVE"
+want_box "(25) col2 row 1 (x.txt) is the focused selection" "$SHOT25B" 901 46 100 20 "$TK_ACCENT"
+echo "(25): Cmd+K xtxt found a/b/x.txt and 한/x.txt, and Enter opened a/b with x.txt selected"
+
 type_keys alt-q
 wait_for_log "terminal: wl> close id=${ID6}" || report_failure "Cmd+Q sent no 'wl> close id=${ID6}' to tars-files"
 wait_for_log "terminal: wl> unmap id=${ID6} ws=1 slot=1" || report_failure "tars-files' fourth slot was not removed"
 sleep 2
-echo "(23): the shell's copy /tmp/tkf/a/b pasted into the field and Enter opened it"
 
 # ── tars-files의 로그를 꺼낸다 ───────────────────────────────────────────
 type_text 'echo tk3begin > /dev/console'
@@ -974,12 +1035,20 @@ has6 '^tk> columns n=2 focus=1 scroll=0$' "(22)"
 has6 '^tk> column i=0 path=/tmp/tkf count=4 sel=2 name=한 shown=한$' "(22)"
 has6 '^tk> paste len=12 us=[0-9]+$' "(23)"
 has6 '^tk> field text=/tmp/tkf/a/b action=enter$' "(23)"
+has6 '^tk> bar mode=filter$' "(24)"
+has6 '^tk> filter text=m n=1$' "(24)"
+has6 '^tk> filter text= n=4$' "(24)"
+has6 '^tk> bar mode=search$' "(25)"
+has6 '^tk> search walked=9 ms=[0-9]+ capped=0 results=[0-9]+$' "(25)"
+has6 '^tk> search query=xtxt walked=9 results=2 score_us=[0-9]+$' "(25)"
+has6 '^tk> search open=/tmp/tkf/a/b/x.txt$' "(25)"
+has6 '^tk> column i=2 path=/tmp/tkf/a/b count=2 sel=1 name=x.txt shown=x.txt$' "(25)"
 MISMATCH6="$(printf '%s\n' "$TK6" | grep -acE '^tk> ime .* match=0$')"
 [ "$MISMATCH6" -eq 0 ] || report_failure "(22) ${MISMATCH6} ime done(s) with a serial that does not match the commits"
 D6="$(printf '%s\n' "$TK6" | grep -acE '^tk> draw ')"
 C6="$(printf '%s\n' "$TK6" | grep -acE '^tk> commit$')"
 [ "$D6" -eq "$C6" ] || report_failure "tars-files (bar) drew ${D6} times but committed ${C6}"
-echo "(20-23 log): copy · send · bar · field · ime (match=1) · columns · paste lines match; ${D6} draws = ${C6} commits"
+echo "(20-25 log): copy · send · bar · field · ime (match=1) · columns · paste · filter · search lines match; ${D6} draws = ${C6} commits"
 echo "(19 log): $(printf '%s\n' "$TK5" | grep -aE '^tk> column ' | sed 's/.* shown=/shown=/' | tr '\n' ' ')"
 echo "(18): ${FILES_N} entries in ${CHUNKS18} chunks, first chunk at ${FIRST18} us, first painted at ${PAINT18} us, all at ${ALL18} us"
 # 측정(참고 — 판정 아님, measurements 110).
@@ -989,7 +1058,7 @@ echo "reference: tars-files draws $(printf '%s\n' "$TK3A" | grep -aE '^tk> draw 
 echo "reference: tars-files /tmp/tkl (elided names) draws $(printf '%s\n' "$TK5" | grep -aE '^tk> draw ' | us_summary)"
 printf '%s\n' "$TK5" | grep -aE '^tk> draw '
 echo "--- reference: tars-files with the path bar (TK-M4 phase B) ---"
-printf '%s\n' "$TK6" | grep -aE '^tk> (draw|ime|ti|bar|field|copy|send|paste|offer|columns|cancelled) '
+printf '%s\n' "$TK6" | grep -aE '^tk> (draw|ime|ti|bar|field|copy|send|paste|offer|columns|cancelled|filter|search) '
 echo "reference: field-only draws (the field rectangle 64,4,536,24) $(printf '%s\n' "$TK6" | grep -aE '^tk> draw .* dirty=64,4,536,24 ' | us_summary)"
 printf '%s\n' "$TK3A" | grep -aE '^tk> (draw|columns|refresh) '
 
@@ -997,4 +1066,4 @@ printf '%s\n' "$TK3A" | grep -aE '^tk> (draw|columns|refresh) '
 MISMATCH="$(count_log 'terminal: verify> mismatch')"
 [ "$MISMATCH" -eq 0 ] || report_failure "render verify mismatch lines: ${MISMATCH}"
 
-echo "PASS: TK-M4 (phase B) — tars-tk-demo binds tars_menu_v1 (native), opens as a 616x752 column, draws a rounded rectangle (z2d) with antialiased corners and antialiased Pretendard text, redraws centred at 1240x752 on Cmd+R, animates a face's opacity (mid colour between, end colour after) with only the face's rectangle blitted, commits only when it draws (2 + ${N} draws and commits, none while idle), and ends by itself on Cmd+Q; tars-tk-demo --list 100000 moves list1's highlight to row 10 after ten downs, End shows the last row and the bar at the bottom, a click selects row 4 and the wheel scrolls three rows, Tab and Shift+Tab move the focus between the lists, and holding down repeats ${REPEATS} time(s) on the client; tars-files lists /tmp/tkf with directories first and hidden names out, -> -> <- leaves three columns with the focus on the second (scroll 201), re-reads on focus and keeps b selected after a/0 appears, and streams ${FILES_N} entries in ${CHUNKS18} chunks (painted at ${PAINT18} us of ${ALL18} us), elides a long directory and a long file name in the middle so they stop short of the › and the bar, copies the selected path to the shell's clipboard on Cmd+C, and opens the path bar on Cmd+L where a typed path, a Hangul path (preedit underlined, then committed) and a pasted path rebuild the columns"
+echo "PASS: TK-M4 — tars-tk-demo binds tars_menu_v1 (native), opens as a 616x752 column, draws a rounded rectangle (z2d) with antialiased corners and antialiased Pretendard text, redraws centred at 1240x752 on Cmd+R, animates a face's opacity (mid colour between, end colour after) with only the face's rectangle blitted, commits only when it draws (2 + ${N} draws and commits, none while idle), and ends by itself on Cmd+Q; tars-tk-demo --list 100000 moves list1's highlight to row 10 after ten downs, End shows the last row and the bar at the bottom, a click selects row 4 and the wheel scrolls three rows, Tab and Shift+Tab move the focus between the lists, and holding down repeats ${REPEATS} time(s) on the client; tars-files lists /tmp/tkf with directories first and hidden names out, -> -> <- leaves three columns with the focus on the second (scroll 201), re-reads on focus and keeps b selected after a/0 appears, and streams ${FILES_N} entries in ${CHUNKS18} chunks (painted at ${PAINT18} us of ${ALL18} us), elides a long directory and a long file name in the middle so they stop short of the › and the bar, copies the selected path to the shell's clipboard on Cmd+C, and opens the path bar on Cmd+L where a typed path, a Hangul path (preedit underlined, then committed) and a pasted path rebuild the columns, filters the focused column on Cmd+F and searches under the first column on Cmd+K"

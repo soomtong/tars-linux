@@ -68,6 +68,8 @@ pub const Model = struct {
     undo_anchor: usize = 0,
     has_undo: bool = false,
     last: Kind = .none,
+    /// 버퍼가 바뀐 횟수(조합은 안 센다) — 뷰가 `Delegate.changed`를 낼지 가른다.
+    gen: u64 = 0,
 
     pub fn text(self: *const Model) []const u8 {
         return self.buf[0..self.len];
@@ -119,6 +121,7 @@ pub const Model = struct {
         std.mem.copyBackwards(u8, self.buf[a + ins.len .. a + ins.len + tail], self.buf[b..self.len]);
         @memcpy(self.buf[a .. a + ins.len], ins);
         self.len = a + ins.len + tail;
+        self.gen +%= 1;
         self.caret = a + ins.len;
         self.anchor = self.caret;
     }
@@ -211,6 +214,7 @@ pub const Model = struct {
         self.len = self.undo_len;
         self.caret = self.undo_caret;
         self.anchor = self.undo_anchor;
+        self.gen +%= 1;
         @memcpy(self.undo_buf[0..n], tmp[0..n]);
         self.undo_len = n;
         self.undo_caret = c;
@@ -310,6 +314,8 @@ pub const Delegate = struct {
     copy: *const fn (ctx: *anyopaque, bytes: []const u8) void,
     /// 붙일 글을 `buf`에 받아 돌려준다(없으면 null).
     paste: *const fn (ctx: *anyopaque, buf: []u8) ?[]const u8,
+    /// 글이 바뀌었다(타이핑 · IME 확정 · 붙여넣기 · 지움 · 되돌리기 — 조합만 바뀐 것은 아니다, TK-M4 plan 확정 18). `setText`는 안 알린다.
+    changed: ?*const fn (ctx: *anyopaque, field: *TextField) void = null,
 };
 
 pub const TextField = struct {
@@ -349,7 +355,7 @@ pub const TextField = struct {
     pub fn setText(self: *TextField, t: []const u8) void {
         self.model.setText(t);
         self.scroll = 0;
-        self.view.layer.setNeedsDisplay();
+        self.changed();
     }
 
     pub fn text(self: *const TextField) []const u8 {
@@ -360,14 +366,26 @@ pub const TextField = struct {
         return @ptrCast(@alignCast(ctx));
     }
 
+    /// 다시 그린다 — 보이지 않으면 건너뛴다(숨긴 바의 필드가 창 포커스 바뀜에 숨은 자리를 다시 그리던 것, TK-M4 단계 B carryover).
     fn changed(self: *TextField) void {
+        if (!self.view.visible()) return;
         self.view.layer.setNeedsDisplay();
+    }
+
+    /// 글이 바뀌었으면 앱에 알린다.
+    fn notify(self: *TextField, gen: u64) void {
+        if (self.model.gen == gen) return;
+        if (self.delegate) |d| if (d.changed) |f| f(d.ctx, self);
     }
 
     fn keyDown(ctx: *anyopaque, ev: input.KeyEvent) bool {
         const self = me(ctx);
+        const gen = self.model.gen;
         const handled = self.key(ev);
-        if (handled) self.changed();
+        if (handled) {
+            self.changed();
+            self.notify(gen);
+        }
         return handled;
     }
 
@@ -454,8 +472,10 @@ pub const TextField = struct {
     fn focusChanged(ctx: *anyopaque, on: bool) void {
         const self = me(ctx);
         self.focused = on;
+        const gen = self.model.gen;
         if (!on) _ = self.model.commitPreedit();
         self.changed();
+        self.notify(gen);
     }
 
     fn windowFocusChanged(ctx: *anyopaque, on: bool) void {
@@ -466,8 +486,10 @@ pub const TextField = struct {
 
     fn textInput(ctx: *anyopaque, ev: input.ImeEvent) bool {
         const self = me(ctx);
+        const gen = self.model.gen;
         self.model.ime(ev.commit, ev.preedit);
         self.changed();
+        self.notify(gen);
         return true;
     }
 

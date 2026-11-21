@@ -28,6 +28,8 @@
 //!    포커스 잃음 · 4096 한도 · 스크롤), ime 상태 기계(enter 전후 · leave · serial 불일치 · 100번 왕복), mime 고르기, 경로 해석 · 열 경로, 필드 뷰(키 표로
 //!    타이핑 · Cmd+A/C/X/V/Z · Ctrl+A/E · Enter · Esc · unhandled · IME 라우팅 · ime 훅), 필드 그림(밑줄 행 · 확정 뒤 · 캐럿 · 링 · 선택 · 부분 = 통째),
 //!    `ColumnView.setColumns`.
+//! 17 필터 · 검색(TK-M4 단계 C) — 걷기(너비 우선 · 숨김 · 링크 · 뿌리 `/`의 제외 · 20만 · 주입한 시계의 10초), 점수 순서(연속 · 이름 · 짧은 경로 · 성분 처음 · 한글),
+//!    판정 25의 결과 순서, 걷는 중 질의 늘이기 = 처음부터, 상위 100 = 전체 정렬의 앞 100, 줄인 질의, 필터의 일치 · 안정 선택 · 갱신 뒤 유지.
 
 const std = @import("std");
 const theme = @import("theme");
@@ -229,6 +231,8 @@ pub fn main(init: std.process.Init) !u8 {
     pathTests();
     try fieldTests(io, alloc, font, &f13, &lut1);
     try setColumnsTests(alloc, &f13);
+    try searchTests(alloc);
+    try filterTests(alloc);
 
     if (failures != 0) {
         std.debug.print("tk_test: {d} failure(s)\n", .{failures});
@@ -1579,7 +1583,8 @@ fn crender(io: std.Io, alloc: std.mem.Allocator, t: *ca.Tree, pixels: []u32, scr
 
 // ── 14 tars-files 모델(TK-M3 단계 B) ──────────────────────────────────
 
-const fm = @import("files_model");
+const fsearch = @import("files_search");
+const fm = fsearch.model;
 
 /// 메모리 표 DirSource — 항목을 `chunk`개씩 준다. 열고 닫은 수를 센다.
 const MemDir = struct {
@@ -2576,4 +2581,317 @@ fn setColumnsTests(alloc: std.mem.Allocator, face: *text.Face) !void {
     check(std.mem.eql(u8, env.firstName(), "col2"), "focusFirst after setColumns: col2", .{});
     try cv.setColumns(&.{env.src.cols[0].source()});
     check(cv.n == 1 and cv.focus == 0 and cv.list(0).selected == 0, "setColumns(1): back to one column, selection 0", .{});
+}
+
+// ── 17 필터 · 검색(TK-M4 단계 C) ──────────────────────────────────────
+
+/// 경로로 찾는 가짜 디렉터리 트리 — `dirs`의 경로마다 항목 목록. 조각은 `chunk`개씩. 모르는 경로는 못 연다.
+const TDir = struct { path: []const u8, items: []const fm.Raw };
+const TreeDir = struct {
+    dirs: []const TDir,
+    chunk: usize = 2,
+    opens: u32 = 0,
+    closes: u32 = 0,
+    hs: [8]struct { items: []const fm.Raw, pos: usize } = undefined,
+    hn: usize = 0,
+
+    fn open(ctx: *anyopaque, path: []const u8) anyerror!*anyopaque {
+        const self: *TreeDir = @ptrCast(@alignCast(ctx));
+        for (self.dirs) |d| if (std.mem.eql(u8, d.path, path)) {
+            self.opens += 1;
+            const h = &self.hs[self.hn % self.hs.len];
+            self.hn += 1;
+            h.* = .{ .items = d.items, .pos = 0 };
+            return h;
+        };
+        return error.FileNotFound;
+    }
+    fn next(ctx: *anyopaque, handle: *anyopaque) anyerror!?[]const fm.Raw {
+        const self: *TreeDir = @ptrCast(@alignCast(ctx));
+        const h: *@TypeOf(self.hs[0]) = @ptrCast(@alignCast(handle));
+        if (h.pos >= h.items.len) return null;
+        const end = @min(h.pos + self.chunk, h.items.len);
+        defer h.pos = end;
+        return h.items[h.pos..end];
+    }
+    fn close(ctx: *anyopaque, _: *anyopaque) void {
+        const self: *TreeDir = @ptrCast(@alignCast(ctx));
+        self.closes += 1;
+    }
+    fn source(self: *TreeDir) fm.DirSource {
+        return .{ .ctx = self, .open = open, .next = next, .close = close };
+    }
+};
+
+/// 뿌리 하나에 파일 `n`개(`f0` …)를 1000개씩 지어 주는 소스(20만 상한 · 네이티브 점수 재기).
+const GenDir = struct {
+    n: usize,
+    pos: usize = 0,
+    names: std.ArrayList(u8) = .empty,
+    raws: [1000]fm.Raw = undefined,
+    alloc: std.mem.Allocator,
+
+    fn open(ctx: *anyopaque, path: []const u8) anyerror!*anyopaque {
+        const self: *GenDir = @ptrCast(@alignCast(ctx));
+        if (!std.mem.eql(u8, path, "/g")) return error.FileNotFound;
+        self.pos = 0;
+        return self;
+    }
+    fn next(ctx: *anyopaque, _: *anyopaque) anyerror!?[]const fm.Raw {
+        const self: *GenDir = @ptrCast(@alignCast(ctx));
+        if (self.pos >= self.n) return null;
+        const end = @min(self.pos + self.raws.len, self.n);
+        self.names.clearRetainingCapacity();
+        var offs: [1001]usize = undefined;
+        var k: usize = 0;
+        while (self.pos + k < end) : (k += 1) {
+            offs[k] = self.names.items.len;
+            const i = self.pos + k;
+            // 이름은 섞인 글자(질의가 고르게 맞도록) — f<i>-<i*7919 % 1000>.txt
+            var b: [48]u8 = undefined;
+            const nm = try std.fmt.bufPrint(&b, "f{d}-{d}.txt", .{ i, (i * 7919) % 1000 });
+            try self.names.appendSlice(self.alloc, nm);
+        }
+        offs[k] = self.names.items.len;
+        for (0..k) |j| self.raws[j] = .{ .name = self.names.items[offs[j]..offs[j + 1]], .kind = .file };
+        self.pos = end;
+        return self.raws[0..k];
+    }
+    fn close(_: *anyopaque, _: *anyopaque) void {}
+    fn source(self: *GenDir) fm.DirSource {
+        return .{ .ctx = self, .open = open, .next = next, .close = close };
+    }
+};
+
+const FakeClock = struct {
+    t: u64 = 0,
+    step: u64 = 0,
+    fn now(ctx: *anyopaque) u64 {
+        const self: *FakeClock = @ptrCast(@alignCast(ctx));
+        self.t += self.step;
+        return self.t;
+    }
+    fn clock(self: *FakeClock) fsearch.Clock {
+        return .{ .ctx = self, .now_ms = now };
+    }
+};
+
+fn rd(name: []const u8, kind: fm.Kind) fm.Raw {
+    return .{ .name = name, .kind = kind };
+}
+
+const TKF = [_]TDir{
+    .{ .path = "/tmp/tkf", .items = &.{ rd("a", .dir), rd(".h", .file), rd("z", .dir), rd("한", .dir), rd("m.txt", .file), .{ .name = "loop", .kind = .dir, .link = true } } },
+    .{ .path = "/tmp/tkf/a", .items = &.{ rd("0", .dir), rd("b", .dir) } },
+    .{ .path = "/tmp/tkf/z", .items = &.{} },
+    .{ .path = "/tmp/tkf/한", .items = &.{rd("x.txt", .file)} },
+    .{ .path = "/tmp/tkf/a/0", .items = &.{} },
+    .{ .path = "/tmp/tkf/a/b", .items = &.{ rd("c", .dir), rd("x.txt", .file) } },
+    .{ .path = "/tmp/tkf/a/b/c", .items = &.{} },
+    .{ .path = "/tmp/tkf/loop", .items = &.{rd("never", .file)} },
+};
+
+fn walkAll(w: *fsearch.Walker) u32 {
+    var steps: u32 = 0;
+    while (w.step()) steps += 1;
+    return steps;
+}
+
+fn joinPaths(w: *const fsearch.Walker, buf: []u8) []const u8 {
+    var n: usize = 0;
+    for (0..w.items.items.len) |i| {
+        const s = std.fmt.bufPrint(buf[n..], "{s}{s}", .{ if (i == 0) "" else " ", w.path(@intCast(i)) }) catch return buf[0..n];
+        n += s.len;
+    }
+    return buf[0..n];
+}
+
+fn topPaths(sr: *const fsearch.Search, buf: []u8) []const u8 {
+    var n: usize = 0;
+    for (sr.results(), 0..) |h, i| {
+        const s = std.fmt.bufPrint(buf[n..], "{s}{s}", .{ if (i == 0) "" else " ", sr.walker.path(h.item) }) catch return buf[0..n];
+        n += s.len;
+    }
+    return buf[0..n];
+}
+
+fn searchTests(alloc: std.mem.Allocator) !void {
+    var clk: FakeClock = .{ .step = 1 };
+    var buf: [4096]u8 = undefined;
+    // 걷기: 너비 우선 · 숨김 빠짐 · 링크는 항목이지만 내려가지 않음.
+    {
+        var src: TreeDir = .{ .dirs = &TKF };
+        var w = fsearch.Walker.init(alloc, src.source(), clk.clock(), "/tmp/tkf");
+        defer w.deinit();
+        _ = walkAll(&w);
+        const got = joinPaths(&w, &buf);
+        check(std.mem.eql(u8, got, "a z 한 m.txt loop a/0 a/b 한/x.txt a/b/c a/b/x.txt") and w.done and !w.capped, "walk /tmp/tkf breadth first, .h hidden, the link listed but not entered: {s}", .{got});
+        check(src.opens == 7 and src.opens == src.closes, "walk opened 7 directories (not loop) and closed each ({d}/{d})", .{ src.opens, src.closes });
+        check(std.mem.eql(u8, w.name(9), "x.txt") and w.items.items[9].kind == .file, "the name of a/b/x.txt is x.txt", .{});
+    }
+    // 뿌리 `/`: 맨 위의 proc sys dev run만 뺀다.
+    {
+        const ROOT = [_]TDir{
+            .{ .path = "/", .items = &.{ rd("proc", .dir), rd("sys", .dir), rd("dev", .dir), rd("run", .dir), rd("tmp", .dir), rd("etc", .file) } },
+            .{ .path = "/tmp", .items = &.{ rd("proc", .dir), rd("run", .file) } },
+            .{ .path = "/tmp/proc", .items = &.{} },
+            .{ .path = "/proc", .items = &.{rd("1", .dir)} },
+        };
+        var src: TreeDir = .{ .dirs = &ROOT, .chunk = 100 };
+        var w = fsearch.Walker.init(alloc, src.source(), clk.clock(), "/");
+        defer w.deinit();
+        _ = walkAll(&w);
+        const got = joinPaths(&w, &buf);
+        check(std.mem.eql(u8, got, "tmp etc tmp/proc tmp/run"), "walk / leaves out the top proc sys dev run only: {s}", .{got});
+    }
+    // 상한: 20만 항목 · 10초.
+    {
+        var g: GenDir = .{ .n = 250_000, .alloc = alloc };
+        defer g.names.deinit(alloc);
+        var c0: FakeClock = .{ .step = 0 };
+        var w = fsearch.Walker.init(alloc, g.source(), c0.clock(), "/g");
+        defer w.deinit();
+        _ = walkAll(&w);
+        check(w.capped and w.items.items.len == fsearch.MAX_ENTRIES, "250k entries: capped at {d}", .{w.items.items.len});
+        var src: TreeDir = .{ .dirs = &TKF, .chunk = 1 };
+        var c1: FakeClock = .{ .step = 1000 };
+        var w2 = fsearch.Walker.init(alloc, src.source(), c1.clock(), "/tmp/tkf");
+        defer w2.deinit();
+        const steps = walkAll(&w2);
+        check(w2.capped and w2.ms >= fsearch.MAX_MS and steps < 12, "a clock of 1 s per look stops the walk at 10 s ({d} steps, {d} ms)", .{ steps, w2.ms });
+    }
+    // 점수 순서.
+    {
+        const S = fsearch.score;
+        check(S("abc", 0, "ab").? > S("axb", 0, "ab").?, "consecutive > scattered (abc vs axb for ab)", .{});
+        check(S("a/xy", 2, "xy").? > S("xy/a", 3, "xy").?, "a name match > a path match (a/xy vs xy/a)", .{});
+        check(S("xy", 0, "xy").? > S("xyz", 0, "xy").?, "the shorter path wins (xy vs xyz)", .{});
+        check(S("q/bar", 2, "b").? > S("q/abr", 2, "b").?, "a match at a component start wins (q/bar vs q/abr for b)", .{});
+        check(S("한/x.txt", 4, "한") != null and S("a", 0, "한") == null and S("README", 0, "read") != null and S("x", 0, "") == null, "Hangul as is, ASCII case folded, an empty query matches nothing", .{});
+        check(S("a/b/x.txt", 4, "xtxt") != null and S("한/x.txt", 4, "xtxt") != null and S("m.txt", 0, "xtxt") == null, "xtxt is in a/b/x.txt and 한/x.txt, not m.txt", .{});
+        check(S("a/b/x.txt", 4, "xtxt").? == S("한/x.txt", 4, "xtxt").?, "a/b/x.txt and 한/x.txt tie (both 9 bytes) — the byte order decides", .{});
+    }
+    // 검색 결과: 판정 25의 모양, 같은 점수는 경로 바이트 순.
+    {
+        var src: TreeDir = .{ .dirs = &TKF };
+        const w = fsearch.Walker.init(alloc, src.source(), clk.clock(), "/tmp/tkf");
+        var sr = fsearch.Search.init(alloc, w);
+        defer sr.deinit();
+        _ = walkAll(&sr.walker);
+        try sr.scanNew();
+        try sr.setQuery("xtxt");
+        const got = topPaths(&sr, &buf);
+        check(std.mem.eql(u8, got, "a/b/x.txt 한/x.txt"), "search xtxt in /tmp/tkf: {s}", .{got});
+    }
+    // 상위 100 = 전체 정렬의 앞 100, 질의 늘이기 = 처음부터, 걷는 중에 바꾼 질의.
+    {
+        var g: GenDir = .{ .n = 5000, .alloc = alloc };
+        defer g.names.deinit(alloc);
+        const w = fsearch.Walker.init(alloc, g.source(), clk.clock(), "/g");
+        var inc = fsearch.Search.init(alloc, w);
+        defer inc.deinit();
+        try inc.setQuery("1");
+        _ = inc.walker.step();
+        try inc.scanNew();
+        try inc.setQuery("12");
+        _ = inc.walker.step();
+        try inc.scanNew();
+        try inc.setQuery("12t");
+        while (inc.walker.step()) try inc.scanNew();
+        try inc.scanNew();
+        // 처음부터: 다 걷고 한 번에.
+        const w2 = fsearch.Walker.init(alloc, g.source(), clk.clock(), "/g");
+        var fresh = fsearch.Search.init(alloc, w2);
+        defer fresh.deinit();
+        while (fresh.walker.step()) {}
+        try fresh.setQuery("12t");
+        var same = inc.top_n == fresh.top_n;
+        if (same) for (inc.results(), fresh.results()) |a, b| {
+            same = same and std.mem.eql(u8, inc.walker.path(a.item), fresh.walker.path(b.item)) and a.score == b.score;
+        };
+        check(same and fresh.top_n == fsearch.TOP, "query 1 -> 12 -> 12t while walking = 12t from scratch after the walk ({d} results)", .{fresh.top_n});
+        // 전체 정렬(점수 내림 · 경로 오름)의 앞 100.
+        var all: std.ArrayList(fsearch.Hit) = .empty;
+        defer all.deinit(alloc);
+        for (0..fresh.walker.items.items.len) |i| {
+            const it = fresh.walker.items.items[i];
+            if (fsearch.score(fresh.walker.path(@intCast(i)), it.name, "12t")) |s| try all.append(alloc, .{ .item = @intCast(i), .score = s });
+        }
+        const Ctx = struct {
+            w: *const fsearch.Walker,
+            fn lt(c: @This(), a: fsearch.Hit, b: fsearch.Hit) bool {
+                if (a.score != b.score) return a.score > b.score;
+                return std.mem.order(u8, c.w.path(a.item), c.w.path(b.item)) == .lt;
+            }
+        };
+        std.mem.sort(fsearch.Hit, all.items, Ctx{ .w = &fresh.walker }, Ctx.lt);
+        var eq = all.items.len >= fsearch.TOP;
+        if (eq) for (fresh.results(), all.items[0..fsearch.TOP]) |a, b| {
+            eq = eq and a.item == b.item;
+        };
+        check(eq, "top 100 = the first 100 of a full sort ({d} candidates)", .{all.items.len});
+        // 이어지지 않는 질의(줄임)도 처음부터와 같다.
+        try inc.setQuery("1");
+        try fresh.setQuery("1");
+        var same2 = inc.top_n == fresh.top_n;
+        if (same2) for (inc.results(), fresh.results()) |a, b| {
+            same2 = same2 and std.mem.eql(u8, inc.walker.path(a.item), fresh.walker.path(b.item));
+        };
+        check(same2, "a shorter query re-reads everything (same as from scratch)", .{});
+    }
+    // 네이티브 재기(참고 — 판정 아님, plan 실측 7): 20만 가짜 항목의 걷기 · 점수 매기기.
+    {
+        var g: GenDir = .{ .n = 200_000, .alloc = alloc };
+        defer g.names.deinit(alloc);
+        const w = fsearch.Walker.init(alloc, g.source(), clk.clock(), "/g");
+        var sr = fsearch.Search.init(alloc, w);
+        defer sr.deinit();
+        const t0 = nowUs();
+        while (sr.walker.step()) {}
+        const t1 = nowUs();
+        try sr.setQuery("1");
+        const t2 = nowUs();
+        const n1 = sr.cands.items.len;
+        try sr.setQuery("12");
+        const t3 = nowUs();
+        const n2 = sr.cands.items.len;
+        try sr.setQuery("12t");
+        const t4 = nowUs();
+        const n3 = sr.cands.items.len;
+        try sr.setQuery("x9");
+        const t5 = nowUs();
+        std.debug.print("tk_test: reference native (host test build mode) 200k fake entries: walk {d} us, score '1' {d} us ({d} cands), '12' (extends) {d} us ({d}), '12t' {d} us ({d}), 'x9' (not extending, all again) {d} us ({d})\n", .{ t1 - t0, t2 - t1, n1, t3 - t2, n2, t4 - t3, n3, t5 - t4, sr.cands.items.len });
+    }
+}
+
+fn nowUs() u64 {
+    var ts: std.os.linux.timespec = undefined;
+    _ = std.os.linux.clock_gettime(.MONOTONIC, &ts);
+    return @as(u64, @intCast(ts.sec)) * 1_000_000 + @as(u64, @intCast(ts.nsec)) / 1000;
+}
+
+fn filterTests(alloc: std.mem.Allocator) !void {
+    check(fm.nameMatches("m.txt", "m") and fm.nameMatches("README.md", "readme") and !fm.nameMatches("a", "m") and fm.nameMatches("x", "") and fm.nameMatches("한글", "글") and !fm.nameMatches("ab", "abc"), "nameMatches: substring, ASCII case folded, Hangul bytes, empty matches all", .{});
+    const items = [_]fm.Entry{ ent("a", .dir), ent("z", .dir), ent("한", .dir), ent("m.txt", .file) };
+    var out: std.ArrayList(fm.Entry) = .empty;
+    defer out.deinit(alloc);
+    try fm.filterInto(alloc, &items, "m", &out);
+    check(out.items.len == 1 and std.mem.eql(u8, out.items[0].name, "m.txt"), "filter m over a z 한 m.txt: m.txt", .{});
+    // 안정 선택: a를 고른 채 거르면 a가 사라져 0행(m.txt), 풀면 이름으로 m.txt를 따라간다.
+    const b0: fm.Before = .{ .sel = items[0], .index = 0, .offset = 0, .touched = true };
+    const a1 = fm.follow(b0, out.items, 600, 24);
+    check(a1.index.? == 0 and a1.gone, "filtering out the selection a: row 0 and gone (the right columns go)", .{});
+    const b1: fm.Before = .{ .sel = out.items[0], .index = 0, .offset = 0, .touched = true };
+    try fm.filterInto(alloc, &items, "", &out);
+    const a2 = fm.follow(b1, out.items, 600, 24);
+    check(a2.index.? == 3 and !a2.gone, "clearing the filter: the selection follows m.txt to row 3", .{});
+    // 갱신 뒤 필터 유지: 새 목록(mm 더함)을 같은 글로 다시 거르면 선택 이름을 따라간다.
+    const items2 = [_]fm.Entry{ ent("a", .dir), ent("z", .dir), ent("한", .dir), ent("m.txt", .file), ent("mm", .file) };
+    try fm.filterInto(alloc, &items, "m", &out);
+    const sel = out.items[0];
+    var out2: std.ArrayList(fm.Entry) = .empty;
+    defer out2.deinit(alloc);
+    try fm.filterInto(alloc, &items2, "m", &out2);
+    const a3 = fm.follow(.{ .sel = sel, .index = 0, .offset = 0, .touched = true }, out2.items, 600, 24);
+    check(out2.items.len == 2 and a3.index.? == 0 and std.mem.eql(u8, out2.items[a3.index.?].name, "m.txt"), "a refresh with the filter kept: 2 rows, the selection stays on m.txt", .{});
 }

@@ -158,7 +158,8 @@ pub fn build(b: *std.Build) void {
     test_mod.addImport("tk_input", host_layers.input);
     test_mod.addImport("tk_kit", host_layers.kit);
     test_mod.addImport("tk_tokens", host_layers.tokens);
-    test_mod.addImport("files_model", b.createModule(.{ .root_source_file = b.path("src/files/model.zig"), .target = host_target, .optimize = optimize }));
+    // `tars-files`의 순수한 것 — 검색(`search.zig`)이 모델(`model.zig`)을 경로로 부르므로 한 모듈이다(`files_search.model`, TK-M4 단계 C).
+    test_mod.addImport("files_search", b.createModule(.{ .root_source_file = b.path("src/files/search.zig"), .target = host_target, .optimize = optimize }));
     // 서버 키맵(TK-M4 — 글자 키 표 `tk_input.charFor`를 이 파일과 대조한다, design 결정 13 · 15). 서버와 같은 파일이다(terminal/build.zig).
     test_mod.addAnonymousImport("keymap", .{ .root_source_file = b.path("../terminal/vendor/keymap-us.xkb") });
     test_mod.addIncludePath(terminal_vendor);

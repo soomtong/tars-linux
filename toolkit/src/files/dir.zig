@@ -64,7 +64,7 @@ pub const Dir = struct {
                 linux.DT.LNK, linux.DT.UNKNOWN => follow(h.fd, name_ptr),
                 else => .file,
             };
-            try h.raws.append(self.alloc, .{ .name = name, .kind = kind });
+            try h.raws.append(self.alloc, .{ .name = name, .kind = kind, .link = d.type == linux.DT.LNK });
             off += reclen;
         }
         return h.raws.items;
