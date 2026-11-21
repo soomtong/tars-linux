@@ -99,4 +99,15 @@ Status: 진행 중. 브랜치 `app-layer-0-3`.
 
 ## 결과
 
-(단계마다 채운다.)
+구현은 `tk-m5`(Herdr, Opus — 조사도 같은 에이전트), lead는 대조 · 게이트 · commit.
+
+1. 단계 A `64e4ee5`(그리기 없음): xml 판 2(`get_menu` since 2 · 새 인터페이스 `tars_menu_v1`) · 서버의 `Menu` 객체(pending · current · generation, toplevel이 사라지면
+   무력) · `Toplevel.title` · `app_id` · 순수 모듈 `menubar.zig`(모델 검증 · 바 배치 · 드롭다운 사각형 · 키 이동 · hit-test · 단축키 글)와 호스트 검사 8묶음 ·
+   메뉴 색 여섯 · `tars-wl-test --menu` · 판정 31의 줄 부분(`wl> menu id=ID menus=2 items=5` · `wl> title`). 체인 wayland 두 번 · terminal · toolkit PASS, 화면 변화 0.
+   색: `MENU_NAME E8D8B0` · `MENU_FG D0D8E0` · `MENU_BG 283448` · `MENU_HL_BG 305C9C` · `MENU_DIM 687484` · `MENU_SEP 485468` — theme의 색 28개 · 코드의 색 11개와
+   모두 다름을 comptime 검사가 지킨다.
+   실측: 스캐너는 `generate(…, 2)` 하나로 since 2 요청과 자식 인터페이스를 함께 낸다. libwayland-server가 판 1 객체의 since 2 요청을 디스패치 전에 막는다(문자열 근거).
+   unifont cmap에 ⌘ · ⇧ · ⌥ · ⌃가 있다(표시는 ASCII 그대로). 둠은 `app_id=tars-doom` · title을 시작 뒤 한 번 바꾼다(`Freedoom` → `Freedoom: Phase 1`).
+   `alt-shift-slash`는 evdev 53 + Shift + Super(0x41)로 온다.
+   plan과 달라진 것: (가) `already_constructed`는 `tars_menu_v1`의 error에. (나) `--native`는 판 1로 남고 `--menu`가 판 2(원래 모드 포함). (다) 메뉴 객체가 생긴 뒤
+   commit 전에는 모델 없음(이름만).
