@@ -665,3 +665,13 @@ clip은 드롭다운 104 × 40 + 창의 damage): 프레임 15.0~15.9 ms 중 드�
 미리보기 판의 이름 · 본문 — 단계 A까지는 미리보기 레이어 통째라 창 전체 616 × 752였다) 1.7~2.4 ms. JPEG를 켠 디코더(stb_image PNG + JPEG)로 `tars-files` 6,329,656 →
 6,714,152바이트(+375 KiB), `tars-tk-demo` 5,915,232 → 6,109,240(+189 KiB — 시험 그림 배열 포함). 호스트 검사(따뜻한 전역 캐시) 8~9초. 체인 toolkit 388 · 345초(단계 A 326 · 329초
 — 판정 30~34로 약 +20~60초, 회차 차이가 크다).
+115. Chromium(Debian trixie 156.0.8078.79, 묶음 browser — CR-M1, TCG 한 CPU · `-m 2048`, 1280 × 800 배율 1). 화면 셸에서 `tars-browser file://…`을 친 뒤 첫
+`wl> commit id=1 buf=636x772`까지 콜드 22초(부하 없음) · browser 체인 25초(두 판 같음, 체인 상한 60초) · 웜(같은 부팅의 둘째) 6~8초. 프로세스 13개, 게스트 `free -m` used 541 ·
+buff/cache 1,174 MiB, QEMU 프로세스 RSS 2.27 GiB(VmHWM 2.36 — 게스트 페이지 캐시까지 찬다. 루트 게이트의 lane 셈 1 GiB의 두 배가 넘어 기본 메모리 2048 이상인 체인을
+한 줄에 묶는다). 묶음 browser 파일 2,811 · 풀린 740 MiB · zstd15 294 MiB(base와 같은 것만 지움 — gpu · media와 겹친 것까지 지우면 228, noto Serif CJK를 빼면 188,
+글꼴 없이 159), 홈 디스크(base · gpu · media · browser) 836 MiB, `mkfs.ext4 -d` 2초. 거두기는 snapshot.debian.org에서 browser 약 3분, debian 묶음 아홉 전부 1,262초
+(base 하나가 약 6분), 캐시 상태의 `make dev-layers` 149 → 156초. 한글 상자(690, 415, 170 × 75): noto-cjk 글자 잉크 2,619 · 색 177가지, 두부(noto 없음) 잉크 2,649 ·
+색 23가지 — 잉크 수가 아니라 색 가짓수가 가른다. `--no-first-run`이 없으면 새 프로필의 첫 실행에 Debian `master_preferences`가 먹어 북마크 줄 · 안내 줄로 페이지 원점이
+(644, 107) → (644, 197). 렌더러는 화면 셸(같은 uid)에서 `/proc/<pid>/status`(`Seccomp: 2`, `NSpid: 173 14 1`) · `uid_map`(`1000 1000 1`, 브라우저 `0 0 4294967295`) ·
+`ns/user` 모두 읽힌다. Chromium의 공유 메모리는 memfd이고 `/dev/shm`을 붙여도 그 안에 아무것도 안 만든다(`/tmp/org.chromium.Chromium.*`은 ProcessSingleton 소켓 자리).
+체인 browser 354 · 358초(`make check`, dev-layers 캐시 확인 약 156초 포함).

@@ -43,13 +43,34 @@ for r in $repos; do
 done
 
 # Debian 저장소의 시각(CR-M1 plan 확정 1 · 2). live 미러는 보안 판 · point release가 오면 옛 판을 내려 `=판` 고정이 깨진다 — 그래서
-# snapshot.debian.org의 한 시각에서 거둔다. 값은 devlayer/snapshot 한 줄이고 DEV_SNAPSHOT(make dev-layers DEV_SNAPSHOT=…)이 앞선다.
+# snapshot.debian.org의 한 시각에서 거둔다. 시각은 devlayer/snapshot의 첫 줄이고 DEV_SNAPSHOT(make dev-layers DEV_SNAPSHOT=…)이 앞선다.
 # 시각은 캐시 해시에 든다 — 바꾸면 모든 debian 묶음을 다시 거둔다. vendor-repo(repos.tsv)는 이 시각과 무관하게 각 저장소 그대로다.
-snap_at="${DEV_SNAPSHOT:-$(tr -d ' \t\r\n' <devlayer/snapshot)}"
+#
+# 파일의 둘째 줄부터는 그 시각의 InRelease 셋의 sha256이다(`sha256  archive  suite`, CR-M1 단계 B). 받는 길은 http이고 만료 검사를 껐으므로,
+# 서명만으로는 "Debian이 언젠가 낸 Release"까지만 지킨다 — 중간자가 서명이 유효한 더 옛 InRelease를 내주면(freeze · replay) 판을 안 적은
+# 의존 폐포가 옛 판으로 풀린다. InRelease가 Packages 색인의 해시를, 색인이 .deb의 해시를 담으므로 이 셋을 대조하면 폐포 전체가 내용으로
+# 고정된다. snapshot.debian.org는 시각을 내용 주소(/file/<sha1>/InRelease)로 돌려 같은 시각에 늘 같은 바이트를 내고, apt는 그것을 바이트 그대로
+# /var/lib/apt/lists/에 둔다(단계 B에서 두 번 받아 확인).
+# DEV_SNAPSHOT으로 파일과 다른 시각을 주면(판올림 시험) 대조할 값이 없다 — 구한 셋을 찍어(파일에 옮겨 적을 수 있게) 경고하고 진행하며,
+# 그 사실을 <묶음>.harvest.log의 snapshot 줄에 남긴다.
+snap_file="$(grep -vE '^[[:space:]]*(#|$)' devlayer/snapshot)"
+snap_pinned="$(head -n 1 <<<"${snap_file}" | tr -d ' \t\r')"
+snap_at="${DEV_SNAPSHOT:-${snap_pinned}}"
 [[ "${snap_at}" =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || { echo "harvest> snapshot '${snap_at}' is not YYYYMMDDThhmmssZ (devlayer/snapshot or DEV_SNAPSHOT)" >&2; exit 1; }
+snap_suites="debian trixie
+debian trixie-updates
+debian-security trixie-security"
+snap_pins=""
+if [ "${snap_at}" = "${snap_pinned}" ]; then
+  snap_pins="$(tail -n +2 <<<"${snap_file}")"
+  while read -r archive suite; do
+    awk -v a="${archive}" -v s="${suite}" '$1 ~ /^[0-9a-f]{64}$/ && $2 == a && $3 == s { n++ } END { exit n == 1 ? 0 : 1 }' <<<"${snap_pins}" ||
+      { echo "harvest> devlayer/snapshot needs one 'sha256  ${archive}  ${suite}' line for ${snap_at}" >&2; exit 1; }
+  done <<<"${snap_suites}"
+fi
 
-# 끝 줄은 해시 하나여야 한다 — build.sh가 `head -n -1`로 매니페스트 줄만 떼어 대조한다.
-want="$(printf '%s\n' "$lines"; { cat devlayer/harvest.sh devlayer/harvest-skip.tsv; printf 'snapshot %s\n' "${snap_at}"; printf '%s' "$repo_state"; } | sha256sum | cut -c1-64)"
+# 끝 줄은 해시 하나여야 한다 — build.sh가 `head -n -1`로 매니페스트 줄만 떼어 대조한다. snapshot 파일은 내용 그대로 든다.
+want="$(printf '%s\n' "$lines"; { cat devlayer/harvest.sh devlayer/harvest-skip.tsv devlayer/snapshot; printf 'snapshot %s\n' "${snap_at}"; printf '%s' "$repo_state"; } | sha256sum | cut -c1-64)"
 if [ -f "$build/$bundle.harvest.tar" ] && [ "$(cat "$build/$bundle.harvest.lines" 2>/dev/null)" = "$want" ]; then
   echo "harvest> $bundle: cached"
   exit 0
@@ -85,14 +106,40 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 # 저장소를 위의 시각으로 바꾼다(CR-M1 plan 확정 1). slim의 live 목록(debian.sources)은 지운다 — 남으면 두 시각이 섞인다. 서명은 slim의
 # debian-archive-keyring이 그대로 검증한다. security · updates의 Release는 약 1주로 만료되므로 check-valid-until=no(만료만 안 본다).
-# ca-certificates가 없으므로 http다(내용은 서명이 지킨다 — vendor-repo와 같다).
+# https는 쓰지 않는다 — slim에 ca-certificates가 없고(설치 전에 아무것도 깔지 않는다), 아래 InRelease 대조가 전송 경로와 만료에 기대지 않아 더 강하다.
 rm -f /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list
-{
-  echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${snap_at}/ trixie main"
-  echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${snap_at}/ trixie-updates main"
-  echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/${snap_at}/ trixie-security main"
-} >/etc/apt/sources.list.d/tars-snapshot.list
+while read -r archive suite; do
+  echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/${archive}/${snap_at}/ ${suite} main"
+done <<<"${snap_suites}" >/etc/apt/sources.list.d/tars-snapshot.list
+
+# apt-get update 뒤, 무엇이든 깔기(upgrade 포함) 전에 부른다. 받아 둔 InRelease 셋의 sha256을 devlayer/snapshot과 대조하고 다르면 멈춘다.
+# 파일과 다른 시각(DEV_SNAPSHOT)이면 구한 값을 찍고 경고만 한다. 결과 한 줄은 $snap_note에 남아 harvest.log에 든다.
+snap_note=""
+check_inrelease() {
+  local archive suite f have want bad=0 got=""
+  while read -r archive suite; do
+    f="/var/lib/apt/lists/snapshot.debian.org_archive_${archive}_${snap_at}_dists_${suite}_InRelease"
+    [ -f "${f}" ] || { echo "harvest> $bundle: apt kept no ${f##*/} — cannot check the snapshot" >&2; exit 1; }
+    have="$(sha256sum <"${f}" | cut -c1-64)"
+    got+=" ${archive}/${suite}=${have}"
+    [ -n "${snap_pins}" ] || continue
+    want="$(awk -v a="${archive}" -v s="${suite}" '$2 == a && $3 == s { print $1 }' <<<"${snap_pins}")"
+    if [ "${have}" != "${want}" ]; then
+      echo "harvest> $bundle: ${archive} ${suite} InRelease at ${snap_at} is ${have}, devlayer/snapshot says ${want}" >&2
+      bad=1
+    fi
+  done <<<"${snap_suites}"
+  ((bad == 0)) || { echo "harvest> $bundle: the snapshot's InRelease is not the pinned one — nothing installed" >&2; exit 1; }
+  if [ -n "${snap_pins}" ]; then
+    snap_note="harvest> snapshot ${snap_at} InRelease sha256 pinned (devlayer/snapshot):${got}"
+  else
+    snap_note="harvest> snapshot ${snap_at} InRelease sha256 NOT PINNED (DEV_SNAPSHOT differs from devlayer/snapshot) — copy into devlayer/snapshot:${got}"
+    echo "${snap_note}" >&2
+  fi
+}
+
 apt-get update -qq
+check_inrelease
 apt-get upgrade -y -qq >/dev/null
 
 dpkg-query -W -f '${Package}\t${Version}\t${Architecture}\n' | LC_ALL=C sort >"$work/pkgs.before"
@@ -108,6 +155,7 @@ for r in $repos; do
 done
 
 apt-get update -qq # vendor-repo 목록을 붙인 뒤라 다시
+check_inrelease    # 다시 받았을 수 있으므로 깔기 전에 한 번 더
 apt-get install -y -qq --no-install-recommends "${pkgs[@]}" >"$work/apt.log"
 
 dpkg-query -W -f '${Package}\t${Version}\t${Architecture}\n' | LC_ALL=C sort >"$work/pkgs.after"
@@ -241,6 +289,7 @@ tar -C / --no-recursion -cpf "$build/$bundle.harvest.tar.tmp" -T "$work/list"
 mv "$build/$bundle.harvest.tar.tmp" "$build/$bundle.harvest.tar"
 cp "$work/pkgs" "$build/$bundle.pkgs"
 {
+  echo "${snap_note}"
   echo "harvest> $bundle: packages=$(wc -l <"$work/pkgs") paths=$(wc -l <"$work/list") changed=$(wc -l <"$work/changed") deps=$(wc -l <"$work/deps")/$(wc -l <"$work/deps.files") flattened=$flattened skipalt=$(wc -l <"$work/skipalt") broken=$(wc -l <"${work}/broken") skipped=$skipped etc=$(wc -l <"$work/etc")"
   sed 's/^/harvest>   changed /' "$work/changed"
   sed 's/^/harvest>   etc /' "$work/etc"

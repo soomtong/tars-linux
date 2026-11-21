@@ -1,0 +1,25 @@
+#!/bin/bash
+# tars-browser — browser 묶음의 Chromium을 TARS의 Wayland 서버에 띄운다(CR design 결정 4, CR-M1 plan 확정 7).
+#
+# Debian의 /usr/bin/chromium 래퍼는 쓰지 않는다 — `--ozone-platform`을 안 붙여 X11을 고르고 끝나며, initrd에 없는 expr를 부르고,
+# /etc/chromium.d의 Google API 키 env를 싣는다. 여기서는 진짜 실행 파일에 Wayland(`--ozone-platform=wayland`)와 소프트웨어 합성
+# (`--disable-gpu` — 없으면 libEGL을 찾다가 GPU 프로세스가 네 번 죽은 뒤에야 같은 길로 간다)을 붙이고, 첫 실행 안내와 기본 브라우저
+# 확인을 끈다. 인자(URL · 파일)는 그대로 넘긴다. sandbox는 끄지 않는다(design 결정 5) — 그래서 root로는 안 뜬다.
+#
+#   tars-browser [URL …]
+set -u
+
+bin=/usr/lib/chromium/chromium
+if [ ! -x "${bin}" ]; then
+  echo "tars-browser: ${bin} is missing — the browser bundle is not laid over /usr" >&2
+  exit 1
+fi
+if [ "$(id -u)" = 0 ]; then
+  echo "tars-browser: Chromium does not run as root with its sandbox on — set user= in tars.conf and run it in the screen shell" >&2
+  exit 1
+fi
+if [ -z "${WAYLAND_DISPLAY:-}" ] || [ -z "${XDG_RUNTIME_DIR:-}" ] || [ ! -S "${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}" ]; then
+  echo "tars-browser: no Wayland display (WAYLAND_DISPLAY='${WAYLAND_DISPLAY:-}', XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR:-}') — run it in the screen shell" >&2
+  exit 1
+fi
+exec "${bin}" --ozone-platform=wayland --disable-gpu --no-first-run --no-default-browser-check "$@"

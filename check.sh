@@ -543,6 +543,12 @@ run_chain() {
 # 받고, 둥근 사각형(z2d)과 Pretendard 글자를 안티에일리어스로 그리며(screendump 좌표 색), Cmd+R의 1240 폭에 다시 그리고, 그린
 # 수만큼만 commit하고(idle 0), Cmd+Q에 스스로 끝나는지. 결정 4의 1배 PNG를 회차 로그 폴더에 남긴다. monitor 45509. 회차당 부팅 1회.
 #
+# CR 체인은 Chromium을 본다. 홈 디스크에 base · gpu · media · browser 묶음을 얹은 사용자 셸(설정 디스크의 user=)에서 `tars-browser file://…`이
+# Debian trixie의 Chromium을 Wayland 창(app_id chromium-browser, 636 × 772 버퍼)으로 60초 안에 띄우고, 페이지 좌표 색과 noto-cjk의 한글 ·
+# 한자 글자(두부가 아님 — 잉크의 색 가짓수)가 화면에 있는지, 렌더러가 seccomp 필터 안에서 브라우저와 다른 user namespace로 도는지
+# (/proc — 화면 셸의 권한으로), Cmd+Q에 스스로 끝나 프로세스가 안 남는지, Wayland 없이 부른 문이 이유와 1로 끝나는지 본다. 게스트
+# 메모리 2048(CR_MEM)이라 devtools와 같은 줄에서 돈다(아래 big_memory). monitor 45510. 회차당 부팅 1회.
+#
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
 CHAINS=(
@@ -582,6 +588,7 @@ CHAINS=(
   "DY-M2:./display/check.sh"
   "WY-M2:./wayland/check.sh"
   "TK-M0:./toolkit/check.sh"
+  "CR-M1:./browser/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면
@@ -851,8 +858,19 @@ calls_make_iso() {
   grep -v '^[[:space:]]*#' "$1" | grep 'make_iso\.sh' > /dev/null
 }
 
+# CR-M1. 게스트 메모리가 큰 체인(`<X>_MEM="${<X>_MEM:-N}"`의 기본값 N이 2048 이상 — devtools의 TP_MEM, browser의 CR_MEM)도 한 줄로
+# 묶는다. 아래 JOBS의 셈은 줄 하나를 1GiB로 잡는데 `-m 2048` 게스트의 QEMU RSS는 2.2GiB를 넘는다(CR-M1 단계 B 실측 — 게스트 페이지
+# 캐시까지 찬다). 그런 게스트 하나는 남겨 둔 1.5GiB 안에 들지만 둘이 겹치면 넘는다 — 그래서 둘이 동시에 뜨지 않게 같은 줄에 둔다.
+# devtools는 ISO 줄에 있으므로 그 줄에 붙는다. 이름이 아니라 스크립트를 읽는 것은 calls_make_iso와 같다.
+big_memory() {
+  local n
+  n="$(grep -v '^[[:space:]]*#' "$1" | sed -nE 's/^[A-Z_]+_MEM="\$\{[A-Z_]+_MEM:-([0-9]+)\}".*/\1/p' | head -n 1)"
+  [ -n "$n" ] && [ "$n" -ge 2048 ]
+}
+
 LANES=()
 iso_lane=-1
+big_lane=-1
 for entry in "${CHAINS[@]}"; do
   if calls_make_iso "${entry#*:}"; then
     if [ "$iso_lane" -lt 0 ]; then
@@ -861,7 +879,11 @@ for entry in "${CHAINS[@]}"; do
     else
       LANES[iso_lane]+=" $entry"
     fi
+    big_memory "${entry#*:}" && [ "$big_lane" -lt 0 ] && big_lane=$iso_lane
+  elif big_memory "${entry#*:}" && [ "$big_lane" -ge 0 ]; then
+    LANES[big_lane]+=" $entry"
   else
+    big_memory "${entry#*:}" && big_lane=${#LANES[@]}
     LANES+=("$entry")
   fi
 done

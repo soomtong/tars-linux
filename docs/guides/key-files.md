@@ -408,6 +408,17 @@
   init · terminal의 `zig build test`, GH-M1. 그 앞에 ghostty 의존성을 세 번까지 받는 step, 세 step이 `/tmp/zig-global`을 전역
   캐시로 잇는다). 초록은
   부팅이 아니다 — 게이트는 로컬. `push`는 `main`만, 브랜치는 `gh workflow run checks.yml --ref <브랜치>`.
+- `devlayer/snapshot` — 개발 도구 층이 Debian 줄을 거두는 snapshot.debian.org의 시각(첫 줄)과 그 시각의 InRelease 셋의 sha256(다음 줄마다
+  `sha256  archive  suite`, CR-M1). `devlayer/harvest.sh`가 sources를 그 시각으로 바꾸고 깔기 전에 InRelease를 대조한다(다르면 멈춤). 내용이
+  거두기 캐시 해시에 들어 고치면 debian 묶음 아홉을 다시 거둔다. 고르는 법과 까닭은 `lessons.md` "개발 도구 층의 Debian 줄은 snapshot의 한 시각에서
+  거둔다". `make dev-layers DEV_SNAPSHOT=<시각>`은 대조 없이(경고 줄) 새 시각을 시험한다.
+- `devlayer/files/browser/usr/local/bin/tars-browser` — browser 묶음의 실행 문(bash, CR-M1). Debian 래퍼(`/usr/bin/chromium`) 대신 진짜 실행 파일에
+  `--ozone-platform=wayland --disable-gpu --no-first-run --no-default-browser-check`를 붙여 exec한다. 묶음 없음 · uid 0 · Wayland 없음을 한 줄로 알리고 1.
+  `--no-first-run`을 빼면 새 프로필에 Debian의 `master_preferences`가 먹어 페이지 원점이 90픽셀 내려간다 — browser 체인의 좌표가 거기 기댄다.
+  `quick_check.sh`의 shellcheck 대상이다.
+- `browser/check.sh` — CR 체인(CR-M1). 설정 디스크 `user=` + 홈 디스크에 base · gpu · media · browser(display 체인 부팅 3의 모양), `CR_MEM` 기본 2048.
+  이미지 버전은 initrd 안 init 실행 파일의 글자(VERSION + 꼬리표)에서 읽는다(부팅이 하나라). 한글 상자는 잉크의 색 가짓수로 본다(두부와 가르는 것).
+  루트 `check.sh`의 `big_memory`가 기본 메모리 2048 이상인 체인(devtools · browser)을 한 줄(ISO 줄)에 묶는다.
 
 ## 기억
 

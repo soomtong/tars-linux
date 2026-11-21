@@ -42,6 +42,8 @@ sh_files+=(kernel/wifi/tars-wifi kernel/dictation/tars-dictate kernel/bluetooth/
 # TP-M11. 서버 서비스 템플릿 다섯 — 확장자 없이 묶음의 /etc/tars/services/에 들어간다.
 sh_files+=(devlayer/files/server/etc/tars/services/*)
 sh_files+=(devlayer/files/container/etc/tars/services/*)
+# CR-M1. 묶음 browser의 실행 문 — 확장자 없이 /usr/local/bin에 들어간다.
+sh_files+=(devlayer/files/browser/usr/local/bin/tars-browser)
 note "shellcheck ${#sh_files[@]} files"
 if shellcheck -x -P SCRIPTDIR -S style "${sh_files[@]}"; then
   :

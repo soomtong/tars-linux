@@ -213,7 +213,12 @@
   쓰고 있었다. 새 검사를 쓰기 전에 이름을 `rg`로 먼저 확인한다 — CS-M1은
   `ls`·`ls_i`·`lhit`~`lhit5`·`lmiss`·`lmiss2`를 미리 확인하고 썼고 한 번도 안
   부딪쳤다.
-
+- 개발 도구 층의 Debian 줄을 live 미러(`deb.debian.org`)에서 `=판`으로 고정하기(CR-M1) — 보안 판과 point release가 오면 미러가 옛 판을 내린다.
+  2026-11-21 point release 날 `libc6-dev=2.41-12+deb13u4` · `patch=2.8-2`가 사라졌고(캐시 없는 기계의 `make dev-layers`가 base에서 멈춘다), live로
+  다시 거둔 묶음은 libc6 · libssl `+deb13u5`가 initrd(`+deb13u4`)와 달라 verify에 걸렸다. `php8.4-cli=8.4.27`도 그 주에 내려갔다. 매번 "버전을 낼 때
+  올린다"로 넘겼지만 캐시가 가렸을 뿐이다 — snapshot의 한 시각에서 거둔다(`lessons.md` "개발 도구 층의 Debian 줄은 snapshot의 한 시각에서 거둔다").
+- noto-cjk 같은 글꼴이 실렸는지를 상자 안 잉크의 수로 보기(CR-M1) — 두부(빈 사각형)도 비슷한 수의 잉크를 낸다(같은 상자에서 글자 2,619 · 두부 2,649).
+  잉크의 색 가짓수(안티에일리어스 — 글자 177 · 두부 23)로 가른다(`browser/check.sh`).
 
 ## 조사용 Zig 프로그램을 저장소 밖에서 돌리는 법
 

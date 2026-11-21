@@ -394,12 +394,27 @@ random: crng init done`으로 빨갰고(`wait_for_at`의 `ink=118$`), 같은 판
 함수(배터리의 `cellText`)가 있으면, 게이트의 기대 글자는 사람이 적지 않고 그 함수의 호스트 검사가 찍은 값이나 실측 줄에서
 베낀다. 판정 글자를 따옴표로 감싸 찍는 것(`cell=" 50%"`)도 같은 이유다 — 따옴표가 없으면 로그에서도 앞 공백이 안 보인다.
 
-### 클라우드 세션(amd64)에서 체인을 돌린다 (PT-M0)
+### 개발 도구 층의 Debian 줄은 snapshot의 한 시각에서 거둔다 (CR-M1)
 
-claude.ai의 클라우드 세션은 amd64 · KVM 없음이고, ghcr의 이미지는 arm64 전용이라 `exec format error`로 안 돈다. Dockerfile의 호스트 몫
-둘(크로스 gcc 패키지 이름 · zig tarball)만 바꾼 사본을 scratchpad에서 구우면 체인 단독이 선다(tools 2분 50초 남짓, 커널 처음 빌드는 따로).
-세션 프록시를 지나는 법(CA 층 · Docker Hub 429 · ghostty archive · zig 의존 캐시)은 기억 `project_partition_tools`의 "배운 것" 4가 절차다.
-`devtools` · `pm` · `mise`처럼 바깥 망 · 묶음이 필요한 체인과 루트 게이트 전체는 거기서 끝까지 못 간다 — 사용자의 맥에서 돈다.
+`devlayer/harvest.sh`는 `deb.debian.org`(live)가 아니라 `snapshot.debian.org`의 한 시각에서 거둔다. 시각과 그 시각의 InRelease 셋
+(`debian trixie` · `debian trixie-updates` · `debian-security trixie-security`)의 sha256은 `devlayer/snapshot`에 있다(첫 줄 시각, 다음 줄마다
+`sha256  archive  suite`).
+
+- 시각은 "manifest의 모든 debian 판이 함께 있는 가장 늦은 시각"이다. 20261121T000000Z에는 `php8.4-cli=8.4.27`이 없어(11-19 18시에 8.4.28) lang-script가
+  `Version … was not found`로 멈췄다 — 시각을 20261119T120000Z로 당겼다. 고를 때는 manifest의 debian 줄을 그 시각의 `apt-cache madison`과 하나씩
+  대조한다(빠진 줄이 0인지). 시각 · `libc6-dev` 줄 · 개발 컨테이너 이미지(initrd의 glibc)는 함께 올린다 — 어긋나면 verify가 `differs from initrd
+  …/libc.so.6`으로 멈춘다.
+- security · updates의 Release는 약 1주로 만료된다. 지난 시각이면 apt가 `is expired (invalid since …)`로 rc 100 — sources 줄에
+  `[check-valid-until=no]`를 둔다. 서명 + 만료 끔은 freeze를 못 막는다(중간자가 서명이 유효한 더 옛 InRelease를 내준다) — 그래서 받은 InRelease
+  셋의 sha256을 `devlayer/snapshot`의 값과 깔기 전에 대조한다. InRelease가 색인의 해시를, 색인이 `.deb`의 해시를 담아 폐포 전체가 내용으로 고정된다.
+  snapshot은 시각을 내용 주소(`/file/<sha1>/InRelease`)로 302 돌려 늘 같은 바이트를 내고, apt는 그것을 바이트 그대로
+  `/var/lib/apt/lists/snapshot.debian.org_archive_<archive>_<시각>_dists_<suite>_InRelease`에 둔다. 새 시각을 시험할 때는
+  `make dev-layers DEV_SNAPSHOT=<시각>` — 대조할 값이 없어 구한 셋을 `harvest> snapshot … NOT PINNED …` 줄로 찍고 진행한다(그 줄을 파일에 옮겨 적는다).
+- `harvest.sh` · `harvest-skip.tsv` · `devlayer/snapshot`을 고치면 모든 debian 묶음의 거두기 캐시 해시가 바뀐다 — debian 묶음 아홉을 다시 거둔다
+  (snapshot에서 약 21분, base 하나가 약 6분). upstream만인 묶음은 그대로다.
+- vendor-repo(`repos.tsv`)는 시각 밖이라 live다. 같은 판 문자열의 짝이 바뀐다 — pgdg가 18.7을 다시 지어(`+2` → `+5`) `postgresql-client-18`의 후보를
+  올리자 `postgresql-18=+2`가 `held broken packages`로 멈췄다(옛 캐시가 가려 왔다). 짝(`postgresql-client-18` · `libpq5` · `postgresql-common` ·
+  `postgresql-client-common`)을 manifest에 같은 판으로 적어 풀었다.
 
 ## 범용 명령
 

@@ -129,7 +129,7 @@ help:
 	@echo "      개발 도구 층의 묶음(DEV_LAYERS, 기본 base container docs editor lang-beam lang-jvm lang-native lang-script media server util fakesteak gpu doom browser)을 devlayer/build/<묶음>.sqfs로 굽는다."
 	@echo "      debian 줄은 snapshot.debian.org의 한 시각(devlayer/snapshot, DEV_SNAPSHOT=…으로 바꿈)에서 거둔다 — 시각을 바꾸면 모두 다시 거둔다."
 	@echo "      devlayer/manifest.toml이 출처다(검사해 devlayer/build/manifest.tsv로). 받은 것은 devlayer/cache/ — 게이트의 clean이 안 지운다."
-	@echo "      DEV_MEASURE=1이면 압축 넷을 잰다. make gate와 make check CHAIN=devtools · display · wayland가 먼저 부른다(캐시면 수십 초)"
+	@echo "      DEV_MEASURE=1이면 압축 넷을 잰다. make gate와 make check CHAIN=devtools · display · wayland · browser가 먼저 부른다(캐시면 수십 초)"
 	@echo
 	@echo "설정 디스크 ($(CONFIG_DISK)) — 게스트가 기억하는 자리"
 	@echo
@@ -343,7 +343,7 @@ gate: container dev-layers
 
 # 체인 하나. CHAIN을 안 주면 무엇을 줄지 알려주고 멈춘다 — 조용히 루트
 # 게이트를 돌리면 10분을 기다린 뒤에야 잘못 친 것을 알게 된다.
-check: container $(if $(filter devtools display wayland,$(CHAIN)),dev-layers)
+check: container $(if $(filter devtools display wayland browser,$(CHAIN)),dev-layers)
 	@test -n "$(CHAIN)" || { echo "make check CHAIN=<chain> — $(CHAINS) 중 하나"; exit 1; }
 	@test -x "$(CHAIN)/check.sh" || { echo "$(CHAIN)/check.sh 가 없다"; exit 1; }
 	$(IN_CONTAINER) 'mkdir -p /tmp/gate-logs/$(CHAIN) && (cd $(CHAIN) && TARS_RENDER_VERIFY=1 TMPDIR=/tmp/gate-logs/$(CHAIN) ./check.sh); rc=$$?; mkdir -p out/gate-logs && rm -rf out/gate-logs/$(CHAIN) && mv /tmp/gate-logs/$(CHAIN) out/gate-logs/ && echo "logs moved to out/gate-logs/$(CHAIN)"; exit $$rc'
