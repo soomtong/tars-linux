@@ -83,7 +83,7 @@ pub fn build(b: *std.Build) void {
     const amd64_libdir: std.Build.LazyPath = .{ .cwd_relative = b.pathJoin(&.{ amd64_sysroot, "usr/lib/x86_64-linux-gnu" }) };
 
     // ── 층 모듈(R-ARCH-1) ──────────────────────────────────────────────
-    const layers = layerModules(b, target, guest_optimize, glyph, z2d);
+    const layers = layerModules(b, target, guest_optimize, theme, glyph, z2d);
     const tk_window = b.createModule(.{
         .root_source_file = b.path("src/window/window.zig"),
         .target = target,
@@ -108,6 +108,7 @@ pub fn build(b: *std.Build) void {
     tk.addImport("tk_ca", layers.ca);
     tk.addImport("tk_input", layers.input);
     tk.addImport("tk_kit", layers.kit);
+    tk.addImport("tk_tokens", layers.tokens);
     tk.addIncludePath(terminal_vendor);
     tk.addCSourceFile(.{ .file = stb_impl, .flags = &.{} });
     tk.linkSystemLibrary("m", .{});
@@ -127,7 +128,7 @@ pub fn build(b: *std.Build) void {
     // ── 호스트 검사 ─────────────────────────────────────────────────────
     // 창 층의 Wayland 부분은 빼고 CG · CA · kit과 창 층의 순수 부분(버퍼 나이 `window/age.zig` · 키 반복 `window/repeat.zig`) — 판은
     // 메모리 배열이다(R-ARCH-4).
-    const host_layers = layerModules(b, host_target, optimize, glyph_host, z2d_host);
+    const host_layers = layerModules(b, host_target, optimize, theme, glyph_host, z2d_host);
     const test_mod = b.createModule(.{
         .root_source_file = b.path("src/tk_test.zig"),
         .target = host_target,
@@ -140,6 +141,7 @@ pub fn build(b: *std.Build) void {
     test_mod.addImport("tk_ca", host_layers.ca);
     test_mod.addImport("tk_input", host_layers.input);
     test_mod.addImport("tk_kit", host_layers.kit);
+    test_mod.addImport("tk_tokens", host_layers.tokens);
     test_mod.addIncludePath(terminal_vendor);
     test_mod.addCSourceFile(.{ .file = stb_impl, .flags = &.{} });
     test_mod.linkSystemLibrary("m", .{});
@@ -156,9 +158,10 @@ fn layerModules(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.lang.Optimize,
+    theme: *std.Build.Module,
     glyph: *std.Build.Module,
     z2d: *std.Build.Module,
-) struct { geom: *std.Build.Module, input: *std.Build.Module, cg: *std.Build.Module, ca: *std.Build.Module, kit: *std.Build.Module } {
+) struct { geom: *std.Build.Module, input: *std.Build.Module, cg: *std.Build.Module, ca: *std.Build.Module, kit: *std.Build.Module, tokens: *std.Build.Module } {
     const geom = b.createModule(.{ .root_source_file = b.path("src/geom.zig"), .target = target, .optimize = optimize });
     const input = b.createModule(.{ .root_source_file = b.path("src/input.zig"), .target = target, .optimize = optimize });
     const cg = b.createModule(.{ .root_source_file = b.path("src/cg/cg.zig"), .target = target, .optimize = optimize });
@@ -168,12 +171,16 @@ fn layerModules(
     const ca = b.createModule(.{ .root_source_file = b.path("src/ca/ca.zig"), .target = target, .optimize = optimize });
     ca.addImport("tk_geom", geom);
     ca.addImport("tk_cg", cg);
+    // 테마 토큰(R-CA-5) — 앱과 위젯이 함께 부른다. 순수 상수라 층 밖이다.
+    const tokens = b.createModule(.{ .root_source_file = b.path("src/tokens.zig"), .target = target, .optimize = optimize });
+    tokens.addImport("theme", theme);
     const kit = b.createModule(.{ .root_source_file = b.path("src/kit/kit.zig"), .target = target, .optimize = optimize });
+    kit.addImport("tk_tokens", tokens);
     kit.addImport("tk_geom", geom);
     kit.addImport("tk_input", input);
     kit.addImport("tk_cg", cg);
     kit.addImport("tk_ca", ca);
-    return .{ .geom = geom, .input = input, .cg = cg, .ca = ca, .kit = kit };
+    return .{ .geom = geom, .input = input, .cg = cg, .ca = ca, .kit = kit, .tokens = tokens };
 }
 
 /// C 헤더 번역(terminal/build.zig의 같은 이름 함수와 같다 — ZU-M1).

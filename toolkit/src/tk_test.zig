@@ -14,6 +14,8 @@
 //! 8 입력 · 키 반복 — evdev 표 · 수정키 비트, 반복 상태 기계를 지어낸 시각으로(TK-M2 단계 A).
 //! 9 hit-test — 겹침(뒤 자식이 위) · 넘친 자식 · masks · hidden · 불투명도 0 · 경계.
 //! 10 kit — responder chain(받음 · 부모로 · unhandled), Tab · Shift+Tab 순환(숨은 뷰 건너뜀), 클릭 포커스 · 휠 라우팅 · 창 포커스.
+//! 11 리스트(TK-M2 단계 B) — 행 수 100 · 10만 · 1,000만에서 같은 조작열의 선택 · 오프셋 · 더티 표가 같다, 세는 데이터 소스(통째 ≤ 보이는 행 + 1,
+//!    선택 이동은 0번, 부분은 clip과 겹치는 행만), 부분 = 통째 바이트 비교(무작위 조작, 리스트 둘), 끝 경계, 강조 애니메이션 · 색 · 휠 · 클릭.
 
 const std = @import("std");
 const theme = @import("theme");
@@ -204,6 +206,7 @@ pub fn main(init: std.process.Init) !u8 {
     inputAndRepeat();
     try hitTests(alloc);
     try kitTests(alloc);
+    try listTests(io, alloc, &f13, &lut1);
 
     if (failures != 0) {
         std.debug.print("tk_test: {d} failure(s)\n", .{failures});
@@ -511,7 +514,7 @@ fn stacks(alloc: std.mem.Allocator) !void {
 // ── 7 토큰 ───────────────────────────────────────────────────────────
 
 fn isSizeName(comptime name: []const u8) bool {
-    for ([_][]const u8{ "TK_RADIUS", "TK_SPACE", "TK_PADDING", "TK_FONT" }) |p| {
+    for ([_][]const u8{ "TK_RADIUS", "TK_SPACE", "TK_PADDING", "TK_FONT", "TK_ROW" }) |p| {
         if (std.mem.startsWith(u8, name, p)) return true;
     }
     return false;
@@ -835,4 +838,281 @@ fn kitTests(alloc: std.mem.Allocator) !void {
     check(vroot.wfocus == false and la_v.wfocus == false and lh_v.wfocus == false and !root.window_focused, "window focus out reaches every view", .{});
     root.handle(.{ .focus = true });
     check(lc_v.wfocus == true and root.window_focused, "window focus in reaches every view", .{});
+}
+
+// ── 11 리스트 ───────────────────────────────────────────────────────
+
+const LW: u32 = 616;
+const LH: u32 = 752;
+const LWHOLE: Rect = .{ .x = 0, .y = 0, .w = LW, .h = LH };
+
+/// 행을 세며 그리는 데이터 소스(레이블은 셈으로 — 데모와 같은 꼴).
+const CountSource = struct {
+    n: usize,
+    face: *text.Face,
+    calls: usize = 0,
+
+    fn count(ctx: *anyopaque) usize {
+        const self: *CountSource = @ptrCast(@alignCast(ctx));
+        return self.n;
+    }
+    fn drawRow(ctx: *anyopaque, p: *Painter, index: usize, rect: Rect, state: kit.RowState) anyerror!void {
+        const self: *CountSource = @ptrCast(@alignCast(ctx));
+        self.calls += 1;
+        var buf: [48]u8 = undefined;
+        const label = std.fmt.bufPrint(&buf, "문서 {d:0>6}.txt", .{index}) catch return;
+        const base: i32 = rect.y + @as(i32, @intFromFloat(@round((@as(f32, @floatFromInt(rect.h)) + self.face.ascent - self.face.descent) / 2)));
+        _ = try p.drawGlyphs(self.face, @as(f32, @floatFromInt(rect.x)) + 16, base, label, theme.TK_TEXT, state.alpha);
+    }
+    fn source(self: *CountSource) kit.ListSource {
+        return .{ .ctx = self, .count = count, .drawRow = drawRow };
+    }
+};
+
+const ROOT_VT: kit.VTable = .{};
+
+/// 데모의 리스트 화면과 같은 모양: 616 × 752, list1(416) · list2(200), 루트 뷰, first responder list1, 창 포커스 있음.
+const ListEnv = struct {
+    tree: ca.Tree,
+    root_layer: *ca.Layer = undefined,
+    root_view: kit.View = undefined,
+    root: kit.Root = undefined,
+    srcs: [2]CountSource,
+    lists: [2]kit.List = undefined,
+    alloc: std.mem.Allocator,
+
+    fn init(self: *ListEnv, alloc: std.mem.Allocator, face: *text.Face, n1: usize, n2: usize, anim_ms: u32) !void {
+        self.* = .{ .tree = ca.Tree.init(alloc), .srcs = .{ .{ .n = n1, .face = face }, .{ .n = n2, .face = face } }, .alloc = alloc };
+        const t = &self.tree;
+        self.root_layer = try t.create(.{ .frame = .{ .x = 0, .y = 0, .w = LW, .h = LH }, .background = theme.TK_BG });
+        try self.lists[0].init(t, "list1", self.srcs[0].source(), anim_ms);
+        try self.lists[1].init(t, "list2", self.srcs[1].source(), anim_ms);
+        try self.root_layer.addChild(self.lists[0].view.layer);
+        try self.root_layer.addChild(self.lists[1].view.layer);
+        t.setRoot(self.root_layer);
+        const stack: ca.Stack = .{ .axis = .horizontal, .items = &.{
+            .{ .layer = self.lists[0].view.layer, .flex = 1 },
+            .{ .layer = self.lists[1].view.layer, .size = 200 },
+        } };
+        stack.layout(.{ .x = 0, .y = 0, .w = LW, .h = LH });
+        self.root_view = .{ .layer = self.root_layer, .vtable = &ROOT_VT, .ctx = self, .name = "root" };
+        self.root = kit.Root.init(t);
+        self.root.setView(&self.root_view);
+        try self.root_view.addChild(alloc, &self.lists[0].view);
+        try self.root_view.addChild(alloc, &self.lists[1].view);
+        for (&self.lists) |*l| l.sync();
+        _ = self.root.setFirstResponder(&self.lists[0].view);
+        self.root.handle(.{ .focus = true });
+        _ = t.takeDirty();
+    }
+
+    fn deinit(self: *ListEnv) void {
+        for (&self.lists) |*l| l.deinit(self.alloc);
+        self.root_view.deinit(self.alloc);
+        self.tree.deinit();
+    }
+
+    fn key(self: *ListEnv, code: u32) ?Rect {
+        self.root.handle(.{ .key = .{ .code = code, .key = input.keyFromCode(code), .pressed = true } });
+        return self.tree.takeDirty();
+    }
+};
+
+fn lrender(io: std.Io, alloc: std.mem.Allocator, t: *ca.Tree, pixels: []u32, scratch: []u32, clip: Rect, lut: *const [256]u8) !void {
+    var p = Painter.begin(io, alloc, pixels, LW, LH, scratch, clip, lut);
+    _ = try t.draw(&p);
+    p.finish();
+}
+
+const Step = struct { sel: usize, offset: u64, dirty: ?Rect };
+
+fn rectEql(a: ?Rect, b: ?Rect) bool {
+    if (a == null or b == null) return a == null and b == null;
+    return Rect.eql(a.?, b.?);
+}
+
+fn lpx(pixels: []const u32, x: u32, y: u32) u32 {
+    return pixels[y * LW + x] & 0x00FFFFFF;
+}
+
+fn listTests(io: std.Io, alloc: std.mem.Allocator, face: *text.Face, lut: *const [256]u8) !void {
+    const pixels = try alloc.alloc(u32, LW * LH);
+    defer alloc.free(pixels);
+    const ref = try alloc.alloc(u32, LW * LH);
+    defer alloc.free(ref);
+    const scratch = try alloc.alloc(u32, LW * LH);
+    defer alloc.free(scratch);
+
+    // ── 행 수에 무관한 표 ──
+    const ops = [_]u32{ input.KEY_DOWN, input.KEY_DOWN, input.KEY_DOWN, input.KEY_DOWN, input.KEY_DOWN, input.KEY_DOWN, input.KEY_DOWN, input.KEY_DOWN, input.KEY_DOWN, input.KEY_DOWN, input.KEY_PAGEDOWN, input.KEY_PAGEDOWN, input.KEY_UP, input.KEY_PAGEUP, input.KEY_HOME };
+    var table: [3][ops.len]Step = undefined;
+    const counts = [_]usize{ 100, 100_000, 10_000_000 };
+    var end_ok = true;
+    var calls_sel: usize = 0;
+    var whole_calls: [3]usize = undefined;
+    for (counts, 0..) |n, ci| {
+        var env: ListEnv = undefined;
+        try env.init(alloc, face, n, 50, 0);
+        defer env.deinit();
+        const l = &env.lists[0];
+        env.srcs[0].calls = 0;
+        for (ops, 0..) |code, k| {
+            const d = env.key(code);
+            table[ci][k] = .{ .sel = l.selected, .offset = l.offset, .dirty = d };
+        }
+        _ = env.key(input.KEY_END);
+        const want_off = @as(u64, n) * 24 - LH;
+        end_ok = end_ok and l.selected == n - 1 and l.offset == want_off and l.first() == want_off / 24 and l.visibleEnd() == n;
+        calls_sel += env.srcs[0].calls;
+        env.srcs[0].calls = 0;
+        try lrender(io, alloc, &env.tree, pixels, scratch, LWHOLE, lut);
+        whole_calls[ci] = env.srcs[0].calls;
+    }
+    var same = true;
+    for (1..3) |ci| for (0..ops.len) |k| {
+        const a = table[0][k];
+        const b = table[ci][k];
+        same = same and a.sel == b.sel and a.offset == b.offset and rectEql(a.dirty, b.dirty);
+    };
+    check(same, "100 / 100,000 / 10,000,000 rows: the same keys give the same selection, offset and dirty table ({d} steps)", .{ops.len});
+    const t9 = table[0][9];
+    check(t9.sel == 10 and t9.offset == 0 and rectEql(t9.dirty, .{ .x = 0, .y = 216, .w = 416, .h = 48 }), "after 10 downs: sel 10, offset 0, last dirty = rows 9 and 10 (0,216 416x48)", .{});
+    const t10 = table[0][10];
+    check(t10.sel == 40 and t10.offset == 40 * 24 + 24 - LH and rectEql(t10.dirty, .{ .x = 0, .y = 0, .w = 416, .h = 752 }), "PgDn moves 30 rows (31 visible - 1) and scrolls minimally: sel 40, offset {d}, dirty = the whole list", .{t10.offset});
+    const t14 = table[0][14];
+    check(t14.sel == 0 and t14.offset == 0, "Home: sel 0, offset 0", .{});
+    check(end_ok, "End: sel n-1, offset n*24-752, first = offset/24, visible end = n (all three counts)", .{});
+    check(calls_sel == 0, "moving the selection and End call drawRow 0 times ({d})", .{calls_sel});
+    check(whole_calls[0] <= 33 and whole_calls[0] == whole_calls[1] and whole_calls[1] == whole_calls[2], "a whole draw calls drawRow {d} / {d} / {d} times (<= ceil(752/24)+1 = 33, independent of the row count)", .{ whole_calls[0], whole_calls[1], whole_calls[2] });
+
+    // ── 부분 그리기의 행 수 · 색 · 휠 · 클릭 · Tab ──
+    {
+        var env: ListEnv = undefined;
+        try env.init(alloc, face, 100_000, 50, 0);
+        defer env.deinit();
+        try lrender(io, alloc, &env.tree, pixels, scratch, LWHOLE, lut);
+        const d = env.key(input.KEY_DOWN).?;
+        env.srcs[0].calls = 0;
+        env.srcs[1].calls = 0;
+        try lrender(io, alloc, &env.tree, pixels, scratch, d, lut);
+        check(env.srcs[0].calls == 2 and env.srcs[1].calls == 0, "a down's partial draw (0,0 416x48) calls drawRow only for the 2 rows in the clip ({d}, list2 {d})", .{ env.srcs[0].calls, env.srcs[1].calls });
+        check(lpx(pixels, 400, 30) == theme.TK_SELECTION and lpx(pixels, 400, 10) == theme.TK_BG and lpx(pixels, 600, 10) == theme.TK_SELECTION_INACTIVE, "focused list1 row 1 is TK_SELECTION, row 0 the background, list2's row 0 TK_SELECTION_INACTIVE", .{});
+        // Tab → list2, 강조색이 바뀐다.
+        env.root.handle(.{ .key = .{ .code = input.KEY_TAB, .key = .tab, .pressed = true } });
+        const dt = env.tree.takeDirty();
+        try lrender(io, alloc, &env.tree, pixels, scratch, dt.?, lut);
+        check(env.root.first == &env.lists[1].view and lpx(pixels, 400, 30) == theme.TK_SELECTION_INACTIVE and lpx(pixels, 600, 10) == theme.TK_SELECTION, "Tab: list2 is first responder, list1's highlight dims, list2's row 0 is TK_SELECTION", .{});
+        env.root.handle(.{ .focus = false });
+        _ = env.tree.takeDirty();
+        check(env.lists[1].highlight.background == theme.TK_SELECTION_INACTIVE, "window focus out dims the focused list too", .{});
+        env.root.handle(.{ .focus = true });
+        env.root.handle(.{ .key = .{ .code = input.KEY_TAB, .key = .tab, .pressed = true, .mods = .{ .shift = true } } });
+        check(env.root.first == &env.lists[0].view, "Shift+Tab back to list1", .{});
+        // 휠: 포인터 아래 리스트, 칸당 3행. 선택은 그대로.
+        env.root.handle(.{ .scroll = .{ .dy = 10, .discrete = 1, .x = 100, .y = 100 } });
+        check(env.lists[0].offset == 72 and env.lists[0].selected == 1, "wheel one notch down over list1: offset 72, selection stays 1", .{});
+        env.root.handle(.{ .scroll = .{ .dy = 10, .discrete = 1, .x = 500, .y = 100 } });
+        check(env.lists[1].offset == 72 and env.lists[0].offset == 72, "wheel over list2 (50 rows = 1200 > 752) scrolls list2 only: offset {d}", .{env.lists[1].offset});
+        env.root.handle(.{ .scroll = .{ .dy = -30, .discrete = -3, .x = 100, .y = 100 } });
+        check(env.lists[0].offset == 0, "wheel up past the top clamps to 0", .{});
+        env.root.handle(.{ .scroll = .{ .dy = 10, .discrete = 1, .x = 100, .y = 100 } });
+        // 클릭: (100, 100) → 행 (72 + 100) / 24 = 7.
+        env.root.handle(.{ .button = .{ .code = input.BTN_LEFT, .pressed = true, .x = 100, .y = 100 } });
+        check(env.lists[0].selected == 7 and env.lists[0].offset == 72, "click at y 100 with offset 72 selects row 7", .{});
+        env.root.handle(.{ .button = .{ .code = input.BTN_LEFT, .pressed = true, .x = 500, .y = 30 } });
+        check(env.root.first == &env.lists[1].view and env.lists[1].selected == 4, "click on list2 at y 30 (offset 72 -> row 4) focuses list2 and selects row 4", .{});
+        // Super+↓는 리스트의 것이 아니다.
+        const before = env.lists[1].selected;
+        env.root.handle(.{ .key = .{ .code = input.KEY_DOWN, .key = .down, .pressed = true, .mods = .{ .super = true } } });
+        check(env.lists[1].selected == before, "Super+Down is not the list's", .{});
+        // 막대: 10만 행이면 최소 높이 24, End면 바닥.
+        _ = env.root.setFirstResponder(&env.lists[0].view);
+        _ = env.key(input.KEY_END);
+        const bf = env.lists[0].bar.frame;
+        check(!env.lists[0].bar.hidden and bf.h == 24 and bf.y + bf.h == 752 and bf.x == 410, "the scroll bar is 6x24 at the bottom after End (x {d}, y {d})", .{ bf.x, bf.y });
+        _ = env.key(input.KEY_HOME);
+        check(env.lists[0].bar.frame.y == 0, "Home puts the bar at the top", .{});
+    }
+
+    // ── 강조 애니메이션 ──
+    {
+        var env: ListEnv = undefined;
+        try env.init(alloc, face, 1000, 50, 120);
+        defer env.deinit();
+        _ = env.key(input.KEY_DOWN);
+        const t0: u64 = 5 * std.time.ns_per_s;
+        const ms = std.time.ns_per_ms;
+        env.tree.tick(t0);
+        env.tree.tick(t0 + 60 * ms);
+        const mid = env.lists[0].highlight.frame.y;
+        env.tree.tick(t0 + 130 * ms);
+        check(mid > 0 and mid < 24 and env.lists[0].highlight.frame.y == 24 and !env.tree.animating(), "the highlight slides to row 1 over 120 ms (mid y {d:.1}, end 24)", .{mid});
+        // 스크롤이 생기는 이동은 바로.
+        _ = env.key(input.KEY_END);
+        check(!env.tree.animating() and env.lists[0].highlight.frame.y == 752 - 24, "a move that scrolls places the highlight at once (no animation)", .{});
+    }
+
+    // ── 부분 = 통째(무작위 조작, 리스트 둘) ──
+    {
+        var env: ListEnv = undefined;
+        try env.init(alloc, face, 100_000, 50, 0);
+        defer env.deinit();
+        try lrender(io, alloc, &env.tree, pixels, scratch, LWHOLE, lut);
+        var prng = std.Random.DefaultPrng.init(0x7A11);
+        const r = prng.random();
+        const keys = [_]u32{ input.KEY_DOWN, input.KEY_DOWN, input.KEY_DOWN, input.KEY_UP, input.KEY_PAGEDOWN, input.KEY_PAGEUP, input.KEY_HOME, input.KEY_END, input.KEY_TAB };
+        var mismatch: u32 = 0;
+        var partial: u32 = 0;
+        var steps: u32 = 0;
+        while (steps < 300) : (steps += 1) {
+            switch (r.uintLessThan(u32, 6)) {
+                0, 1, 2 => {
+                    const code = keys[r.uintLessThan(usize, keys.len)];
+                    env.root.handle(.{ .key = .{ .code = code, .key = input.keyFromCode(code), .pressed = true, .mods = .{ .shift = r.boolean() and code == input.KEY_TAB } } });
+                },
+                3 => env.root.handle(.{ .scroll = .{ .dy = 0, .discrete = r.intRangeAtMost(i32, -2, 2), .x = @floatFromInt(r.uintLessThan(u32, LW)), .y = @floatFromInt(r.uintLessThan(u32, LH)) } }),
+                4 => env.root.handle(.{ .button = .{ .code = input.BTN_LEFT, .pressed = true, .x = @floatFromInt(r.uintLessThan(u32, LW)), .y = @floatFromInt(r.uintLessThan(u32, LH)) } }),
+                else => env.root.handle(.{ .focus = r.uintLessThan(u32, 4) != 0 }),
+            }
+            const d = env.tree.takeDirty() orelse continue;
+            const clip = Rect.intersect(d, LWHOLE) orelse continue;
+            if (!Rect.eql(clip, LWHOLE)) partial += 1;
+            try lrender(io, alloc, &env.tree, pixels, scratch, clip, lut);
+            try lrender(io, alloc, &env.tree, ref, scratch, LWHOLE, lut);
+            if (!std.mem.eql(u32, pixels, ref)) mismatch += 1;
+        }
+        check(mismatch == 0 and partial > 50, "list partial = whole: 300 random steps on two lists, {d} partial redraws, {d} mismatch(es)", .{ partial, mismatch });
+    }
+
+    // ── 끝 경계 ──
+    {
+        var env: ListEnv = undefined;
+        try env.init(alloc, face, 0, 1, 0);
+        defer env.deinit();
+        const d0 = env.key(input.KEY_DOWN);
+        const d1 = env.key(input.KEY_END);
+        env.srcs[0].calls = 0;
+        try lrender(io, alloc, &env.tree, pixels, scratch, LWHOLE, lut);
+        check(d0 == null and d1 == null and env.srcs[0].calls == 0 and env.lists[0].highlight.hidden and env.lists[0].bar.hidden, "0 rows: keys change nothing, nothing drawn, no highlight, no bar", .{});
+        env.root.handle(.{ .button = .{ .code = input.BTN_LEFT, .pressed = true, .x = 100, .y = 100 } });
+        check(env.lists[0].selected == 0 and env.tree.takeDirty() == null, "0 rows: a click selects nothing", .{});
+        _ = env.root.setFirstResponder(&env.lists[1].view);
+        _ = env.tree.takeDirty();
+        const u = env.key(input.KEY_UP);
+        const dn = env.key(input.KEY_DOWN);
+        check(u == null and dn == null and env.lists[1].selected == 0 and env.lists[1].bar.hidden, "1 row: up and down make no dirty, no bar", .{});
+    }
+    {
+        var env: ListEnv = undefined;
+        try env.init(alloc, face, 5, 50, 0);
+        defer env.deinit();
+        const top = env.key(input.KEY_UP);
+        _ = env.key(input.KEY_END);
+        const sel_end = env.lists[0].selected;
+        const off = env.lists[0].offset;
+        const bottom = env.key(input.KEY_DOWN);
+        check(top == null and bottom == null and sel_end == 4 and off == 0 and env.lists[0].bar.hidden, "5 rows (shorter than the view): up at the top and down at the bottom make no dirty, End = row 4, offset 0, no bar", .{});
+        const pd = env.key(input.KEY_PAGEUP);
+        check(env.lists[0].selected == 0 and pd != null, "PgUp from row 4 goes to row 0", .{});
+    }
 }

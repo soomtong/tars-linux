@@ -213,6 +213,17 @@ pub const Tree = struct {
         });
     }
 
+    /// 레이어 `l`의 속성 `prop` 애니메이션을 지금 값 그대로 멈춘다(알림 없음). 값을 바로 넣으려는 쪽이 먼저 부른다 — 안 부르면 도는
+    /// 애니메이션이 다음 tick에 값을 다시 덮는다.
+    pub fn cancel(self: *Tree, l: *Layer, prop: anim.Prop) void {
+        for (self.anims.items, 0..) |a, i| {
+            if (a.layer == l and std.meta.activeTag(a.to) == prop) {
+                _ = self.anims.swapRemove(i);
+                return;
+            }
+        }
+    }
+
     pub fn animating(self: *const Tree) bool {
         return self.anims.items.len != 0;
     }

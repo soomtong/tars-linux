@@ -76,6 +76,12 @@ pub const FocusHook = struct {
     on: *const fn (ctx: *anyopaque, view: ?*View) void,
 };
 
+/// 클릭(왼쪽 누름)이 맞힌 뷰를 듣는 곳(`tk> hit x= y= view=` 줄 — TK-M2 plan 확정 14). 아무 뷰도 아니면 null.
+pub const HitHook = struct {
+    ctx: *anyopaque,
+    on: *const fn (ctx: *anyopaque, x: f32, y: f32, view: ?*View) void,
+};
+
 /// 체인 끝까지 아무도 안 받은 키.
 pub const Unhandled = struct {
     ctx: *anyopaque,
@@ -91,6 +97,7 @@ pub const Root = struct {
     ptr_x: f32 = 0,
     ptr_y: f32 = 0,
     hook: ?FocusHook = null,
+    hit_hook: ?HitHook = null,
     unhandled: ?Unhandled = null,
 
     pub fn init(tree: *Tree) Root {
@@ -153,7 +160,9 @@ pub const Root = struct {
     }
 
     fn mouseDown(self: *Root, b: input.ButtonEvent) void {
-        const hit = self.viewAt(b.x, b.y) orelse return;
+        const hit_v = self.viewAt(b.x, b.y);
+        if (self.hit_hook) |h| h.on(h.ctx, b.x, b.y, hit_v);
+        const hit = hit_v orelse return;
         var f: ?*View = hit;
         while (f) |x| : (f = x.parent) {
             if (x.acceptsFocus()) {

@@ -83,3 +83,5 @@ pub const TK_PADDING: u32 = 16;
 pub const TK_FONT_SMALL: u32 = 13;
 pub const TK_FONT: u32 = 14;
 pub const TK_FONT_TITLE: u32 = 17;
+/// 리스트 한 행의 높이(TK-M2 — 13 px 레이블 줄 높이 16에 위아래 4).
+pub const TK_ROW: u32 = 24;

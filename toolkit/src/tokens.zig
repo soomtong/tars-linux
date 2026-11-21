@@ -2,6 +2,8 @@
 //! 앱과 위젯은 theme을 직접 부르지 않고 이것을 부른다. 테마가 실행 중에 바뀌는 날(design 결정 7의 이벤트)에 고칠 자리가 여기 하나다.
 //!
 //! 색은 0xRRGGBB, 크기는 논리 픽셀(그릴 때 배율을 곱한다), 글꼴 크기는 em 픽셀.
+//!
+//! 모듈 `tk_tokens`(TK-M2) — 앱(`tk.tokens`)과 AppKit 층(`tk_kit`의 위젯)이 같은 것을 부른다.
 
 const theme = @import("theme");
 
@@ -24,6 +26,11 @@ pub const space = struct {
 };
 
 pub const padding: f32 = theme.TK_PADDING;
+
+pub const size = struct {
+    /// 리스트 한 행(TK-M2 plan 확정 9).
+    pub const row: f32 = theme.TK_ROW;
+};
 
 pub const radius = struct {
     pub const s: f32 = theme.TK_RADIUS_S;

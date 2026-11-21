@@ -5,7 +5,8 @@ cd "$(dirname "$0")" || exit 1
 
 # TK 체인 — TARS 툴킷(`toolkit/`, TK design)과 그 시험 앱 `tars-tk-demo`. 서른여섯번째 체인.
 #
-# 이 게이트가 증명하는 사슬(TK-M0 plan 확정 6의 판정 1~6, TK-M1 plan 확정 10의 판정 7~9 — 7~9는 5와 6 사이에 돈다):
+# 이 게이트가 증명하는 사슬(TK-M0 plan 확정 6의 판정 1~6, TK-M1 plan 확정 10의 판정 7~9 — 7~9는 5와 6 사이에 돈다, TK-M2 plan 확정 15의
+# 판정 10~14 — 9 뒤 같은 부팅에서 둘째 데모 `--list 100000`):
 #   셸에서 띄운 tars-tk-demo가 tars_menu_manager_v1을 bind하고(원래 모드) 셸 오른쪽 column이 되어 pane 크기(616 × 752)의
 #   configure를 받는다
 #   → 그 크기로 버퍼를 만들어 바탕 · 둥근 사각형(z2d) · 글자(stb_truetype, Pretendard 13 · 14 px)를 그린다 — screendump의
@@ -17,11 +18,22 @@ cd "$(dirname "$0")" || exit 1
 #   → 그 프레임마다 서버는 면의 사각형만 옮긴다 — `wl> blit`의 부분 줄이 다 면의 64 × 32(8)
 #   → Cmd+Q가 close를 보내 데모가 스스로 끝나고 셸이 전체 폭을 되찾는다(6)
 #   → 데모 로그: 그린 수 = commit 수 = 2 + 애니메이션 프레임 수 — 애니메이션이 끝난 뒤 2초 동안 그림도 commit도 없었다(9)
+#   → 둘째 데모(리스트 둘): `↓` 열 번 뒤 list1의 행 10이 강조(TK_SELECTION), 행 0 · 9 · 11은 바탕, 부분 blit은 통째가 아니다(10)
+#   → `End`: 10만 행의 맨 아래 행이 강조, 막대가 바닥(11)
+#   → `Home` 뒤 행 4를 클릭하면 그 행이 강조, 휠 아래 한 칸이 axis v=10 → 오프셋 72(12)
+#   → `Tab`이 list2로 포커스를 옮겨 list1의 강조가 흐린 색(TK_SELECTION_INACTIVE), list2의 행 0이 강조, `↓`가 list2를 움직이고
+#     `Shift+Tab`이 돌아온다(13)
+#   → `sendkey down 1000`(1초 누름)에 클라이언트 반복이 3번 이상 나고 선택이 그만큼 내려간다(14)
+#   → 둘째 데모 로그: `tk> list` · `hit` · `scroll` · `focus` 줄이 위 판정과 맞고, 그린 수 = commit 수
 #
 # 부팅 하나, NIC 없음, 디스크 없음 — 셸은 root(fish), 소켓은 `/run/user/0`. 키보드는 QEMU의 PS/2라 pc로 읽혀 Cmd가 Alt
-# 자리다(wayland 체인과 같다). monitor 포트는 45509 — 예약 범위(RP-M0)에서 45508(wayland) 다음이다(TK design 결정 12).
+# 자리다(wayland 체인과 같다). USB 마우스 하나(TK-M2 — 판정 12의 클릭 · 휠). HMP `mouse_move` · `mouse_button`이 그 장치로 가고 포인터는
+# 화면 가운데(640, 400 — 셸과 column 사이 구분선)에서 시작한다. 첫 움직임 전에는 화살표를 안 그리므로 판정 1~9의 덤프는 마우스가 없던 때와 같다. monitor 포트는 45509 — 예약 범위(RP-M0)에서 45508(wayland) 다음이다(TK design 결정 12).
 #
 # 화면 1280 × 800. 셸 하나 옆에 열린 app column은 x 644..1259 · y 20..771(616 × 752)이다(셸 0..635, 구분선 636..643).
+# 둘째 데모(리스트 화면, 같은 616 × 752 column): list1 x 644..1059 · list2 x 1060..1259, 행 i는 y 20 + 24 × i − 오프셋부터 24줄, 레이블은 행 왼쪽
+# 16부터(list1 x 660..), 막대는 리스트마다 오른쪽 6 px(list1 x 1054..1059). 판정 상자는 레이블과 막대를 피해 list1은 x 900..1039, list2는
+# x 1190..1249다. 클릭은 (700, 128)이라 화살표(그 자리에서 오른쪽 아래)가 상자에 안 걸린다.
 # 데모의 자리는 `toolkit/src/demo.zig` 머리의 논리 픽셀이다 — 사각형은 폭 320 · 높이 96 · 위 24 · 가운데 정렬이라 616 폭에서
 # 화면 x 792..1111 · y 44..139, 1240 폭(x 20부터)에서 x 480..799다. "안녕"은 사각형 가운데(952, 92) 언저리다. 면(64 × 32, 세로 스택의
 # 셋째 — 데모 머리 주석)은 1240 폭에서 x 20 + 588 = 608..671 · y 20 + 308 = 328..359, 가운데 (640, 344)다.
@@ -75,6 +87,9 @@ JUDGE_DIR="${TMPDIR:-/tmp}"
 TK_BG=202c3c
 TK_ACCENT=3c78d8
 TK_TEXT=f4f6f8
+# 둘째 데모의 색 — 흐린 선택(TK_SELECTION_INACTIVE) · 막대(TK_TEXT_DIM).
+TK_INACTIVE=465a78
+TK_DIM=98a4b4
 # 면 애니메이션의 길이(ms) — 도중의 screendump가 TCG의 지연에도 끝 색에 닿지 않을 만큼 길게, linear로(TK-M1 plan 확정 9).
 ANIM_MS=3000
 
@@ -136,6 +151,64 @@ type_text() {
   type_keys "${keys[@]}"
 }
 
+# 셈이 N이 될 때까지 기다린다. 15초.
+wait_for_count() {
+  local pattern="$1" want="$2" i n
+  for i in $(seq 1 150); do
+    n="$(count_log "$pattern")"
+    if [ "$n" -ge "$want" ]; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+
+# HMP 한 줄(마우스 · 누름 시간을 준 sendkey).
+hmp() {
+  echo "$1" >&3
+  sleep 0.05
+}
+
+last_at() {
+  tlog | grep -a 'terminal: pointer> at ' | tail -n 1 | tr -d '\r' | from_terminal
+}
+
+wait_for_at() {
+  local pattern="$1" i line
+  for i in $(seq 1 150); do
+    line="$(last_at)"
+    if grep -aE -- "$pattern" <<<"$line" > /dev/null; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+
+# 포인터를 (X, Y)로 — wayland 체인의 move_to와 같다. 첫 움직임 전에는 at 줄이 없으므로 가운데(640, 400)에서 시작한다.
+move_to() {
+  local tx="$1" ty="$2" line cx=640 cy=400 dx dy sx sy
+  line="$(last_at)"
+  if [ -n "$line" ]; then
+    cx="$(sed -E 's/.* x=([0-9]+) .*/\1/' <<<"$line")"
+    cy="$(sed -E 's/.* y=([0-9]+) .*/\1/' <<<"$line")"
+  fi
+  dx=$((tx - cx))
+  dy=$((ty - cy))
+  while [ "$dx" -ne 0 ] || [ "$dy" -ne 0 ]; do
+    sx=$dx; [ "$sx" -gt 100 ] && sx=100; [ "$sx" -lt -100 ] && sx=-100
+    sy=$dy; [ "$sy" -gt 100 ] && sy=100; [ "$sy" -lt -100 ] && sy=-100
+    hmp "mouse_move $sx $sy"
+    dx=$((dx - sx))
+    dy=$((dy - sy))
+  done
+  wait_for_at "^terminal: pointer> at x=${tx} y=${ty} "
+}
+
+# 상자 하나가 한 색인가(`bg=색 ink=0`). 이름 · 덤프 · 상자 · 색.
+want_box() {
+  local what="$1" shot="$2" x="$3" y="$4" w="$5" h="$6" colour="$7" got
+  got="$(ppm_ink "$shot" "$x" "$y" "$w" "$h")"
+  [ "$got" = "bg=${colour} ink=0" ] || report_failure "${what}: (${x},${y} ${w}x${h}) is not ${colour} (${got})"
+}
+
 # 픽셀 하나의 색(RRGGBB, 소문자).
 ppm_px() {
   local got
@@ -161,7 +234,7 @@ ppm_other() {
     print "$n\n";' "$@"
 }
 
-echo "=== boot: ${XRES}x${YRES}, no disk (root shell), PS/2 keyboard read as pc (Cmd = alt) ==="
+echo "=== boot: ${XRES}x${YRES}, no disk (root shell), PS/2 keyboard read as pc (Cmd = alt), a USB mouse ==="
 qemu-system-x86_64 \
   -nic none \
   -m "$GUEST_MEM" \
@@ -171,6 +244,7 @@ qemu-system-x86_64 \
   -vga none \
   -device virtio-gpu-pci,xres=${XRES},yres=${YRES} \
   -display none \
+  -usb -device usb-mouse,id=tkmouse \
   -serial file:"$LOG" \
   -monitor tcp:127.0.0.1:${MONITOR_PORT},server,nowait \
   -no-reboot &
@@ -372,8 +446,166 @@ echo "reference: partial draws (age 2, 64x32) $(printf '%s\n' "$TKLINES" | grep 
 echo "reference: whole blits $(printf '%s\n' "$BLITS" | grep -aE ' w=(616|1240) h=752 ' | sed 's/.*blit id=[0-9]* //' | tr '\n' ' ')"
 echo "reference: partial blits (64x32) $(printf '%s\n' "$BLITS" | grep -aF "$FACE_BLIT" | us_summary)"
 
+# ══ 둘째 데모 — 리스트 화면(TK-M2) ══════════════════════════════════════
+#
+# 판정 9 뒤 셸(전체 폭, 포커스)에서 띄운다. 새 column은 판정 1과 같은 616 × 752 자리다. 데모 로그(`/tmp/tk2.log`)는 끝에 꺼낸다.
+echo "=== (10) tars-tk-demo --list 100000: ten downs move list1's highlight to row 10 ==="
+type_text 'tars-tk-demo --list 100000 > /tmp/tk2.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' 2 || report_failure "(10) the list demo did not open a second column"
+ID2="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+' | tail -n 1 | sed 's/.*id=//')"
+[ "$ID2" != "$ID" ] || report_failure "(10) the list demo's column id is the first demo's (${ID})"
+wait_for_log "terminal: wl> configure id=${ID2} w=616 h=752 act=1" || report_failure "(10) no 'wl> configure id=${ID2} w=616 h=752 act=1'"
+wait_for_log "terminal: wl> commit id=${ID2} buf=616x752 " || report_failure "(10) the list demo never committed a 616x752 buffer"
+sleep 1.5
+SHOT10A="${SCREENS_DIR}/list-first.ppm"
+screendump "$SHOT10A" || report_failure "(10) screendump did not write ${SHOT10A}"
+want_box "(10) list1 row 0 at start" "$SHOT10A" 900 22 140 20 "$TK_ACCENT"
+want_box "(10) list2 row 0 at start (not focused)" "$SHOT10A" 1190 22 60 20 "$TK_INACTIVE"
+DOWN="terminal: wl> key code=108 state=1 to=${ID2}"
+for _ in $(seq 1 10); do type_keys down; done
+wait_for_count "$DOWN" 10 || report_failure "(10) the server did not send ten downs ($(count_log "$DOWN"))"
+sleep 1
+SHOT10="${SCREENS_DIR}/list-down10.ppm"
+screendump "$SHOT10" || report_failure "(10) screendump did not write ${SHOT10}"
+want_box "(10) list1 row 10 (y 260..283)" "$SHOT10" 900 262 140 20 "$TK_ACCENT"
+got="$(ppm_ink "$SHOT10" 660 262 140 20)"
+case "$got" in
+  "bg=${TK_ACCENT} ink=0") report_failure "(10) row 10's label box (660,262 140x20) has no ink" ;;
+  "bg=${TK_ACCENT} ink="*) ;;
+  *) report_failure "(10) row 10's label box is not on ${TK_ACCENT} (${got})" ;;
+esac
+want_box "(10) list1 row 0 after the downs" "$SHOT10" 900 22 140 20 "$TK_BG"
+want_box "(10) list1 row 9" "$SHOT10" 900 238 140 20 "$TK_BG"
+want_box "(10) list1 row 11" "$SHOT10" 900 286 140 20 "$TK_BG"
+# 이 창의 blit 줄: 첫 통째 하나 뒤는 다 부분이어야 한다(스크롤이 없었다 — 강조의 이동만).
+BLITS2="$(tlog | grep -aE "terminal: wl> blit id=${ID2} " | tr -d '\r')"
+PARTS2="$(printf '%s\n' "$BLITS2" | tail -n +2 | grep -ac .)"
+WHOLES2="$(printf '%s\n' "$BLITS2" | tail -n +2 | grep -acE ' w=616 h=752 ')"
+[ "$PARTS2" -ge 1 ] && [ "$WHOLES2" -eq 0 ] ||
+  report_failure "(10) after the first blit ${PARTS2} blit line(s), ${WHOLES2} of them whole — the downs should blit only parts"
+echo "(10): ten downs reached window ${ID2}; row 10 is ${TK_ACCENT} with its label, rows 0 9 11 are ${TK_BG}; ${PARTS2} partial blit(s), none whole"
+
+# ── 판정 11: End → 맨 아래 행 · 막대 ───────────────────────────────────────
+echo "=== (11) End selects the last of 100000 rows and the bar sits at the bottom ==="
+type_keys end
+wait_for_count "terminal: wl> key code=107 state=1 to=${ID2}" 1 || report_failure "(11) End did not reach the window"
+sleep 1
+SHOT11="${SCREENS_DIR}/list-end.ppm"
+screendump "$SHOT11" || report_failure "(11) screendump did not write ${SHOT11}"
+want_box "(11) the last row (y 748..771)" "$SHOT11" 900 750 140 20 "$TK_ACCENT"
+want_box "(11) the row above the last" "$SHOT11" 900 726 140 20 "$TK_BG"
+want_box "(11) the scroll bar at the bottom" "$SHOT11" 1055 756 4 10 "$TK_DIM"
+want_box "(11) no scroll bar at the top" "$SHOT11" 1054 22 6 40 "$TK_BG"
+echo "(11): the last row is ${TK_ACCENT}, the bar (${TK_DIM}) is at the bottom"
+
+# ── 판정 12: Home → 행 4 클릭 · 휠 ──────────────────────────────────────
+echo "=== (12) Home, a click on row 4 selects it, one wheel notch down is axis v=10 ==="
+type_keys home
+wait_for_count "terminal: wl> key code=102 state=1 to=${ID2}" 1 || report_failure "(12) Home did not reach the window"
+tlog | grep -a 'terminal: pointer> open ' > /dev/null || report_failure "(12) terminal did not open the USB mouse"
+move_to 700 128 || report_failure "(12) the pointer did not reach 700,128 (last at: $(last_at))"
+wait_for_log "terminal: wl> pointer enter id=${ID2}" || report_failure "(12) no 'wl> pointer enter id=${ID2}'"
+hmp "mouse_button 1"
+wait_for_log "terminal: wl> button id=${ID2} code=272 state=1" || report_failure "(12) the press did not reach the window"
+hmp "mouse_button 0"
+wait_for_log "terminal: wl> button id=${ID2} code=272 state=0" || report_failure "(12) the release did not reach the window"
+sleep 1
+SHOT12="${SCREENS_DIR}/list-click.ppm"
+screendump "$SHOT12" || report_failure "(12) screendump did not write ${SHOT12}"
+want_box "(12) the clicked row 4 (y 116..139)" "$SHOT12" 900 118 140 20 "$TK_ACCENT"
+want_box "(12) row 0 after the click" "$SHOT12" 900 22 140 20 "$TK_BG"
+hmp "mouse_move 0 0 -1"
+wait_for_log "terminal: wl> axis id=${ID2} v=10" || report_failure "(12) one notch down did not reach the window as axis 10"
+sleep 1
+SHOT12B="${SCREENS_DIR}/list-wheel.ppm"
+screendump "$SHOT12B" || report_failure "(12) screendump did not write ${SHOT12B}"
+# 오프셋 72(세 행) — 행 4는 y 20 + 96 − 72 = 44..67로 올라왔다.
+want_box "(12) row 4 after the wheel (y 44..67)" "$SHOT12B" 900 46 140 20 "$TK_ACCENT"
+want_box "(12) the old place of row 4 after the wheel" "$SHOT12B" 900 118 140 20 "$TK_BG"
+echo "(12): the click selected row 4, the wheel scrolled three rows (row 4 now at y 44)"
+
+# ── 판정 13: Tab · Shift+Tab ──────────────────────────────────────────
+echo "=== (13) Tab moves the focus to list2, Shift+Tab back ==="
+type_keys tab
+sleep 1
+SHOT13="${SCREENS_DIR}/list-tab.ppm"
+screendump "$SHOT13" || report_failure "(13) screendump did not write ${SHOT13}"
+want_box "(13) list1 row 4 dims after Tab" "$SHOT13" 900 46 140 20 "$TK_INACTIVE"
+want_box "(13) list2 row 0 is the focused selection" "$SHOT13" 1190 22 60 20 "$TK_ACCENT"
+type_keys down
+sleep 1
+SHOT13B="${SCREENS_DIR}/list-tab-down.ppm"
+screendump "$SHOT13B" || report_failure "(13) screendump did not write ${SHOT13B}"
+want_box "(13) list2 row 1 after a down" "$SHOT13B" 1190 46 60 20 "$TK_ACCENT"
+want_box "(13) list2 row 0 after a down" "$SHOT13B" 1190 22 60 20 "$TK_BG"
+want_box "(13) list1 row 4 stays dim" "$SHOT13B" 900 46 140 20 "$TK_INACTIVE"
+type_keys shift-tab
+sleep 1
+SHOT13C="${SCREENS_DIR}/list-shift-tab.ppm"
+screendump "$SHOT13C" || report_failure "(13) screendump did not write ${SHOT13C}"
+want_box "(13) list1 row 4 is focused again" "$SHOT13C" 900 46 140 20 "$TK_ACCENT"
+want_box "(13) list2 row 1 dims" "$SHOT13C" 1190 46 60 20 "$TK_INACTIVE"
+echo "(13): Tab focused list2 (${TK_ACCENT}) and dimmed list1 (${TK_INACTIVE}), down moved list2, Shift+Tab came back"
+
+# ── 판정 14: 키 반복 ─────────────────────────────────────────────────
+echo "=== (14) holding down for 1 s repeats on the client ==="
+UPS="terminal: wl> key code=108 state=0 to=${ID2}"
+U1="$(count_log "$UPS")"
+hmp "sendkey down 1000"
+wait_for_count "$UPS" $((U1 + 1)) || report_failure "(14) the held down was never released"
+sleep 1
+echo "(14): the held down was released (the repeat count is read from the demo's log below)"
+
+# ── 둘째 데모를 닫고 로그를 꺼낸다 ─────────────────────────────────────────
+type_keys alt-q
+wait_for_log "terminal: wl> close id=${ID2}" || report_failure "Cmd+Q sent no 'wl> close id=${ID2}' to the list demo"
+wait_for_log "terminal: wl> unmap id=${ID2} ws=1 slot=1" || report_failure "the list demo's slot was not removed"
+sleep 2
+type_text 'echo tk2begin > /dev/console'
+type_keys ret
+type_text 'cat /tmp/tk2.log > /dev/console'
+type_keys ret
+got_rss=0
+for _ in $(seq 1 150); do
+  if tr -d '\r' < "$LOG" | sed -n '/^tk2begin$/,$p' | grep -aE '^tk> rss vmrss_kb=[0-9]+ ' > /dev/null; then got_rss=1; break; fi
+  sleep 0.1
+done
+[ "$got_rss" = 1 ] || report_failure "the list demo's log did not come out on the serial (no 'tk> rss' after 'tk2begin')"
+TK2="$(tr -d '\r' < "$LOG" | sed -n '/^tk2begin$/,$p' | grep -a '^tk> ')"
+has() {
+  printf '%s\n' "$TK2" | grep -aE -- "$1" > /dev/null || report_failure "$2: no '$1' in the list demo's log"
+}
+has '^tk> focus view=list1$' "(10)"
+has '^tk> list view=list1 sel=10 first=0 offset=0$' "(10)"
+has '^tk> list view=list1 sel=99999 first=99968 offset=2399248$' "(11)"
+has '^tk> list view=list1 sel=0 first=0 offset=0$' "(12)"
+has '^tk> hit x=56 y=108 view=list1$' "(12)"
+has '^tk> list view=list1 sel=4 first=0 offset=0$' "(12)"
+has '^tk> scroll view=list1 offset=72 by=wheel$' "(12)"
+has '^tk> focus view=list2$' "(13)"
+has '^tk> list view=list2 sel=1 first=0 offset=0$' "(13)"
+REPEATS="$(printf '%s\n' "$TK2" | grep -acE '^tk> key code=108 state=1 repeat=1$')"
+[ "$REPEATS" -ge 3 ] || report_failure "(14) only ${REPEATS} repeat(s) while down was held for 1 s"
+LAST1="$(printf '%s\n' "$TK2" | grep -aE '^tk> list view=list1 ' | tail -n 1)"
+[ "$LAST1" = "tk> list view=list1 sel=$((5 + REPEATS)) first=3 offset=72" ] ||
+  report_failure "(14) after 1 press + ${REPEATS} repeats from row 4 list1 should be at row $((5 + REPEATS)) (last line: ${LAST1})"
+DRAWS2="$(printf '%s\n' "$TK2" | grep -acE '^tk> draw ')"
+COMMITS2="$(printf '%s\n' "$TK2" | grep -acE '^tk> commit$')"
+[ "$DRAWS2" -eq "$COMMITS2" ] || report_failure "the list demo drew ${DRAWS2} times but committed ${COMMITS2}"
+echo "(14): ${REPEATS} client repeat(s) in 1 s, list1 went from row 4 to row $((5 + REPEATS))"
+echo "(10-14 log): focus · list · hit · scroll lines match; ${DRAWS2} draws = ${COMMITS2} commits"
+# 측정(참고 — 판정 아님, measurements 109).
+echo "--- reference: the list demo ---"
+printf '%s\n' "$TK2" | grep -aE '^tk> (draw .* age=0|rss )'
+echo "reference: whole-list draws (416x752, scroll) $(printf '%s\n' "$TK2" | grep -aE '^tk> draw .* dirty=0,0,416,752 ' | us_summary)"
+echo "reference: partial draws (h <= 48, highlight) $(printf '%s\n' "$TK2" | grep -aE '^tk> draw .* dirty=[0-9]+,[0-9]+,[0-9]+,([1-9]|[1-3][0-9]|4[0-8]) ' | us_summary)"
+echo "reference: draws while down was held $(printf '%s\n' "$TK2" | awk '/repeat=1$/ {if (!s) s=NR; e=NR} {l[NR]=$0} END {n=0; for (i=s; i<=e; i++) if (l[i] ~ /^tk> draw /) n++; print "n=" n " between the first and last repeat"}')"
+# 서버는 창마다 blit 줄을 처음 16줄만 찍는다 — 여기 보이는 것은 첫 통째와 `↓`의 강조 이동이다(스크롤 프레임의 blit은 measurements 109).
+echo "reference: list demo blits $(printf '%s\n' "$BLITS2" | sed 's/.*blit id=[0-9]* //' | tr '\n' ' ')"
+
 # ── render verify ─────────────────────────────────────────────────────
 MISMATCH="$(count_log 'terminal: verify> mismatch')"
 [ "$MISMATCH" -eq 0 ] || report_failure "render verify mismatch lines: ${MISMATCH}"
 
-echo "PASS: TK-M1 — tars-tk-demo binds tars_menu_v1 (native), opens as a 616x752 column, draws a rounded rectangle (z2d) with antialiased corners and antialiased Pretendard text, redraws centred at 1240x752 on Cmd+R, animates a face's opacity (mid colour between, end colour after) with only the face's rectangle blitted, commits only when it draws (2 + ${N} draws and commits, none while idle), and ends by itself on Cmd+Q"
+echo "PASS: TK-M2 — tars-tk-demo binds tars_menu_v1 (native), opens as a 616x752 column, draws a rounded rectangle (z2d) with antialiased corners and antialiased Pretendard text, redraws centred at 1240x752 on Cmd+R, animates a face's opacity (mid colour between, end colour after) with only the face's rectangle blitted, commits only when it draws (2 + ${N} draws and commits, none while idle), and ends by itself on Cmd+Q; tars-tk-demo --list 100000 moves list1's highlight to row 10 after ten downs, End shows the last row and the bar at the bottom, a click selects row 4 and the wheel scrolls three rows, Tab and Shift+Tab move the focus between the lists, and holding down repeats ${REPEATS} time(s) on the client"

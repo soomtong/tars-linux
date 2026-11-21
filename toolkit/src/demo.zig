@@ -13,8 +13,15 @@
 //!   줄 높이 올림). 위아래 8은 글자가 레이어 밖으로 넘지 않게 둔 여유다(content는 레이어 밖에 그리면 안 된다 — layer.zig).
 //! - 면: 64 × 32, x = (W − 64) / 2(내림), y 308, 색 `tokens.color.text`. 처음 불투명도 0(안 보임). 616 폭에서 x 276, 1240 폭에서 x 588.
 //!
+//! 리스트 화면(`--list N`, TK-M2 plan 확정 13): 위 화면 대신 가로 스택에 리스트 둘 — 왼쪽 `list1`(N행, 남는 폭) · 오른쪽 `list2`(50행, 폭 200),
+//! 둘 다 창 높이 전체, 간격 · 여백 없음(616 폭에서 `list1` x 0..415 · `list2` x 416..615). 행 높이 24(`tokens.size.row`), 레이블 "문서 000123.txt"
+//! (셈으로 만든다 — 메모리가 행 수와 무관)을 13 px로 행 왼쪽 16에서, 세로 가운데. 리스트마다 오른쪽 끝 6 px가 막대. 처음 first responder는
+//! `list1`, 선택은 둘 다 0. 키 · 클릭 · 휠은 kit의 responder chain으로 간다(`Tab` · `Shift+Tab`이 두 리스트를 오간다). 끝날 때(close)
+//! `tk> rss vmrss_kb= vmhwm_kb=` 한 줄.
+//!
 //! 인자: `--font PATH`(기본 `/vendor/fonts/Pretendard-Regular.otf`) · `--gamma G`(기본 `tk.text.GAMMA` 1.8, 0.5..3.0) ·
-//! `--anim-ms N`(면 애니메이션 길이, 기본 250, 0..60000) · `--easing ease-out|linear`(기본 ease-out — 체인은 linear 3000).
+//! `--anim-ms N`(면 애니메이션 길이, 기본 250 — 리스트 화면에서는 강조의 이동 길이, 기본 120, 0..60000) · `--easing ease-out|linear`(기본
+//! ease-out — 체인은 linear 3000, 면에만) · `--list N`(리스트 화면, N 0..100,000,000).
 
 const std = @import("std");
 const tk = @import("tk");
@@ -26,6 +33,38 @@ const SAMPLE = [_][]const u8{
     "갉 꽃잎 뷁 쐈 읽음 됐다 흙 ㄱㄴㄷ 한글 입력기 (preedit) 밑줄",
     "The quick brown fox jumps over 0123456789 ilI1|",
 };
+
+/// 리스트 화면: 오른쪽 리스트의 폭 · 행 수, 레이블의 왼쪽 여백, 강조 이동의 기본 길이.
+const LIST2_W: f32 = 200;
+const LIST2_ROWS: usize = 50;
+const LABEL_X: f32 = 16;
+const LIST_ANIM_MS: u32 = 120;
+const MAX_ROWS: usize = 100_000_000;
+
+/// 리스트 하나의 데이터 소스(행 수와 그리는 법 — 레이블은 셈으로).
+const RowSource = struct {
+    app: *App,
+    n: usize,
+
+    fn count(ctx: *anyopaque) usize {
+        const self: *RowSource = @ptrCast(@alignCast(ctx));
+        return self.n;
+    }
+
+    fn drawRow(ctx: *anyopaque, p: *tk.Painter, index: usize, rect: tk.Rect, state: tk.kit.RowState) anyerror!void {
+        const self: *RowSource = @ptrCast(@alignCast(ctx));
+        const app = self.app;
+        const f = &app.small.?;
+        const s: f32 = @floatFromInt(app.scale);
+        var buf: [48]u8 = undefined;
+        const label = std.fmt.bufPrint(&buf, "문서 {d:0>6}.txt", .{index}) catch return;
+        const base: i32 = rect.y + @as(i32, @intFromFloat(@round((@as(f32, @floatFromInt(rect.h)) + f.ascent - f.descent) / 2)));
+        _ = try p.drawGlyphs(f, @as(f32, @floatFromInt(rect.x)) + LABEL_X * s, base, label, tokens.color.text, state.alpha);
+    }
+};
+
+/// 리스트 화면의 루트 뷰 — 아무것도 안 받는다(키는 리스트에서 멈추거나 루트의 Tab · unhandled로).
+const ROOT_VT: tk.kit.VTable = .{};
 
 const RECT_H: f32 = 96;
 const RECT_MAX_W: f32 = 320;
@@ -54,6 +93,12 @@ const App = struct {
     face: *tk.Layer = undefined,
     /// 면이 향하는 끝(`space`마다 뒤집힌다).
     face_on: bool = false,
+    /// 리스트 화면(`--list N`)이면 N. null이면 위의 화면.
+    list_rows: ?usize = null,
+    sources: [2]RowSource = undefined,
+    lists: [2]tk.kit.List = undefined,
+    root_view: tk.kit.View = undefined,
+    kit_root: tk.kit.Root = undefined,
 
     fn faces(self: *App, s: u32) !void {
         if (self.scale == s) return;
@@ -67,6 +112,7 @@ const App = struct {
     }
 
     fn build(self: *App) !void {
+        if (self.list_rows) |n| return self.buildList(n);
         const t = &self.tree;
         self.root = try t.create(.{ .background = tokens.color.bg });
         self.rect = try t.create(.{ .background = tokens.color.accent, .radius = tokens.radius.m, .content = .{ .ctx = self, .draw = drawHello } });
@@ -78,6 +124,34 @@ const App = struct {
         t.setRoot(self.root);
     }
 
+    /// 리스트 화면의 트리와 뷰(머리 주석). `self`는 이 뒤로 옮기지 않는다 — 리스트 · 뷰가 가리킨다.
+    fn buildList(self: *App, n: usize) !void {
+        const t = &self.tree;
+        self.root = try t.create(.{ .background = tokens.color.bg });
+        self.sources = .{ .{ .app = self, .n = n }, .{ .app = self, .n = LIST2_ROWS } };
+        const names = [2][]const u8{ "list1", "list2" };
+        for (&self.lists, &self.sources, names) |*l, *src, name| {
+            try l.init(t, name, .{ .ctx = src, .count = RowSource.count, .drawRow = RowSource.drawRow }, self.anim_ms);
+            try self.root.addChild(l.view.layer);
+        }
+        t.setRoot(self.root);
+        self.root_view = .{ .layer = self.root, .vtable = &ROOT_VT, .ctx = self, .name = "root" };
+        self.kit_root = tk.kit.Root.init(t);
+        self.kit_root.setView(&self.root_view);
+        for (&self.lists) |*l| {
+            try self.root_view.addChild(self.alloc, &l.view);
+            tk.connectList(l);
+        }
+        tk.connectRoot(&self.kit_root);
+        _ = self.kit_root.setFirstResponder(&self.lists[0].view);
+    }
+
+    fn deinitList(self: *App) void {
+        if (self.list_rows == null) return;
+        for (&self.lists) |*l| l.deinit(self.alloc);
+        self.root_view.deinit(self.alloc);
+    }
+
     /// 창 층의 resize — 루트를 configure 크기로, 자식들은 세로 스택으로(머리 주석의 자리).
     fn resize(ctx: *anyopaque, width: u32, height: u32, s: u32) void {
         const self: *App = @ptrCast(@alignCast(ctx));
@@ -85,6 +159,18 @@ const App = struct {
         const W: f32 = @floatFromInt(width / s);
         const H: f32 = @floatFromInt(height / s);
         self.root.setFrame(.{ .x = 0, .y = 0, .w = W, .h = H });
+        if (self.list_rows != null) {
+            const stack: tk.Stack = .{
+                .axis = .horizontal,
+                .items = &.{
+                    .{ .layer = self.lists[0].view.layer, .flex = 1 },
+                    .{ .layer = self.lists[1].view.layer, .size = LIST2_W },
+                },
+            };
+            stack.layout(.{ .x = 0, .y = 0, .w = W, .h = H });
+            for (&self.lists) |*l| l.sync();
+            return;
+        }
         const rw = @min(if (W > 2 * MARGIN) W - 2 * MARGIN else W, RECT_MAX_W);
         const stack: tk.Stack = .{
             .axis = .vertical,
@@ -103,6 +189,7 @@ const App = struct {
     /// 입력(TK-M2 — 창 층의 `Handler.input`). 지금 화면이 쓰는 것은 `space`의 누름 하나다(반복은 무시 — 누르고 있어도 한 번).
     fn input(ctx: *anyopaque, ev: tk.input.Event) void {
         const self: *App = @ptrCast(@alignCast(ctx));
+        if (self.list_rows != null) return self.kit_root.handle(ev);
         const k = switch (ev) {
             .key => |k| k,
             else => return,
@@ -158,7 +245,7 @@ const App = struct {
 };
 
 fn usage() u8 {
-    tk.window.say("usage: tars-tk-demo [--font PATH] [--gamma G] [--anim-ms N] [--easing ease-out|linear]", .{});
+    tk.window.say("usage: tars-tk-demo [--font PATH] [--gamma G] [--anim-ms N] [--easing ease-out|linear] [--list N]", .{});
     return 2;
 }
 
@@ -166,7 +253,8 @@ pub fn main(init: std.process.Init) !u8 {
     const alloc = init.gpa;
     var font_path: []const u8 = tk.FONT_PATH;
     var gamma: f32 = tk.text.GAMMA;
-    var anim_ms: u32 = 250;
+    var anim_ms: ?u32 = null;
+    var list_rows: ?usize = null;
     var easing: tk.Easing = .ease_out_cubic;
     const argv = try init.minimal.args.toSlice(init.arena.allocator());
     var i: usize = 1;
@@ -181,8 +269,14 @@ pub fn main(init: std.process.Init) !u8 {
             if (gamma < 0.5 or gamma > 3.0) return usage();
         } else if (std.mem.eql(u8, a, "--anim-ms") and i + 1 < argv.len) {
             i += 1;
-            anim_ms = std.fmt.parseInt(u32, argv[i], 10) catch return usage();
-            if (anim_ms > 60000) return usage();
+            const v = std.fmt.parseInt(u32, argv[i], 10) catch return usage();
+            if (v > 60000) return usage();
+            anim_ms = v;
+        } else if (std.mem.eql(u8, a, "--list") and i + 1 < argv.len) {
+            i += 1;
+            const v = std.fmt.parseInt(usize, argv[i], 10) catch return usage();
+            if (v > MAX_ROWS) return usage();
+            list_rows = v;
         } else if (std.mem.eql(u8, a, "--easing") and i + 1 < argv.len) {
             i += 1;
             if (std.mem.eql(u8, argv[i], "linear")) {
@@ -204,11 +298,13 @@ pub fn main(init: std.process.Init) !u8 {
         .alloc = alloc,
         .font = font,
         .lut = tk.text.gammaLut(gamma),
-        .anim_ms = anim_ms,
+        .anim_ms = anim_ms orelse if (list_rows != null) LIST_ANIM_MS else 250,
         .easing = easing,
         .tree = tk.Tree.init(alloc),
+        .list_rows = list_rows,
     };
     defer app.tree.deinit();
+    defer app.deinitList();
     defer inline for (.{ &app.small, &app.body }) |f| if (f.*) |*x| x.deinit();
     app.build() catch |e| {
         tk.window.say("error tree={s}", .{@errorName(e)});
@@ -230,5 +326,34 @@ pub fn main(init: std.process.Init) !u8 {
         tk.window.say("error run={s}", .{@errorName(e)});
         return 1;
     };
+    if (list_rows != null) sayRss();
+    return 0;
+}
+
+/// `tk> rss vmrss_kb= vmhwm_kb=` — /proc/self/status의 두 줄(리스트 화면이 끝날 때, plan 실측 6).
+fn sayRss() void {
+    const linux = std.os.linux;
+    const fd_rc = linux.open("/proc/self/status", .{ .ACCMODE = .RDONLY, .CLOEXEC = true }, 0);
+    if (linux.errno(fd_rc) != .SUCCESS) return;
+    const fd: i32 = @intCast(fd_rc);
+    defer _ = linux.close(fd);
+    var buf: [4096]u8 = undefined;
+    var len: usize = 0;
+    while (len < buf.len) {
+        const n = linux.read(fd, buf[len..].ptr, buf.len - len);
+        if (linux.errno(n) != .SUCCESS or n == 0) break;
+        len += n;
+    }
+    tk.window.say("rss vmrss_kb={d} vmhwm_kb={d}", .{ statusKb(buf[0..len], "VmRSS:"), statusKb(buf[0..len], "VmHWM:") });
+}
+
+fn statusKb(text: []const u8, key: []const u8) u64 {
+    var it = std.mem.splitScalar(u8, text, '\n');
+    while (it.next()) |line| {
+        if (!std.mem.startsWith(u8, line, key)) continue;
+        var words = std.mem.tokenizeAny(u8, line[key.len..], " \t");
+        const w = words.next() orelse return 0;
+        return std.fmt.parseInt(u64, w, 10) catch 0;
+    }
     return 0;
 }

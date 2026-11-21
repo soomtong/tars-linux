@@ -22,7 +22,7 @@ pub const Window = window.Window;
 pub const Painter = cg.Painter;
 pub const Face = cg.Face;
 pub const text = cg.text;
-pub const tokens = @import("tokens.zig");
+pub const tokens = @import("tk_tokens");
 pub const Tree = ca.Tree;
 pub const Layer = ca.Layer;
 pub const Stack = ca.Stack;
@@ -45,13 +45,31 @@ fn animEvent(_: *anyopaque, ev: ca.anim.Event) void {
     }
 }
 
-/// first responder가 바뀌면 `tk> focus view=NAME`(아무도 아니면 `view=-`) 줄(TK-M2 plan 확정 14).
+/// first responder가 바뀌면 `tk> focus view=NAME`(아무도 아니면 `view=-`), 클릭(왼쪽 누름)마다 `tk> hit x= y= view=` 줄(TK-M2 plan 확정 14).
+/// 좌표는 surface 논리 좌표의 정수 부분이다.
 pub fn connectRoot(root: *kit.Root) void {
     root.hook = .{ .ctx = root, .on = focusEvent };
+    root.hit_hook = .{ .ctx = root, .on = hitEvent };
 }
 
 fn focusEvent(_: *anyopaque, v: ?*kit.View) void {
     window.say("focus view={s}", .{if (v) |x| x.name else "-"});
+}
+
+fn hitEvent(_: *anyopaque, x: f32, y: f32, v: ?*kit.View) void {
+    window.say("hit x={d} y={d} view={s}", .{ @as(i32, @intFromFloat(@floor(x))), @as(i32, @intFromFloat(@floor(y))), if (v) |w| w.name else "-" });
+}
+
+/// 리스트의 선택 · 스크롤을 줄로: `tk> list view= sel= first= offset=`(키 · 클릭마다) · `tk> scroll view= offset= by=wheel`(TK-M2 plan 확정 14).
+pub fn connectList(list: *kit.List) void {
+    list.hook = .{ .ctx = list, .on = listEvent };
+}
+
+fn listEvent(_: *anyopaque, list: *kit.List, ev: kit.list.ListEvent) void {
+    switch (ev) {
+        .select => |s| window.say("list view={s} sel={d} first={d} offset={d}", .{ list.view.name, s.sel, s.first, s.offset }),
+        .scroll => |s| window.say("scroll view={s} offset={d} by=wheel", .{ list.view.name, s.offset }),
+    }
 }
 
 fn sinkInvalidate(ctx: *anyopaque, r: Rect) void {
