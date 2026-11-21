@@ -4,7 +4,7 @@
 
 Date: 2026-11-20
 Status: TK-M4 끝(2026-11-21, `b0ff7d2`, 루트 게이트 36/36). 사용자 위임(2026-11-18 "주요 결정은 너의 의견에 따를 테니까")으로 Claude가 정했다.
-다음은 TK-M5 plan. 브랜치 `app-layer-0-3`.
+TK-M5 plan `docs/plans/2026-11-21-tars-ui-toolkit-tk-m5.md`. 브랜치 `app-layer-0-3`.
 
 계기: App Layer의 3단(`docs/plans/2026-11-18-tars-app-layer-roadmap.md` "3단 — TK", 4판 — WY-M6 뒤). 요구사항
 `2026-11-18-tars-app-layer-requirements.md`의 결정 4 · 9 · 13, R-ARCH · R-TKW · R-CG · R-TXT · R-CA · R-KIT · R-FM.
@@ -88,6 +88,10 @@ stb_truetype 비례폭 글자. terminal과는 `shared/`의 테마 색 · 글리�
     키맵 파일과 대조한다. 정규화는 표시에서만 한다(조합형 자모를 음절로 — Pretendard에 U+1100대가 없다. 버퍼 · 경로 · 정렬은 바이트 그대로). 글리프가 없으면 `□`,
     잘못된 바이트는 `?`. text-input은 `done` 하나를 이벤트 하나로 올리고 preedit은 버퍼에 넣지 않는다. 캐럿은 깜빡이지 않는다(idle commit 0). 붙여넣기는 동기
     (offer가 늘 서버 사본이라 교착이 없다), 창 층이 SIGPIPE를 무시한다. milestone은 표시 → 편집 → 검색 세 단계.
+16. 메뉴 바(TK-M5, 조사 `tk-m5` — 결정 11을 닫는다): 자리는 (가) 위 여백 20 px 안의 16 px 한 줄(격자 · 게이트 숫자 불변), 논리 그림자에 그린다. 셸 pane이
+    포커스면 비운다. `tars_menu_v1` 판 2는 toplevel마다의 모델을 요청 여러 개 + commit으로 통째 교체하고(wl_array 직렬화는 손 파서가 는다), 단축키는 구조(mods · evdev
+    코드)로 받아 서버가 글을 그린다. 서버는 표시만 하고 단축키 자체는 앱이 키로 받는다. 여는 키는 `Cmd+Shift+/`. 드롭다운은 프레임의 마지막 그리기이고 열기 · 닫기는
+    통째 프레임이다(밑 픽셀 저장 없음). verify의 그림자가 같은 함수로 같은 순서에 그린다.
 
 ## Milestone
 
