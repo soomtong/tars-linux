@@ -3,7 +3,7 @@
 Date: 2026-11-21
 Design: `docs/specs/2026-11-20-tars-ui-toolkit-design.md`(결정 10 · 11 · 16, milestone 표 TK-M5), 요구사항 결정 1 · 3 · 9, R-KIT-7 · 8 · 9, R-TKW-3, R-KEY-1 · 2,
 WY design 결정 42 · 44~47
-Status: 진행 중. 브랜치 `app-layer-0-3`.
+Status: 끝(2026-11-21). 브랜치 `app-layer-0-3`.
 
 ## 확인(조사 `tk-m5`, 세션 scratchpad `tk5/research.md` — HEAD `b0ff7d2`, 읽기만 한 조사)
 
@@ -121,3 +121,17 @@ Status: 진행 중. 브랜치 `app-layer-0-3`.
    실측: hidpi(bs 2)에서 바가 있는 채 블록 판정 0. SDL3는 `set_app_id`를 먼저 보낸다(바 이름 `tars-gpu-demo`). 바 그리기 시간은 단계 C가 `us=`로 잰다.
    루트 게이트 36/36 첫 판(`out/gate-logs/20261121-101205`), verify mismatch 0. 전체 화면 체인(FU)에서 `menu> bar hidden`이 찍혔다 — 위 여백을 보는 기존 판정은
    하나도 안 깨졌다(실측 9).
+3. 단계 C `08fb7fe`(열린 메뉴): `input.zig`의 `Pane.menu_open`(`tableChord`의 Shift 갈래 `KEY_SLASH`) · `State.menuKey`(연 동안 — 수정키만 창으로, 방향키 · Enter · Esc는
+   메뉴, 표의 chord는 pane, 그 밖은 버림, 한글 층 안 지남) · `main.zig`의 `renderDrop`(실제 경로 · 그림자 한 곳) · `presentComposed`의 드롭다운 다시 늘리기 ·
+   `openMenu`(앱 조합 확정 먼저) · `closeMenu(why)` · `checkMenu`(`syncFocus` 끝) · `pickMenu`(`srv.activate`) · `menuPress` · `menuHover` · 그림자의 app slot 복사 뒤
+   드롭다운 · R-KEY-1 표와 `docs/help/desk.md`의 `Cmd+Shift+/` · 판정 32~34 · 36 · hidpi 7b2 · `measurements.md` 113.
+   체인 wayland 두 번 · terminal · toolkit · hidpi · pointer · hangul · pane PASS.
+   판정의 실제 값: 32 `menu> open id=12 menu=0` · 드롭다운 `rect=124,20 104x40` · 열린 제목 칸과 Open 행 `305c9c` · Quit 행 `283448`(글 `687484`) · 구분선 88픽셀 ·
+   `Cmd+O`가 오른쪽 칸(x 180..220)에 · `→` `↓` Enter → `menu> activate id=12 item=4` + 클라이언트 `menu activated id=4` · 그 사이 창에 간 키 0.
+   33 Esc 뒤 그 자리가 연 적 없던 화면과 같음. 34 제목 클릭 → 열림 · 항목 클릭 → `item=1` · 바깥 클릭 → `why=click`이고 창의 `button` 0.
+   35 모델 없는 창과 셸 포커스에서 여는 키가 아무 일 없음. 36 `wl> ime … commit=한`이 `menu> open` 앞. hidpi 7b2: bs 2 창 위 드롭다운이 2 × 2 블록(어긋남 0).
+   plan과 달라진 것: (가) 판정 31의 `alt-shift-slash` 실측을 32로 옮김. (나) 열린 메뉴에서 여는 키를 다시 누르면 닫는다(`why=key`). (다) 포인터로 연 메뉴는 강조 없이.
+   (라) 열린 동안 Cmd + 표 밖 글자도 먹는다(창의 단축키가 메뉴가 열린 채 실행되지 않게). (마) 줄 `menu> close id= why=` · `menu> drop …` · `menu> draw kind= us=`.
+   lead의 화면 판정: 4배 덤프 둘 — File(`Open  Cmd+O` 강조 · 구분선 · 흐린 `Quit`), Edit(`Copy  Cmd+C` · `한글`).
+   실측: 닫힌 바 그리기 72~108 µs. 메뉴를 열고 · 옮기고 · 닫는 통째 프레임 22.7~25.2 ms(메뉴 그리기는 88~355 µs — 프레임의 1 % 안팎).
+4. 루트 게이트 36/36 첫 판(`out/gate-logs/20261121-115411`), verify mismatch 0. TK-M5의 게이트는 둘(단계 B 뒤 · 단계 C 뒤) 다 첫 판 PASS.

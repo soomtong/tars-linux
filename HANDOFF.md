@@ -1,4 +1,4 @@
-# HANDOFF: App Layer(0.3) — TK-M4 끝(`b0ff7d2`, 루트 게이트 36/36). 다음 TK-M5(서버 쪽 메뉴 바 · `tars_menu_v1` 판 2). tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) — TK-M5 끝(`08fb7fe`, 루트 게이트 36/36). 다음 TK-M6(툴킷 쪽 메뉴 모델 · 단축키 표 · 미리보기 — TK의 마지막). tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
 
 ## 목표
 
@@ -22,6 +22,12 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 실제 파일과 대조한다. 기억 `feedback_herdr_subagents`.
 
 ## 완료된 작업 (2026-11-19~20, WY-M0 단계 C · WY-M1 착수 — 이 세션)
+
+- [x] TK-M5(plan `docs/plans/2026-11-21-tars-ui-toolkit-tk-m5.md`, design 결정 16 — 결정 11을 닫음, 서브에이전트 `tk-m5` — 끝나고 pane 닫음): A `64e4ee5`
+      `tars_menu_v1` 판 2(`get_menu` · 모델 요청 · `activated`) · 서버의 메뉴 객체 · title/app_id 저장 · 순수 모듈 `terminal/src/menubar.zig` · `tars-wl-test --menu`,
+      B `0fe7e75` 위 여백 20 px 안의 닫힌 바(앱 이름 + 제목, 셸 포커스면 빔, verify 그림자가 같은 함수) · 판정 31 · 35, C `08fb7fe` 여는 키 `Cmd+Shift+/` · 드롭다운
+      (프레임의 마지막 그리기, 열기 · 닫기는 통째) · 연 동안 키 · 조합 확정 · 포인터 · 판정 32~34 · 36 · hidpi 7b2 · `measurements.md` 113 · R-KEY-1 표 · 도움말.
+      루트 게이트 36/36 둘 다 첫 판(`out/gate-logs/20261121-101205` · `20261121-115411`). 남은 것: carryover "TK-M5가 남긴 것"
 
 - [x] TK-M4(plan `docs/plans/2026-11-21-tars-ui-toolkit-tk-m4.md`, design 결정 15, 서브에이전트 `tk-m4` — 끝나고 pane 닫음): A `ca95301` 놓기 층 `cg/layout.zig`
       (클러스터 · NFD 자모를 음절로 · 캐럿 x ↔ 색인 · 가운데 생략 · 줄 나누기) · 글자 키 표 `input.charFor`(서버 키맵과 대조) · 판정 19, B `b7feb42` `kit/textfield.zig` ·
@@ -144,9 +150,9 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
       `devlayer/cache/<sha256>`에 손으로 두었다 — 캐시 없는 기계에서는 release 전까지 `make dev-layers`가 받기에서 멈춘다.
       release 방법 두 갈래: (가) 태그 push → Actions가 빌드 · 업로드(sha256이 바뀌어 manifest를 고치고 wayland 체인 한 번), (나) 로컬 tarball을
       `gh release create`로 올림(sha256 그대로). Actions workflow가 태그에서 함께 돌면 자산이 겹치니 (나)면 workflow를 고르게 손본다
-- [ ] TK-M5(서버 쪽: `tars_menu_v1` 판 2(메뉴 모델 요청 · 고른 항목 이벤트) · 메뉴 바 그리기 · 키 · title/app_id 저장 — design 결정 10 · 11, milestone 표):
-      조사 `tk-m5`가 세션 scratchpad `tk5/research.md`에 있다(읽기만 한 조사). 끝나는 조건 "메뉴 바의 좌표 판정". 바의 자리 (가)/(나)는 plan이 고른다.
-      그 뒤 TK-M6(툴킷 쪽 메뉴 모델 · 단축키 표 · 미리보기 — 녹화 C), CR-M0 → WY-M7 → CR-M1
+- [ ] TK-M6(툴킷 쪽: 메뉴 모델 · 단축키 표 하나(R-KIT-9) · 미리보기 — TK의 마지막 milestone, 끝나는 조건 "녹화 C"): 조사 `tk-m6`이 세션 scratchpad
+      `tk6/research.md`에 있다(읽기만 한 조사). 넘겨받은 것: 툴킷의 bind를 판 2로 · 모델은 첫 commit 전에 · 상한을 툴킷이 먼저 지킴 · 단축키는 구조(mods + evdev) ·
+      모델을 다시 commit하면 열린 메뉴가 닫힘. 끝나면 TK 서브프로젝트 마감(design Status · `completed.md` · 기억). 그 뒤 CR-M0 → WY-M7 → CR-M1
 - [ ] 녹화 B(사람 녹화 — strip + SDL3 column + 클립보드 + 한글, 조사 `wy-m5/research.md` 6절 끝에 보일 것)
 - [ ] 소개 페이지(`gh-pages`의 `data.js`)에 SW를 안 올렸다 — 사이트는 `main` 줄 기준(`commits`가 `rev-list --count main`)이고 SW는
       `app-layer-0-3`에만 있다. 0.3 줄이 `main`에 들어갈 때 올린다(사용자가 먼저 원하면 그때)
