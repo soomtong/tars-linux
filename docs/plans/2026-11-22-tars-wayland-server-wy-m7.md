@@ -89,4 +89,22 @@ verify가 모든 체인에서 돈다).
 
 ## 결과
 
-(단계마다 채운다.)
+구현은 `wy-m7`(Herdr, Opus — 조사도 같은 에이전트), lead는 대조 · 게이트 · commit.
+
+1. 단계 A `9b945c7`: 서버의 surface 상태 세 칸(pending → cache → current — 적용하는 길이 하나) · `wl_subcompositor` 판 1과 `wl_subsurface` 전부(에러 · sync · 쌓임 · 수명) ·
+   트리 합성(`paint` · `paintPhys` — 아래 자식 → 부모 → 위 자식, ARGB는 over, clip 안) · 자식 damage의 부분 blit · 트리 전체의 frame done과 `enter` · `set_window_geometry`
+   (`fitGeom`) · `wl_region`과 입력 영역 · (창, surface) 포인터(`pickAt`) · 호환 창에 Cmd 키 안 보냄 · text-input 표기. 순수 함수 열(`wl_logic.zig` — `fitGeom` · `rootOrigin` ·
+   `over` · `blendClip` · `damageAt` · `pick` · `restack` · `effectiveSync`)과 호스트 검사 30경우. `tars-wl-test --subsurface` · `--subsurface-sync` · `--sub-scale` · `--second`.
+   체인 wayland 두 번 연속 · terminal · toolkit · hidpi · pointer · display · browser PASS, verify mismatch 0.
+   판정의 실제 값: 37 자식 (684, 60)~(747, 123)이 `cc3366` · 그 오른쪽 `3366cc`. 38 `set_position`만 한 뒤 1초에도 그대로 → 부모 commit 뒤 옮겨짐, sync 창은 자식 색 바꿈이
+   부모 commit 뒤에야 `33cc66`. 39 `sub enter x=32 y=32` · `sub leave` · `pointer enter x=152 y=172`. 43 한 클라이언트의 창 둘에서 `wl> ti enable to=18`(둘째).
+   44 호환 창의 Cmd tap + `Cmd+V` → `key code=125|126` 0줄 · `depressed=0x4`. hidpi 9: 물리 2880 × 1800에서 bs 2 창의 자식(bs 2 · bs 1 둘 다)이 물리 (1528, 120)에.
+   browser 3a: `Cmd+L` · `a` → `wl> subsurface id=1 sub=1 map w=454 h=89 bs=1 at=109,35` · bubble 자리 `2e8b57` → `f2f2f2` · `wl> gone pid=` 0 · crash report 0.
+   Chromium의 첫 화면(판정 2 · 3)은 한 글자도 안 바뀌었다 — 그림자 10이 대칭이라 geometry로 한 fit이 가운데 자르기와 같다(호스트 검사가 단언한다).
+   plan과 달라진 것: (가) `--second`(판정 43은 "한 클라이언트의 창 둘"이어야 옛 표기 오류가 드러난다 — 클라이언트 둘은 옛 코드로도 맞게 찍힌다). (나) `wl> tree` 줄
+   (자식을 섞은 옮기기의 시간 — `wl> blit`의 통째 줄은 창마다 둘뿐이다). (다) `TextInput.to` · `Subsurface.top` — 클라이언트가 끝날 때 surface가 먼저 사라져 창을 못 찾는다.
+   (라) 3a는 주소창의 `ti enable`을 기다린 뒤 `a`를 친다(Chromium의 포커스 이동이 비동기다 — 안 기다리면 `a`가 페이지로 간다). (마) 판정 37 앞에서 한글을 끈다(36이 켠 채 끝난다).
+   첫 체인 판 셋이 FAIL이었다 — 한글이 켜진 채 친 명령(판정 순서), 끝나는 클라이언트의 `gone` 줄(코드 — `top`으로 고침), 이른 `a`(판정). 다 고친 뒤 여덟 체인 PASS.
+   lead의 화면 판정: 주소창에 `a`를 친 전체 화면 — 자동 완성 목록 다섯 줄, 그림자가 페이지와 섞였고 캐럿 자리에 구멍이 없다.
+   실측(`measurements.md` 116): bubble이 처음 보인 통째 프레임 17.5 ms(부모만은 1.0~1.2 ms — 섞기 약 0.4 µs/px, TCG), 떠 있는 동안 부모 캐럿 1 × 17은 26~34 µs.
+   루트 게이트 37/37 첫 판(`out/gate-logs/20261122-002737`), verify mismatch 0. browser 체인의 첫 화면은 게이트 부하 아래 28초.
