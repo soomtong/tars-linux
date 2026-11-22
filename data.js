@@ -4,16 +4,16 @@
 // 표기: 문자열 안의 `x`는 <code>, [x]는 <kbd>로 그려진다(app.js의 rich).
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
-  asOf: '2026-11-15',
-  latest: 'Link Status (LK-M0~M2)',
+  asOf: '2026-11-22',
+  latest: 'Chromium (CR-M0~M2)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1364,      // git rev-list --count main
+    commits: 1499,      // git rev-list --count main
     since: '2026-08-01',
-    chains: 34,         // check.sh의 CHAINS
-    zigKLines: 50,      // init · terminal · tars-config의 .zig 줄 수 / 1000
+    chains: 37,         // check.sh의 CHAINS
+    zigKLines: 61,      // init · terminal · tars-config의 .zig 줄 수 / 1000
   },
 
   // 부팅 사슬 애니메이션: [켜질 칸(0 ISO … 5 셸), 머리, 본문].
@@ -135,6 +135,11 @@ window.TARS = {
     ['2026-11-14', 'Odin', 'OD', 'odin을 `lang-native`에 — clang 없이 기본 gcc로 링크하고, rust 1.100.0'],
     ['2026-11-14', 'Tool Upgrade', 'TU', '실린 언어와 유틸리티를 새 판으로 — go 1.27.4 · node 26.13.1 · cyber 0.4.10 · cmake 4.5.0 · PostgreSQL 18.7 · 유틸리티 아홉'],
     ['2026-11-15', 'Link Status', 'LK', '상태 줄의 배터리 칸 왼쪽에 붙은 Wi-Fi의 이름이나 `LAN` — 주소를 받으면 하늘색, 기다리는 동안 흐리게. 커널 netlink만 읽는다'],
+    ['2026-11-19', 'Strip Workspace', 'SW', '패널이 가로로 늘어선 열(column) — 열마다 셸 셋, 화면에 안 들어가면 포커스를 따라 열 단위로 흐르고 [⌘R]이 폭을 80칸 · 120칸 · 절반 · 전체로 돌린다'],
+    ['2026-11-20', 'Partition Tools', 'PT', '설치 전 · 복구용 파티션 도구 `fdisk` · `cfdisk`가 initrd에 — `sfdisk`와 같은 엔진, 새 라이브러리는 libmount 하나'],
+    ['2026-11-22', 'Wayland Server', 'WY', '터미널이 Wayland 서버를 겸한다 — 셸에서 띄운 앱 창이 오른쪽 열에 뜨고, 키 · 포인터 · 클립보드 · 한글 조합이 셸과 같다. 둠 · SDL3 · Chromium이 고치지 않고 뜬다'],
+    ['2026-11-22', 'UI Toolkit', 'TK', '우리 Wayland 툴킷과 첫 앱 `tars-files` — column view · 미리보기 · 경로 칸 · 찾기, Pretendard 한글, 앱이 키를 받으면 맨 위 줄에 메뉴 바'],
+    ['2026-11-22', 'Chromium', 'CR', '`tars-browser` — Debian의 Chromium을 sandbox를 켠 채 셸 옆 열에. 자동 완성 · 메뉴 · 주소창 한글 · [⌘⌃F]로 자기 워크스페이스, browser 묶음을 실은 web 판 ISO'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -158,6 +163,8 @@ window.TARS = {
       'ad2f2213ff4941bdebbf0c202e3e40ce5d6ca864ea4766513da303926f5a65bc'],
     ['2026-11-14', '0.2.2', '도구 판올림과 GPU — rust 1.100 · go · node · odin, 화면 양보(`tars-fullscreen`)와 SDL3 · Mesa, nonative 판 · fakesteak · GPU 데모 ISO도 함께', 'tars-0.2.2-x86_64.iso',
       '53b7021047d71440fc4979a63bc09887171e9156687b760c3e01bceaeb04e03c'],
+    ['2026-11-22', '0.3.0', '앱 층 — 터미널이 Wayland 서버를 겸해 셸 옆 열에 앱 창이 뜬다: 파일 관리자 `tars-files` · 둠 · Chromium(web 판 ISO), 열(column) 워크스페이스, fdisk · cfdisk', 'tars-0.3.0-x86_64.iso',
+      '008896d91d71ae1a91d7bcf33553a09ba00701b84b9cfa1c60f17c5be7296a24'],
   ],
 
   // 전체 기능: 갈래마다 [이름, 설명, 끝난 날]. 끝난 날은 timeline의 날짜와 같게.
@@ -228,7 +235,7 @@ window.TARS = {
       title: '개발 도구 층',
       note: '설치 USB에 싣고 `tars-install`이 디스크로 옮긴다. 부팅마다 init이 묶음(squashfs)을 `/usr`에 읽기 전용으로 겹친다 — RAM에 상주하지 않고, 망이 없어도 된다. USB로 띄운 채로는 붙지 않는다.',
       items: [
-        ['묶음 열셋', 'base · container · lang-native · lang-script · lang-jvm · lang-beam · editor · util · media · docs · server · gpu · fakesteak, 합 1.9GiB. GitHub에는 server를 뺀 기본 판과 lang-native를 뺀 nonative 판을 올린다. 출처는 매니페스트 한 파일(버전 · URL · sha256), 소스 빌드 없음', '2026-11-12'],
+        ['묶음 열다섯', 'base · container · lang-native · lang-script · lang-jvm · lang-beam · editor · util · media · docs · server · gpu · fakesteak · doom · browser, 합 2.2GiB. GitHub에는 server · browser를 뺀 기본 판, lang-native를 뺀 nonative 판, browser를 싣고 lang-native를 뺀 web 판을 올린다. 출처는 매니페스트 한 파일(버전 · URL · sha256), Debian 줄은 snapshot의 한 시각에 고정', '2026-11-22'],
         ['언어', 'C · C++ · Zig · Rust · Go · Odin · Python · Ruby · Lua · Luau · Cyber · Node · Bun · Janet · PHP · Java · Kotlin · Clojure · Erlang · Elixir · Gleam', '2026-11-09'],
         ['편집기', 'Neovim · mitos · ttt, 게스트 vim은 그대로(emacs는 0.2.1 뒤에 뺐다)', '2026-11-12'],
         ['유틸리티', 'lazygit · gitui · yazi · difftastic · starship · duckdb · sqlite · ffmpeg · ImageMagick 등 쉰여 개 — initrd에 있는 것도 최신판이 앞선다', '2026-11-09'],
@@ -237,6 +244,8 @@ window.TARS = {
         ['`/usr/local`', '`/usr`는 읽기 전용, `/usr/local`만 쓰기 가능 — root가 `make install` · `npm i -g`로 깐 것이 재부팅 · 갱신에도 남는다', '2026-11-09'],
         ['컨테이너', 'Docker Engine · compose · buildx — `sudo tars-service enable docker`면 부팅마다 뜨고 내 계정이 `sudo` 없이 쓴다. 이미지는 `/home`에 남고 `-p`는 127.0.0.1에만 선다', '2026-11-12'],
         ['GPU — 묶음 `gpu`', 'SDL3 · Mesa(EGL · OpenGL ES · GBM) — SDL3로 만든 프로그램이 `tars-fullscreen`으로 화면을 넘겨받아 GPU로 그린다', '2026-11-14'],
+        ['둠 — 묶음 `doom`', '`tars-doom` — Freedoom Phase 1을 Wayland 창으로. 기본 판에 실린다', '2026-11-22'],
+        ['브라우저 — 묶음 `browser`', '`tars-browser` — Debian의 Chromium과 Noto CJK(294MiB). 2GiB 한도 때문에 web 판 ISO에만 실린다', '2026-11-22'],
         ['AI 도구', 'claude · codex · opencode · omp는 싣지 않고 공식 설치 길이 그대로 선다. 샌드박스가 쓰는 `bwrap` · `socat`은 실려 있다', '2026-11-12'],
       ],
     },
@@ -307,6 +316,10 @@ window.TARS = {
     {
       title: '명령',
       items: [
+        ['`tars-files [경로]`', '파일 관리자(Wayland 창) — column view · 미리보기(글 · PNG · JPEG) · 경로 칸 [⌘L] · 거르기 [⌘F] · 찾기 [⌘K] · 메뉴', '2026-11-22'],
+        ['`tars-browser [URL]`', 'Chromium을 셸 옆 열에(web 판, 사용자 화면 셸에서). 주소창 한글 · 셸과 클립보드 · [F11]', '2026-11-22'],
+        ['`tars-doom`', '둠(Freedoom)을 Wayland 창으로. 화살표 · [Ctrl] 쏘기 · [⌘Q] 끝', '2026-11-22'],
+        ['`sudo fdisk` · `sudo cfdisk <디스크>`', '대화형 · 화면형 파티션 도구(설치 전 · 복구). TARS 파티션의 GPT 이름을 바꾸면 갱신 대신 새 설치가 된다', '2026-11-20'],
         ['`tars-fullscreen <명령>`', '화면을 직접 그리는 프로그램(`/dev/dri/card0`)에 화면과 키보드를 넘기고, 끝나면 셸 화면이 그대로 돌아온다. 멈추면 [Ctrl]+[⌘]+[Backspace]', '2026-11-14'],
         ['`tars-config`', '인자 없이: 지금 설정을 init이 읽는 모양으로, 실제로 쓰이는 값과 다르면 알린다', '2026-10-07'],
         ['`tars-config version`', '이 이미지의 TARS 버전. 릴리즈가 아닌 빌드는 커밋(`+sha`)과 `-dirty`를 붙인다. 부팅 로그 첫 줄에도 같은 글자', '2026-10-20'],
@@ -338,11 +351,23 @@ window.TARS = {
         ['bracketed paste', '자식이 모드 2004를 켰으면 붙인 글자를 `ESC[200~` · `ESC[201~`로 감싼다', '2026-10-04'],
         ['질의 응답', '커서 위치(`ESC[6n`) · 상태 보고 · 픽셀 크기(`CSI 14t`). 제목 보고는 보안상 끔', '2026-09-19'],
         ['마우스 보고', '모드 9 · 1000 · 1002 · 1003, 1007(대체 화면의 휠 → 화살표)', '2026-10-05'],
-        ['워크스페이스 · 패널', '워크스페이스 아홉 × 패널 여덟. 마지막 패널을 닫으면 terminal이 끝나고 init이 새로 띄운다', '2026-10-04'],
+        ['워크스페이스 · 열', '워크스페이스 아홉 × 패널 여덟. 패널은 가로로 늘어선 열(column)에 셋까지 — 화면에 안 들어가면 보이는 만큼만, 포커스를 따라 열 단위로 흐른다. 마지막 패널을 닫으면 terminal이 끝나고 init이 새로 띄운다', '2026-11-19'],
         ['클립보드', 'terminal 전체에 하나 — 한 패널에서 잡은 것을 다른 워크스페이스에 붙인다. `clipboard=pane`이면 패널마다', '2026-10-05'],
         ['그리기 속도', '칠하기는 행마다 한 번에 쓰고, 출력이 쏟아질 때는 초당 60번 안쪽으로 그린다. 화면은 DIRTYFB로 내보낸다', '2026-10-11'],
         ['전체 화면 `CSI 10;Ps t`', '패널 안 프로그램이 xterm 시퀀스로 전체 화면을 켜고(1) · 끄고(0) · 바꾼다(2). 비슷한 시퀀스는 무시', '2026-11-09'],
         ['Powerline 기호', 'U+E0B0~E0B3(채운 삼각형 둘 · 선 화살표 둘)을 8x16 비트맵으로 직접 그린다 — unifont에 없어 상자가 찍히던 자리', '2026-11-08'],
+      ],
+    },
+    {
+      title: '앱 층 — Wayland',
+      note: '터미널(PID 1이 띄운 화면 프로세스)이 Wayland 서버를 겸한다. 그리기는 CPU 합성(`wl_shm`)이고 dmabuf는 아직 받지 않는다. 서버 쪽 창 장식은 없다.',
+      items: [
+        ['앱 창은 셸 옆 열에', '셸에서 띄운 Wayland 앱(`WAYLAND_DISPLAY`가 잡혀 있다)의 창이 오른쪽 새 열에 뜨고, 전체 화면을 바라는 앱은 자기 워크스페이스에. 앱이 끝나면 열이 사라진다', '2026-11-22'],
+        ['키 · 포인터', '키는 포커스 창으로(패널 키는 빼고), 클릭 포커스 · 휠은 포인터 아래 창으로. HiDPI 배율(`buffer_scale`)', '2026-11-22'],
+        ['클립보드 · 한글', '셸과 앱 사이 [⌘C] · [⌘V] 양방향. text-input을 켠 앱에는 셸과 같은 오토마타로 한글 조합(밑줄 → 확정)', '2026-11-22'],
+        ['메뉴 바', '앱이 키를 받는 동안 화면 맨 위 줄에 이름과 메뉴(`tars_menu_v1`). 메뉴 프로토콜을 모르는 앱은 호환 모드 — [⌘]가 [Ctrl]로 간다', '2026-11-22'],
+        ['팝업 · 하위 surface', '문맥 메뉴 · 자동 완성 · `<select>`가 열 밖으로 나가 셸 위에 겹친다. 셸을 누르거나 포커스를 옮기면 닫힌다', '2026-11-22'],
+        ['UI 툴킷 `toolkit/`', '우리 앱의 Wayland 클라이언트 라이브러리 — 가상화 리스트 · column view · 텍스트 필드 · 메뉴 모델 하나에서 나오는 단축키, Pretendard 한글', '2026-11-22'],
       ],
     },
     {
@@ -355,6 +380,7 @@ window.TARS = {
         ['`W1`~`W9`', '워크스페이스가 둘 이상일 때', '2026-10-04'],
         ['`COPY`', 'copy mode에 있는 동안. 전용 색', '2026-10-03'],
         ['받아쓰기 낱말', '`REC` · `WAIT` · `NO MIC` · `NO KEY` · `FAILED` · `PASSWORD` · `NO PANE`', '2026-10-06'],
+        ['열 칸 `2/3`', '지금 열과 전체 열 수 — 화면 밖에 열이 있을 때만', '2026-11-19'],
         ['배터리 칸', '오른쪽 끝 폭 4(`100%` · ` 50%` · `  ?%`). 방전 중 회색, 어댑터 초록, 15% 이하 빨강. 배터리가 없으면 칸도 없다', '2026-10-09'],
         ['링크 칸', '배터리 칸 왼쪽. 무선이면 SSID, 유선이면 `LAN`, 둘 다면 `LAN  SSID`. IPv4 주소를 받으면 하늘색, 링크만이면 흐린 색. 붙은 것이 없으면 칸도 없다', '2026-11-15'],
       ],
@@ -369,7 +395,10 @@ window.TARS = {
         ['[⌘⌥←] · [⌘⌥↑] · [⌘⌥↓] · [⌘⌥→]', '그 방향의 이웃 패널. 여럿이면 맨 위 · 맨 왼쪽과 마주 보는 것, 끝에서는 멈춘다', '2026-10-27'],
         ['[⌘T] · [⌘1]~[⌘9]', '새 워크스페이스 · 그 번호로', '2026-10-04'],
         ['[⌘⇧C]', 'copy mode', '2026-08-26'],
-        ['[⌘⌃F]', '전체 화면 — 둘레 여백과 상태 줄을 감추고 격자를 화면 끝까지(1280×800이면 155×47 → 160×50). 셸은 그대로', '2026-11-09'],
+        ['[⌘⌃F]', '전체 화면 — 둘레 여백과 상태 줄을 감추고 격자를 화면 끝까지(1280×800이면 155×47 → 160×50). 셸은 그대로. 앱 창에서는 그 창을 화면 전체의 자기 워크스페이스로 옮기고 다시 누르면 원래 열로', '2026-11-22'],
+        ['[⌘R]', '지금 열의 폭 — 80칸 · 120칸 · 절반 · 전체를 돈다', '2026-11-19'],
+        ['[⌘Q]', '포커스 앱 창을 닫는다 — 답이 없으면 2초 뒤 끝낸다', '2026-11-22'],
+        ['[⌘⇧/]', '앱의 메뉴 바를 연다(맨 위 줄)', '2026-11-22'],
         ['[⌘V]', '붙이기. 어느 모드에서나, 검색 프롬프트에서는 검색어에', '2026-09-09'],
         ['[⌘←] · [⌘→] · [⌘⌫]', '줄 처음 · 끝 · 커서 앞까지 지우기', '2026-08-19'],
         ['[⌥←] · [⌥→] · [⌥⌫] · [⌥Del]', '단어 이동 · 단어 지우기', '2026-08-19'],
