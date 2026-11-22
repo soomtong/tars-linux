@@ -292,6 +292,16 @@ WY-M6을 열며(2026-11-20, 조사 `wy-m6` — HEAD `e654a8e`, SDL 3.2.10 · 둠
     `Held`의 짝도 그대로다. 잃는 것: 호환 앱이 Cmd 단독 tap을 못 본다 — 그 길은 원래 모드다.
 55. text-input의 귀속은 이미 surface다(둘째 창에서 한글이 그 창으로 간다 — CR design 확인 9는 로그를 잘못 읽었다). 고치는 것은 `ti enable` · `ti disable` 줄의 `to=`가 첫 창을
     찍던 표기뿐이다. 서버 쪽 장식(포커스 테두리 · 빈 칸 이름)은 WY-M7에서도 하지 않는다 — Chromium은 자기 장식을 그린다(뒤의 필요가 생길 때).
+56. (CR-M2, 요구사항 결정 1 · 6) 앱의 풀스크린은 그 창을 자기 workspace로 옮긴다. 들어가는 길은 둘이다 — 셸 workspace의 포커스 slot이 창일 때의 `Cmd+Ctrl+F`와, column 창이
+    매핑 뒤에 보낸 `xdg_toplevel.set_fullscreen`(Chromium의 F11). 결정 21은 "전체 화면은 첫 commit 전의 것만 뜻이 있다"였다 — 그것은 처음 자리를 정하는 규칙으로 남고,
+    매핑 뒤의 요청은 옮기기가 된다. slot을 strip에서 빼고(창은 산다) 끝에 `.app` workspace를 더한다. 아홉이 다 찼으면 거절하고 제자리에서 column 폭만 가장 넓게 한다
+    (xdg-shell대로 fullscreen 없는 configure로 답한다). 포커스 slot이 셸 패널이면 `Cmd+Ctrl+F`는 FU 그대로다(셸 workspace의 chrome).
+57. 돌아갈 자리는 번호가 아니라 workspace의 정체다(요구사항 결정 6). 셸 workspace에 서버 수명 동안 느는 번호(`uid`)를 두고 옮긴 창의 workspace가 그것을 기억한다 —
+    번호는 자리라 앞의 workspace가 닫히면 당겨진다. 나올 때 그 workspace가 살아 있으면 그 포커스 column의 오른쪽, 없어졌으면 가장 가까운 왼쪽 셸 workspace(없으면 첫 셸
+    workspace)의 오른쪽 끝이다. 받을 셸 workspace가 없거나 strip이 못 받으면 나오지 않는다. 처음부터 자기 workspace로 뜬 창(둠)은 돌아갈 자리가 없다 — 나오는 요청은 무시한다.
+58. 자기 workspace의 configure 상태는 누가 청했느냐로 가른다: 클라이언트가 청한 것(F11 · 둠)은 `fullscreen`, `Cmd+Ctrl+F`로 옮긴 것은 `maximized`(둘 다 화면 크기 · `activated`).
+    요구사항 결정 1의 "chrome이 꺼진"은 TARS의 chrome(여백 · 상태 줄 · 메뉴 바)이지 앱의 것이 아니다 — Chromium은 `fullscreen` 상태를 받으면 탭 줄과 주소창을 감추는데,
+    녹화 D는 자기 workspace에서 주소창을 쓴다. 자기 workspace 안에서 클라이언트가 fullscreen을 켜고 끄면 자리는 그대로 상태만 바뀐다.
 
 ## Milestone
 

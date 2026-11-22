@@ -77,6 +77,10 @@ App Layer(0.3)의 4단. Wayland 서버(WY-M0~M6)와 툴킷(TK)이 섰고, 남은
    테스트 클라이언트뿐 아니라 진짜 Chromium으로 바로 검증한다("주소창에 글자를 쳐도 안 죽는다"). 로드맵 5판.
 9. 체인 `browser/check.sh`: display 체인 부팅 3의 모양(설정 디스크 `user=` + 홈 디스크의 묶음들), `-m 2048` 이상, 네트워크 없음, 첫 화면 기다림 상한 60초.
    첫 화면은 체인이 쓰는 `file://` 단색 페이지(좌표 색을 정할 수 있다).
+10. (CR-M2 — 결정 9의 "네트워크 없음"을 고친다) browser 체인은 `net=dhcp`와 `restrict=on` SLIRP로 부팅한다 — 바깥(인터넷 · 컨테이너)은 막히고 `guestfwd`로 세운 체인의
+    http stub 하나(`10.0.2.100:80`)만 보인다. Chromium의 배경 요청(구성 요소 갱신 · 제안)이 회선에 안 기대고, 컨테이너 포트를 안 써 lane과 부딪치지 않는다. HTTPS는 게이트
+    밖이다 — 자기 서명 인증서를 믿게 하려면 `--ignore-certificate-errors` 같은 것을 문에 넣어야 하는데 그것은 나쁜 선례다. HTTPS는 CR-M0이 바깥 망으로 이미 봤고 녹화 D가 본다.
+11. (CR-M2) 앱의 풀스크린은 WY design 결정 56~58이다 — `Cmd+Ctrl+F`는 Chromium을 탭 줄 · 주소창이 산 채(`maximized`) 자기 workspace로, F11은 Chromium의 풀스크린(`fullscreen`)으로.
 
 ## Milestone
 
