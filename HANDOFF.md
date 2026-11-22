@@ -1,6 +1,13 @@
-# HANDOFF: App Layer(0.3) — 네 단(SW · WY · TK · CR)의 코드가 다 섰다. CR-M2 끝(단계 A `1965553` · B `7fc4142`, 루트 게이트 37/37). 남은 것은 사람 녹화 넷과 0.3 줄을 `main`에 넣는 결정. 브랜치 `app-layer-0-3`
+# HANDOFF: TARS 0.3.0 공개(2026-11-22, `v0.3.0` = `f6ccce4`, ISO 다섯 + 로컬 full) — App Layer(SW · WY · TK · CR) 끝, `main`이 0.3 줄이 됐다
 
 ## 지금 멈춘 자리 (2026-11-22 — 먼저 읽는다)
+
+- 0.3.0을 냈다(기억 `project_release`의 0.3.0 절): `main`의 PT-M0 위로 rebase → 루트 게이트 36/37(+ bluetooth 단독 초록) → `VERSION` 0.3.0 ·
+  tag → 묶음 다시 굽기 → ISO 다섯(기본 · web · nonative · fakesteak · gpu)과 로컬 full → smoke 여섯 → `gh release create --latest`.
+  `main`은 `v0.3.0`까지 fast-forward했다(사용자 결정) — 이제 줄은 `main` 하나(기억 `project_branch_lines`).
+- 로컬 full 판: `out/tars-full.iso`(= `out/tars-0.3.0-full-x86_64.iso`, 2,461,104,128 B, 묶음 열다섯) — 사용자가 맥북 에어 2011에 `dd`로 쓴다.
+  `out/`은 `make clean` · 게이트가 지운다. 다시 필요하면 `git checkout v0.3.0 && make iso-full`.
+- 소개 페이지(`gh-pages`)에 0.3.0 · SW · PT · WY · TK · CR을 넣었다.
 
 - 그 뒤: 브랜치 리뷰(`/code-review high`)의 지적 여덟을 RF-M0으로 고쳤다(plan `docs/plans/2026-11-22-tars-review-fixes-rf-m0.md`, 서브에이전트
   `rf-tk` · `rf-wl` — 끝나고 pane 닫음). 커밋 제목 길이 지적은 사용자가 고치지 않기로 했다. 루트 게이트 36/37(browser 판정 3의 첫 페이지 타이밍) →
@@ -186,10 +193,7 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 - [x] tars-doom v0.1.0 release(2026-11-22, 사용자 "로컬에서 빌드 후 업로드 정도면 충분함"): 브랜치 `wayland`를 push하고(`5179493` 포트 + `5ca8edd` workflow를 수동 실행
       전용으로 — 태그가 다시 빌드해 자산을 덮지 않게) 로컬 tarball을 `gh release create v0.1.0`으로 올렸다. 내려받은 파일의 sha256이 manifest의 `0da0b4a7…`과 같다.
       남은 것: `devlayer/manifest.toml`의 tars-doom 주석("임시: release 전")을 사실대로 고친다 — 체인이 도는 동안은 manifest를 건드리지 않는다
-- [ ] push(사용자 2026-11-22): `app-layer-0-3`은 필요한 만큼만 push한다(CI 비용 — 기억 `feedback_push_sparingly`). CR-M2가 끝난 자리까지 올렸다(2026-11-22).
-      이 브랜치의 맨 push는 CI를 안 부른다(`checks.yml`은 `main` push · PR · 수동)
-- [ ] web 판 ISO(사용자 2026-11-22): browser를 실은 ISO는 `web` 식별자로 따로 짓는다, lang-native는 뺀다 — 절차는 `project_release` 절차 3. 아직 굽지 않았다
-      (셈 약 1.87 GiB) — 다음 버전을 낼 때 실제 크기 · 설치 smoke
+- [x] web 판 ISO: 0.3.0으로 처음 냈다 — 1,968,009,216 B(1.83 GiB). 설치 smoke(Chromium이 뜨는지)는 아직이다 — 실기나 QEMU 설치로 본다
 - [x] WY-M7(2026-11-22, plan `docs/plans/2026-11-22-tars-wayland-server-wy-m7.md` 결과 1 · 2): A `9b945c7` subsurface · geometry · surface 단위 포인터 · 호환 Cmd 키,
       B `f0f3524` `xdg_popup` · `xdg_positioner`(column 밖 합성 · 서버 쪽 닫기 셋). 루트 게이트 둘 다 37/37 첫 판. WY 서브프로젝트 끝
 - [x] CR-M2(2026-11-22, plan `docs/plans/2026-11-22-tars-chromium-cr-m2.md` 결과 1~4): A `1965553` 앱 풀스크린 ↔ 자기 workspace(`Cmd+Ctrl+F`는 maximized, F11은
@@ -199,9 +203,7 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 - [ ] 녹화 C(사람 녹화 — `tars-files`: column에 뜸 · 방향키 · `Cmd+L` 한글 경로 · `Cmd+K` · `Cmd+C` → 셸 `Cmd+V` · 메뉴 바 · 강조 애니메이션. 장면은 toolkit 체인
       판정 15~34가 돈다). 녹화 A(둠)도 아직 안 찍었다
 - [ ] 녹화 B(사람 녹화 — strip + SDL3 column + 클립보드 + 한글, 조사 `wy-m5/research.md` 6절 끝에 보일 것)
-- [ ] 소개 페이지(`gh-pages`의 `data.js`)에 SW · WY · TK를 안 올렸다 — 사이트는 `main` 줄 기준(`commits`가 `rev-list --count main`)이고 SW는
-      `app-layer-0-3`에만 있다. 0.3 줄이 `main`에 들어갈 때 올린다(사용자가 먼저 원하면 그때)
-- [ ] `app-layer-0-3`의 이 세션 commit들(`cac1858`부터)은 push하지 않았다 — 사용자가 원하면 push
+- [x] 소개 페이지: SW · PT · WY · TK · CR과 0.3.0 release를 넣었다(2026-11-22). 영상은 안 찍었다 — 녹화 A~D가 그 몫
 - [ ] 게이트 밖으로 남긴 것: 끄는 선택 중 키로 viewport가 옮기면 누른 pane이 화면 밖일 수 있다(기억 `project_strip_workspace`)
 - [ ] 0.2.3은 프리릴리스라 소개 페이지 `releases`에 안 넣었다 — 사용자가 원하면 넣는다
 - [x] `main`의 것을 0.3 줄로: rebase(사용자 2026-11-22). `main`의 `4782c9d`(PT-M0 — initrd에 fdisk · cfdisk, 클라우드 세션 · PR)
@@ -209,9 +211,7 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 - [x] rebase 뒤 루트 게이트(2026-11-22, `out/gate-logs/20261122-093758`, 57분 15초 · lanes 2,253초): 36/37 — tools 검사 29
       (sfdisk → `fdisk -l` → cfdisk) 초록. 빨간 하나는 `bluetooth`의 `btvirt` general protection fault(`carryover.md`의 간헐,
       KH-M1 · CR-M1과 같은 모양), 같은 산출물로 체인만 다시 돌려 PASS(3분 47초)
-- [ ] PT-M0: 소개 페이지(`gh-pages`의 `data.js`)의 기능 목록에 "파티션 도구 fdisk · cfdisk" — 별도 브랜치라 PR에 안 들었다.
-      기억 `project_partition_tools`
-- [ ] 실기(사용자, 맥북 에어 2011): 링크 칸 · GPU 데모 판(`project_link_status` · `carryover.md` DY 절), 그리고 SW의 strip(`Cmd+R` 등)
+- [ ] 실기(사용자, 맥북 에어 2011 — 0.3.0 full 판): 링크 칸 · GPU 데모(`project_link_status` · `carryover.md` DY 절), SW의 strip(`Cmd+R` 등), Wayland 앱 셋(`tars-files` · `tars-doom` · `tars-browser`)
 - [ ] 이월: janet 1.43.0(AVX2), mitos 0.2.1, 위임 결정(CE 4~7, LT 2), memcpy · memset glibc 측정, 클라우드 브랜치 정리, DC-M2 boot 7 여유
 
 ## 핵심 파일

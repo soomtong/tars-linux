@@ -1,6 +1,6 @@
 ---
 name: project_release
-description: "프리릴리스 TARS 0.2.3(2026-11-18, v0.2.3 = 17b3dfa, ISO 넷, 0.3 브랜치로 가기 전의 판) · 공개 버전 TARS 0.2.2(2026-11-14, v0.2.2 = 16a1072, ISO 넷 — 기본 · nonative · fakesteak · gpu 데모) · 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) · 0.1.4(2026-11-05, v0.1.4 = d93a8aa, 설치해 쓰는 기계 · 맥북) · 0.2.0(2026-11-10, v0.2.0 = 3d84d27, 개발 도구 층) · 0.2.1(2026-11-12, v0.2.1 = 4a26f01, 컨테이너) — GitHub release에 x86_64 ISO 셋(기본 판 · barebone · fakesteak 납품 데모)과 SHA256SUMS. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create. 내려받아 대조는 정식 버전부터)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
+description: "공개 버전 TARS 0.3.0(2026-11-22, v0.3.0 = f6ccce4, App Layer, ISO 다섯 — 기본 · web · nonative · fakesteak · gpu, full은 로컬) · 프리릴리스 TARS 0.2.3(2026-11-18, v0.2.3 = 17b3dfa, ISO 넷, 0.3 브랜치로 가기 전의 판) · 공개 버전 TARS 0.2.2(2026-11-14, v0.2.2 = 16a1072, ISO 넷 — 기본 · nonative · fakesteak · gpu 데모) · 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) · 0.1.4(2026-11-05, v0.1.4 = d93a8aa, 설치해 쓰는 기계 · 맥북) · 0.2.0(2026-11-10, v0.2.0 = 3d84d27, 개발 도구 층) · 0.2.1(2026-11-12, v0.2.1 = 4a26f01, 컨테이너) — GitHub release에 x86_64 ISO 셋(기본 판 · barebone · fakesteak 납품 데모)과 SHA256SUMS. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create. 내려받아 대조는 정식 버전부터)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
 metadata:
   type: project
 ---
@@ -145,6 +145,22 @@ app-layer-0-3." 0.2.2 뒤의 LK와 cyber 0.4.15 · `cyber-lsp`를 담았다. 0.3
 네 판 모두 tag의 커밋에서 지었다(GPU 판에도 꼬리표가 없다). smoke 넷 모두 `TARS 0.2.3` · grid 155×47 · fish, panic 0. `/boot/layers`는
 호스트에 xorriso가 없어 `bsdtar -tf <iso>`로 대조했다. 받아서 `shasum -c` 넷 다 OK. 7(소개 페이지)은 프리릴리스라 넣지 않았다 — 사용자가 원하면 넣는다.
 절차에서 배운 것: `out/release-<ver>/`을 게이트 전에 만들면 게이트를 거치며 없어진다 — 게이트가 끝난 뒤에 만든다.
+
+## 0.3.0 (2026-11-22, 공개 — ISO 다섯 · 로컬 full)
+
+| 항목 | 값 |
+|---|---|
+| tag | `v0.3.0` (annotated) → `f6ccce4` (`Release 0.3.0`). 루트 게이트는 `3f86f7f`의 코드(`VERSION` 한 줄 앞)에서 36/37 — 빨간 bluetooth는 `btvirt` crash 간헐(`carryover.md`), 체인만 다시 돌려 초록 |
+| ISO | `tars-0.3.0-x86_64.iso` 2,002,964,480 B(묶음 전부 − server − browser, doom 포함) · `tars-0.3.0-web-x86_64.iso` 1,968,009,216 B(− lang-native + browser) · `tars-0.3.0-nonative-x86_64.iso` 1,658,894,336 B · `tars-0.3.0-fakesteak-x86_64.iso` 148,566,016 B · `tars-0.3.0-gpu-x86_64.iso` 477,528,064 B |
+| sha256 | `008896d9…96a24` · `5ae4a243…79081` · `467819df…f43ca8` · `e9f08b52…1f23a3` · `20a0252c…aa0709` (SHA256SUMS, 다섯) |
+| release | https://github.com/soomtong/tars-linux/releases/tag/v0.3.0 (Latest) |
+| 로컬 | `make iso-full` → `out/tars-full.iso` 2,461,104,128 B(묶음 열다섯, 2GiB 넘음), 하드 링크 `out/tars-0.3.0-full-x86_64.iso`, sha256 `d4412e85…36fa0c` — 사용자가 맥북 에어 2011에 `dd`로 쓴다 |
+
+사용자(2026-11-22): "let tag 0.3.0 it's a big release of tars linux … prepare it and publish them" · "let me get full version of iso file in local machine".
+App Layer(SW · WY · TK · CR)와 `main`의 PT-M0을 담은 판이다. 사용자 결정 둘: `main`을 `v0.3.0`까지 fast-forward(0.3 줄이 `main`이 됐다 —
+[[project_branch_lines]]), ISO는 다섯(web 판을 처음 냈다 — 셈 1.87 GiB였던 것이 실제 1.83 GiB). 묶음 굽기는 거두기 캐시 덕에 4분 25초.
+smoke 여섯(full 포함) 모두 `TARS 0.3.0` · grid · fish, panic 0. `/boot/layers`는 `bsdtar -tf`로 대조. 기본 판이 2GiB까지 약 138 MiB —
+다음 판에서 묶음이 자라면 먼저 본다. 절차 7(소개 페이지)은 같은 날 `releases`와 SW · PT · WY · TK · CR을 함께 넣었다.
 
 ## 0.2.2부터의 배포 모양 (사용자 결정 2026-11-14)
 

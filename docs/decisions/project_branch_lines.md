@@ -1,6 +1,6 @@
 ---
 name: project_branch_lines
-description: 2026-11-18부터 줄이 둘이다 — `main`은 0.2.x(0.2.3 다음의 작업은 언제든 여기로 돌아와 잇는다), App Layer(0.3)는 브랜치 `app-layer-0-3`. 갈라진 자리는 프리릴리스 v0.2.3
+description: 줄이 둘이던 때(2026-11-18~22 — `main` 0.2.x · `app-layer-0-3`)는 0.3.0으로 끝났다. 2026-11-22 rebase로 main의 PT-M0을 받고 `main`을 `v0.3.0`까지 fast-forward — 지금은 `main` 하나
 metadata:
   type: project
 ---
@@ -8,12 +8,14 @@ metadata:
 사용자(2026-11-18): "this project (app layer enhanced) go 0.3 branch named app-layer-0-3" · "Anytime we go back to this main branch to
 continue 0.2.3 next branch."
 
-- `main` — 0.2.x 줄. 0.2.3 다음의 패치(도구 판올림 · 실기 수정 · 작은 서브프로젝트)는 여기서 한다. 릴리스 tag도 여기에 단다.
-- `app-layer-0-3` — App Layer(SW · WY · TK · CR, [[project_app_layer_vision]])의 줄. `v0.2.3`([[project_release]]) 뒤의 `main`에서 갈라졌다.
+- 2026-11-18~22: `main`은 0.2.x 줄(그 사이 PT-M0 하나가 클라우드 세션의 PR로 들어왔다), `app-layer-0-3`은 App Layer(SW · WY · TK · CR,
+  [[project_app_layer_vision]])의 줄. `v0.2.3`([[project_release]]) 뒤의 `main`에서 갈라졌다.
+- 2026-11-22 합침: 사용자 "pull main of origin, new commits there. rebase onto main" — 브랜치 123개를 `main`의 `4782c9d` 위로 rebase
+  (충돌은 문서 넷 — `-X theirs`로 옮긴 뒤 PT의 줄을 다시 넣었다, `7e22dcd`) → force push. 이어서 0.3.0 릴리스 때 사용자가 "main을 fast-forward"를
+  골라 `main` = `v0.3.0`(`f6ccce4`)이 됐다.
 
 How to apply:
 
-- 세션을 시작하면 `git branch --show-current`로 어느 줄인지 먼저 본다. App Layer 일이면 `app-layer-0-3`, 그 밖이면 `main`.
-- `main`에 쌓인 것을 0.3 줄로 가져오는 방법(merge · rebase)과 0.3을 `main`에 합치는 때는 아직 정하지 않았다 — 처음 필요해질 때 사용자에게 묻는다
-  (Claude의 해석: 사용자의 말은 두 줄을 오간다는 것까지다).
-- `HANDOFF.md` · `MEMORY.md`는 두 줄에서 따로 자란다. 줄을 옮길 때 다른 줄의 HANDOFF를 `git show <branch>:HANDOFF.md`로 읽는다.
+- 이제 줄은 `main` 하나다. `app-layer-0-3`은 `v0.3.0`과 같은 자리에 남아 있고 더 쌓지 않는다(지울지는 사용자가 정한다).
+- 다시 줄을 가를 때는 이번처럼: 갈라진 줄에 `main`의 것을 가져올 때 rebase를 썼고, `HANDOFF.md` · `MEMORY.md` · `completed.md`처럼 두 줄이
+  함께 고치는 문서가 충돌의 거의 전부였다.
