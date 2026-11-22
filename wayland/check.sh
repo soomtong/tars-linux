@@ -38,6 +38,8 @@ cd "$(dirname "$0")" || exit 1
 # WY-M7 단계 A: 판정 37~39(36 뒤 · 9 앞) — `--subsurface` 창의 64 × 64 자식이 부모의 (40, 40)에 그려지고, `set_position`과 sync 자식의 commit은
 #   부모의 commit을 기다리며, 포인터가 자식의 입력 영역 위면 enter가 자식 surface의 좌표로 간다. 판정 43 — 한 클라이언트의 둘째 창에서
 #   `ti enable to=`가 그 창이다. 판정 44 — 호환 창에는 Cmd 키 자체(125 · 126)가 안 가고 Cmd+V는 Ctrl+V로 간다.
+# WY-M7 단계 B: 판정 40~42(44 뒤 · 9 앞) — `--popup` 창의 popup이 누른 자리에 서고, column 밖(셸 pane 위)으로 나갔다 닫히면 셸이 되살아나며, 아래 경계에서
+#   flip_y한다. grab 없는 popup이 열린 채 창을 누르면 그 누름은 창에 가고, grab한 popup은 클라이언트 밖 누름에 닫히고 그 누름을 먹는다. Cmd+[에 닫힌다.
 # WY-M2(단계 B): 창 모드로 띄운 창은 셸 오른쪽 column이 된다(판정 16 · 17 · 22) — `wl> column`, pane 픽셀 크기의 configure
 #   (activated · tiled), 포커스 slot이 창이면 키가 그 창으로, Cmd+[로 셸에 오면 activated를 잃고 keyboard leave, Cmd+R의 새
 #   configure, Cmd+Q에 slot이 닫히고 셸이 전체 폭을 되찾는다. 자기 workspace를 보는 판정 2~8은 `--fullscreen`으로 띄운다.
@@ -1183,6 +1185,123 @@ type_text 'echo c44-(grep -c code.12. /tmp/wl18.log)-(grep -cw depressed.0x4 /tm
 type_keys ret
 wait_for_screen '\| c44-0-[1-9]' || report_failure "(44) the client's log has a Cmd key or no Ctrl"
 echo "(44): no Cmd key event reached the compat window, Cmd+V came as 47 with Ctrl"
+
+# ── 판정 40 · 41 · 42: popup — 자리와 좌표 색, column 밖, flip, grab, 서버 쪽 닫기(WY-M7 단계 B, plan 확정 7 · 8 · 9) ──────────────
+# 셸만 남은 자리다(판정 44 끝). `--popup` 창(x 644 · y 20, 616 × 752, 3366CC)을 누르면 그 자리(1 × 1 anchor, anchor bottom_left)에 120 × 80 popup(33CC66)이
+# 열린다. 40a: (900, 300) — surface (256, 280), configure (256, 281), 화면 (900, 301)~(1019, 380). 41b: grab 없는 popup이 열린 채 창 안 (1100, 600)을 누르면
+# 그 누름은 창에 가고(`wl> button`) 클라이언트가 popup을 지운다. 40b: `--popup-left --popup-ca 8` — (660, 300)이면 gravity bottom_left로 x −104,
+# 화면 (540, 301)~(659, 380) — column 밖(셸 pane 위)이고, 닫으면 그 자리가 앞의 셸 그림으로 돌아온다. (900, 740)이면 아래 경계(격자 끝 772)에 걸려
+# flip_y — configure (136, 640), 화면 (780, 660)~(899, 739). 41a: `--popup-grab` popup이 열린 채 셸 pane을 누르면 `done why=outside`, 그 누름은 셸에도 창에도
+# 안 간다. 42: popup이 열린 채 Cmd+[ → `done why=focus`.
+SHOT40="${SCREENS_DIR}/popup-now.ppm"
+wait_for_ink40() {
+  local label="$1" box="$2" want="$3" got="" i x y w h
+  read -r x y w h <<<"$box"
+  for i in $(seq 1 20); do
+    screendump "$SHOT40" || return 1
+    got="$(ppm_ink "$SHOT40" "$x" "$y" "$w" "$h")"
+    [ "$got" = "$want" ] && return 0
+    sleep 0.3
+  done
+  echo "(${label}) at ${x},${y} ${w}x${h}: ${got}, want ${want}"
+  return 1
+}
+click_at() {
+  move_to "$1" "$2" || return 1
+  hmp "mouse_button 1"
+  hmp "mouse_button 0"
+}
+# 판정마다 셸에 칠 것이 있다 — 한글이 켜져 있으면 끈다.
+if tlog | tr -d '\r' | grep -aoE 'terminal: hangul> on=(true|false)' | tail -n 1 | grep -a 'on=true' > /dev/null; then
+  OFFS="$(count_log 'terminal: hangul> on=false')"
+  type_keys shift-spc
+  wait_for_count 'terminal: hangul> on=false' $((OFFS + 1)) || report_failure "(40) Shift+Space did not turn hangul off"
+fi
+echo "=== (40a) a popup opens where the window was clicked ==="
+move_to 200 600 || report_failure "(40) the pointer did not reach 200,600"
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size --popup > /tmp/wl19.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(40) the client did not open as a column"
+POP_A="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+wait_for_ink40 40 "700 400 100 100" "bg=3366cc ink=0" || report_failure "(40) the window is not drawn"
+click_at 900 300 || report_failure "(40) the pointer did not reach 900,300"
+wait_for_log "terminal: wl> popup id=${POP_A} pop=[0-9]+ new parent=main at=256,281 w=120 h=80 ca=0" || report_failure "(40) no 'wl> popup … new parent=main at=256,281 w=120 h=80'"
+wait_for_log "terminal: wl> popup id=${POP_A} pop=[0-9]+ map w=120 h=80 bs=1 " || report_failure "(40) the popup was not mapped"
+wait_for_ink40 40 "930 321 80 50" "bg=33cc66 ink=0" || report_failure "(40) the popup's colour is not at (900, 301)"
+cp "$SHOT40" "${SCREENS_DIR}/popup.ppm"
+echo "(40a): the popup is at the window's (256, 281) — screen (900, 301), 33CC66"
+
+echo "=== (41b) with a popup without grab open, a click in the window reaches the window ==="
+BTN="$(count_log "terminal: wl> button id=${POP_A} code=272 state=1")"
+click_at 1100 600 || report_failure "(41b) the pointer did not reach 1100,600"
+wait_for_count "terminal: wl> button id=${POP_A} code=272 state=1" $((BTN + 1)) || report_failure "(41b) the click in the window did not reach it"
+wait_for_log "terminal: wl> popup id=${POP_A} pop=[0-9]+ gone" || report_failure "(41b) the client did not destroy its popup"
+wait_for_ink40 41 "930 321 80 50" "bg=3366cc ink=0" || report_failure "(41b) the popup's place is not the window's colour again"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${POP_A} ws=1 slot=1" || report_failure "(41b) Cmd+Q did not close the window"
+echo "(41b): the click reached the window and the client took its popup away"
+
+echo "=== (40b) a popup goes over the shell column and flips at the bottom ==="
+move_to 200 600 || report_failure "(40b) the pointer did not reach 200,600"
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size --popup-left --popup-ca 8 > /tmp/wl20.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(40b) the client did not open as a column"
+POP_B="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+wait_for_ink40 40b "700 400 100 100" "bg=3366cc ink=0" || report_failure "(40b) the window is not drawn"
+sleep 1
+screendump "$SHOT40" || report_failure "(40b) screendump did not write ${SHOT40}"
+SHELL40="$(ppm_ink "$SHOT40" 550 311 80 60)"
+click_at 660 300 || report_failure "(40b) the pointer did not reach 660,300"
+wait_for_log "terminal: wl> popup id=${POP_B} pop=[0-9]+ new parent=main at=-104,281 w=120 h=80 ca=8" || report_failure "(40b) no 'wl> popup … at=-104,281'"
+wait_for_ink40 40b "550 311 80 60" "bg=33cc66 ink=0" || report_failure "(40b) the popup is not over the shell column at (540, 301)"
+cp "$SHOT40" "${SCREENS_DIR}/popup-over-shell.ppm"
+click_at 1100 600 || report_failure "(40b) the pointer did not reach 1100,600"
+wait_for_log "terminal: wl> popup id=${POP_B} pop=[0-9]+ gone" || report_failure "(40b) the client did not destroy its popup"
+wait_for_ink40 40b "550 311 80 60" "$SHELL40" || report_failure "(40b) the shell under the popup was not drawn again"
+click_at 900 740 || report_failure "(40b) the pointer did not reach 900,740"
+wait_for_log "terminal: wl> popup id=${POP_B} pop=[0-9]+ new parent=main at=136,640 w=120 h=80 ca=8" || report_failure "(40b) the popup at the bottom did not flip to (136, 640)"
+wait_for_ink40 40b "790 670 100 60" "bg=33cc66 ink=0" || report_failure "(40b) the flipped popup is not at (780, 660)"
+cp "$SHOT40" "${SCREENS_DIR}/popup-flip.ppm"
+click_at 1100 400 || report_failure "(40b) the pointer did not reach 1100,400"
+wait_for_count "terminal: wl> popup id=${POP_B} pop=[0-9]+ gone" 2 || report_failure "(40b) the client did not destroy the flipped popup"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${POP_B} ws=1 slot=1" || report_failure "(40b) Cmd+Q did not close the window"
+echo "(40b): a popup at (−104, 281) covered the shell column and gave it back; at the bottom it flipped to (136, 640)"
+
+echo "=== (41a · 42) a grabbing popup closes on a click outside the client (eaten) and on Cmd+[ ==="
+move_to 200 600 || report_failure "(41a) the pointer did not reach 200,600"
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size --popup-grab > /tmp/wl21.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(41a) the client did not open as a column"
+POP_C="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+wait_for_ink40 41a "700 400 100 100" "bg=3366cc ink=0" || report_failure "(41a) the window is not drawn"
+click_at 900 300 || report_failure "(41a) the pointer did not reach 900,300"
+wait_for_log "terminal: wl> popup id=${POP_C} pop=[0-9]+ grab" || report_failure "(41a) the popup did not grab"
+wait_for_log "terminal: wl> popup id=${POP_C} pop=[0-9]+ map w=120 h=80 bs=1 geom=0,0 120x80 grab=1" || report_failure "(41a) the grabbing popup was not mapped"
+FOCUS0="$(count_log 'terminal: pane> ws=1/1 panes=2 focus=0 ')"
+BTN="$(count_log "terminal: wl> button id=${POP_C} ")"
+click_at 200 400 || report_failure "(41a) the pointer did not reach 200,400"
+wait_for_log "terminal: wl> popup id=${POP_C} pop=[0-9]+ done why=outside" || report_failure "(41a) the click on the shell did not close the grabbing popup"
+sleep 1
+[ "$(count_log 'terminal: pane> ws=1/1 panes=2 focus=0 ')" -eq "$FOCUS0" ] || report_failure "(41a) the eaten click focused the shell"
+[ "$(count_log "terminal: wl> button id=${POP_C} ")" -eq "$BTN" ] || report_failure "(41a) the eaten click reached the window"
+wait_for_log "terminal: wl> popup id=${POP_C} pop=[0-9]+ gone" || report_failure "(41a) the client did not destroy the closed popup"
+echo "(41a): the click on the shell closed the grabbing popup (done why=outside) and went nowhere"
+click_at 900 300 || report_failure "(42) the pointer did not reach 900,300"
+wait_for_count "terminal: wl> popup id=${POP_C} pop=[0-9]+ map w=120 h=80 " 2 || report_failure "(42) the popup did not open again"
+type_keys alt-bracket_left
+wait_for_log "terminal: wl> popup id=${POP_C} pop=[0-9]+ done why=focus" || report_failure "(42) Cmd+[ did not close the popup"
+type_keys alt-bracket_right
+wait_for_log "terminal: pane> ws=1/1 panes=2 focus=1 slot=1 app id=${POP_C} " || report_failure "(42) Cmd+] did not focus the window"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${POP_C} ws=1 slot=1" || report_failure "(42) Cmd+Q did not close the window"
+type_text 'echo c41-(grep -c popup.configure.x.256.y.281 /tmp/wl19.log)-(grep -c popup.configure.x.136.y.640 /tmp/wl20.log)-(grep -c popup.done /tmp/wl21.log)'
+type_keys ret
+wait_for_screen '\| c41-1-1-2' || report_failure "(41) the clients' logs do not have the configures (256, 281) · (136, 640) and two popup_done"
+echo "(42): Cmd+[ closed the popup (done why=focus)"
 
 # ── 판정 9: render verify ───────────────────────────────────────────────
 #

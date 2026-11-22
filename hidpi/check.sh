@@ -25,6 +25,7 @@ cd "$(dirname "$0")" || exit 1
 #     화살표가 그 그림을 덮지 않는다. 배율을 안 쓰는 창(`--buffer-scale 1`)은 HS의 늘린 길
 #     그대로 2 × 2 블록 바둑판이다. 배율 1(부팅 B)에서는 서버가 1을 알린다
 #   → (WY-M7) bs 2 창의 자식(subsurface)도 물리로 합성된다 — 자식이 bs 2여도 bs 1이어도 물리 화면의 그 자리에 자식의 색이 있다(판정 9)
+#   → (WY-M7) bs 2 창의 popup도 물리 화면의 그 자리에 있다(판정 10)
 #
 # 판정의 도구가 넷이다.
 #   kms: · terminal: grid 줄 — 무엇이 골라졌고 격자가 몇 칸인가.
@@ -579,6 +580,33 @@ for sub_scale in 2 1; do
   wait_for_log "terminal: wl> unmap id=${ID9} ws=1 slot=1" || report_failure "(9) Cmd+Q did not close the window"
 done
 echo "(9): a bs 2 and a bs 1 child of a bs 2 window are both on the physical screen"
+
+# ── 판정 10: popup도 물리로 합성된다(WY-M7 단계 B, plan 확정 9) ─────────────────────────────
+#
+# bs 2 창(`--popup`)을 논리 (창 원점 + 100, + 100)에서 누르면 그 자리에 120 × 80 popup(33CC66, bs 2)이 열린다 — 물리로는 창 원점 + (200, 202)에
+# 240 × 160. popup을 창 위에 걸친 자리는 물리 합성(창 bs 2)이 덮으므로 다시 섞어야 보인다. 화살표(누른 자리)를 비켜 오른쪽 안쪽을 본다.
+echo "=== boot A (10): a popup on a buffer-scale-2 window is on the physical screen ==="
+COLS10="$(tlog | grep -acE 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text "tars-wl-test --buffer-scale 2 --follow-size --popup --color ${WL_COLOR^^} > /tmp/hs10.log &"
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS10 + 1)) || report_failure "(10) the window did not open as a column"
+ID10="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+' | tail -n 1 | sed 's/.*id=//')"
+wait_for_log "terminal: pane> ws=1/1 panes=2 focus=1 slot=1 app id=${ID10} " || report_failure "(10) the pane> line does not show the window"
+read -r X0 Y0 X1 Y1 < <(app_rect "$ID10") || report_failure "(10) could not read the window's rectangle"
+sleep 1
+move_to $(( X0 / 2 + 100 )) $(( Y0 / 2 + 100 )) || report_failure "(10) the pointer did not reach the window"
+hmp "mouse_button 1"
+hmp "mouse_button 0"
+wait_for_log "terminal: wl> popup id=${ID10} pop=[0-9]+ map w=120 h=80 bs=2 " || report_failure "(10) no 'wl> popup id=${ID10} … map w=120 h=80 bs=2'"
+sleep 1
+SHOT10="${SCREENS_DIR}/bs2-popup.ppm"
+screendump "$SHOT10" || report_failure "(10) screendump did not write ${SHOT10}"
+IN10="$(ppm_ink "$SHOT10" $(( X0 + 260 )) $(( Y0 + 212 )) 160 140)"
+echo "(10) popup at physical $(( X0 + 200 )),$(( Y0 + 202 )) 240x160: ${IN10}"
+[ "$IN10" = "bg=33cc66 ink=0" ] || report_failure "(10) the popup is not on the physical screen (${IN10})"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${ID10} ws=1 slot=1" || report_failure "(10) Cmd+Q did not close the window"
+echo "(10): the bs 2 popup is on the physical screen at the window's (200, 202)"
 tlog | grep -aoE 'terminal: wl> (frame full|phys arrow) [^|]*' | tr -d '\r' | sed 's/^/measure: /'
 
 stop_boot

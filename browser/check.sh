@@ -15,6 +15,7 @@ cd "$(dirname "$0")" || exit 1
 #   → 렌더러가 seccomp 필터 안(`Seccomp: 2`)에서, 브라우저와 다른 user namespace(uid_map `1000 1000 1`)로 돈다 — 화면 셸(같은 uid)이 /proc로
 #     읽는다(4 — CR design 결정 5 · 요구사항 결정 8: sandbox를 끄지 않는다)
 #   → (WY-M7) 주소창에 글자를 치면 자동 완성 bubble이 subsurface로 뜨고 Chromium이 살아 있다(3a — 3 뒤 · 4 앞)
+#   → (WY-M7) 오른쪽 누름의 문맥 메뉴가 xdg_popup으로 보이고 Esc에 사라진다(3b — 3a 뒤 · 4 앞)
 #   → Cmd+Q가 close를 보내 Chromium이 스스로 끝나고(kill 없음) chromium 프로세스가 하나도 남지 않는다(5)
 #
 # 부팅 하나, NIC 없음(R-CR-5의 망은 CR-M2). 설정 디스크 `shell=fish keyboard=apple user=cruser` + 라벨 tars-home의 홈 디스크(display 체인
@@ -225,6 +226,7 @@ qemu-system-x86_64 \
   -display none \
   -drive file="$CONFIG_IMG",if=virtio,format=raw \
   -drive file="$HOME_IMG",if=virtio,format=raw \
+  -usb -device usb-mouse \
   -serial file:"$LOG" \
   -monitor tcp:127.0.0.1:${MONITOR_PORT},server,nowait \
   -no-reboot &
@@ -355,6 +357,85 @@ n_act3b="$(count_log "$ACT3B")"
 type_keys meta_l-bracket_right
 wait_for_count "$ACT3B" $((n_act3b + 1)) || report_failure "(3a) Cmd+] did not give chromium the keyboard back"
 echo "(3a) ${MAP3A#terminal: }; probe ${BEFORE3A} -> ${AFTER3A}; no client gone, no crash report; the screens are ${JUDGE_DIR}/cr-bubble.png and cr-bubble-2x.png"
+
+# ── 판정 3b: 문맥 메뉴가 보인다(WY-M7 단계 B, plan 확정 10) ──────────────────────────
+#
+# USB 마우스(WY-M7 단계 B에서 이 체인에 더함 — 움직이기 전에는 화살표가 없어 판정 2 · 3은 그대로다)로 페이지 (1000, 500)을 오른쪽 누름. Chromium의 문맥 메뉴
+# (319 × 319, anchor bottom_left · gravity bottom_right · ca 41)는 아래 경계(격자 끝 772)에 걸려 flip_y로 누른 자리 위에, 오른쪽 화면 끝에 걸려 slide_x로 왼쪽에
+# 선다 — geometry 화면 (961, 181)~(1279, 499)(호스트 표의 셈, Chromium 판에 따라 크기가 바뀔 수 있다). 상자는 그 안 오른쪽 가운데 `1150 300 40 10` —
+# 페이지 색 2e8b57에서 바뀌고, Esc에 Chromium이 popup을 지우면 페이지 색으로 돌아온다(통째 프레임).
+echo "=== (3b) a right click opens chromium's context menu as an xdg_popup, Esc takes it away ==="
+hmp() {
+  echo "$1" >&3
+  sleep 0.05
+}
+last_at() {
+  tlog | grep -a 'terminal: pointer> at ' | tail -n 1 | tr -d '\r'
+}
+wait_for_at() {
+  local pattern="$1" i line
+  for i in $(seq 1 150); do
+    line="$(last_at)"
+    if grep -aqE -- "$pattern" <<<"$line"; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+# wayland 체인의 move_to와 같다(첫 움직임 전에는 가운데 (640, 400)에서).
+move_to() {
+  local tx="$1" ty="$2" line cx=640 cy=400 dx dy sx sy
+  line="$(last_at)"
+  if [ -n "$line" ]; then
+    cx="$(sed -E 's/.* x=([0-9]+) .*/\1/' <<<"$line")"
+    cy="$(sed -E 's/.* y=([0-9]+) .*/\1/' <<<"$line")"
+  fi
+  dx=$((tx - cx))
+  dy=$((ty - cy))
+  while [ "$dx" -ne 0 ] || [ "$dy" -ne 0 ]; do
+    sx=$dx; [ "$sx" -gt 100 ] && sx=100; [ "$sx" -lt -100 ] && sx=-100
+    sy=$dy; [ "$sy" -gt 100 ] && sy=100; [ "$sy" -lt -100 ] && sy=-100
+    hmp "mouse_move $sx $sy"
+    dx=$((dx - sx))
+    dy=$((dy - sy))
+  done
+  wait_for_at "^terminal: pointer> at x=${tx} y=${ty} "
+}
+MENU_PROBE="1150 300 40 10"
+move_to 1000 500 || report_failure "(3b) the pointer did not reach 1000,500"
+sleep 1
+screendump "$SHOT" || report_failure "(3b) screendump did not write ${SHOT}"
+# shellcheck disable=SC2086 # 상자는 낱말로 갈라 넘긴다.
+BEFORE3B="$(ppm_ink "$SHOT" $MENU_PROBE)"
+[ "$BEFORE3B" = "bg=${PAGE_BG} ink=0" ] || report_failure "(3b) the probe ${MENU_PROBE} is not the page colour before the click (${BEFORE3B})"
+hmp "mouse_button 2"
+hmp "mouse_button 0"
+wait_for_log "terminal: wl> popup id=${CR_ID} pop=[0-9]+ new parent=main " || report_failure "(3b) the right click opened no popup"
+wait_for_log "terminal: wl> popup id=${CR_ID} pop=[0-9]+ map " || report_failure "(3b) the context menu was never mapped"
+AFTER3B=""
+for _ in $(seq 1 20); do
+  sleep 0.5
+  screendump "$SHOT" || report_failure "(3b) screendump did not write ${SHOT}"
+  # shellcheck disable=SC2086
+  AFTER3B="$(ppm_ink "$SHOT" $MENU_PROBE)"
+  [ "$AFTER3B" != "bg=${PAGE_BG} ink=0" ] && break
+done
+[ "$AFTER3B" != "bg=${PAGE_BG} ink=0" ] || report_failure "(3b) the context menu is not on the screen (the probe is still the page colour)"
+cp "$SHOT" "${SCREENS_DIR}/menu.ppm"
+convert "$SHOT" "${JUDGE_DIR}/cr-menu.png" || report_failure "(3b) could not write ${JUDGE_DIR}/cr-menu.png"
+NEW3B="$(tlog | grep -aoE "terminal: wl> popup id=${CR_ID} pop=[0-9]+ new [^|]*" | head -n 1 | tr -d '\r')"
+type_keys esc
+wait_for_log "terminal: wl> popup id=${CR_ID} pop=[0-9]+ gone" || report_failure "(3b) Esc did not take the context menu away"
+GONE3B=""
+for _ in $(seq 1 20); do
+  sleep 0.5
+  screendump "$SHOT" || report_failure "(3b) screendump did not write ${SHOT}"
+  # shellcheck disable=SC2086
+  GONE3B="$(ppm_ink "$SHOT" $MENU_PROBE)"
+  [ "$GONE3B" = "bg=${PAGE_BG} ink=0" ] && break
+done
+[ "$GONE3B" = "bg=${PAGE_BG} ink=0" ] || report_failure "(3b) the page did not come back under the closed menu (${GONE3B})"
+[ "$(count_log 'terminal: wl> gone pid=')" -eq 0 ] || report_failure "(3b) a Wayland client went away"
+echo "(3b) ${NEW3B#terminal: }; probe ${BEFORE3B} -> ${AFTER3B} -> ${GONE3B}; the screen is ${JUDGE_DIR}/cr-menu.png"
 
 # ── 판정 4: 렌더러의 sandbox ──────────────────────────────────────────────
 #

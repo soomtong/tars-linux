@@ -586,5 +586,65 @@ pub fn main() !void {
         if (!logic.effectiveSync(&[_]bool{ false, true }) or logic.effectiveSync(&[_]bool{ false, false }) or !logic.effectiveSync(&[_]bool{true})) return error.WrongSync;
     }
     std.debug.print("wl_logic_test: restack · effectiveSync 5 cases\n", .{});
+    // ── popup의 자리(WY-M7 단계 B) ──
+    {
+        // 1280 × 800, 위 띠 20 · 상태 줄 아래 28을 뺀 화면을 부모(Chromium 창, geometry 원점 화면 (644, 20)) 좌표로.
+        const scr: logic.Rect = .{ .x = -644, .y = 0, .w = 1280, .h = 752 };
+        const cases = [_]struct { name: []const u8, p: logic.Positioner, b: ?logic.Rect, want: logic.Rect }{
+            // Chromium의 다섯 장면(조사 research 5절의 값).
+            .{ .name = "context menu: flip_y, then slide_x", .p = .{ .w = 319, .h = 319, .ax = 356, .ay = 580, .aw = 1, .ah = 1, .anchor = 6, .gravity = 8, .ca = 41 }, .b = scr, .want = .{ .x = 317, .y = 261, .w = 319, .h = 319 } },
+            .{ .name = "select: fits", .p = .{ .w = 99, .h = 130, .ax = 40, .ay = 267, .aw = 99, .ah = 28, .anchor = 6, .gravity = 8, .ca = 8 }, .b = scr, .want = .{ .x = 40, .y = 295, .w = 99, .h = 130 } },
+            .{ .name = "tooltip: slide_x", .p = .{ .w = 234, .h = 26, .ax = 593, .ay = 63, .aw = 10, .ah = 15, .anchor = 8, .gravity = 8, .ca = 11 }, .b = scr, .want = .{ .x = 402, .y = 78, .w = 234, .h = 26 } },
+            .{ .name = "app menu: flip_y fails, resize_y", .p = .{ .w = 364, .h = 687, .ax = 576, .ay = 46, .aw = 34, .ah = 34, .anchor = 8, .gravity = 6, .ca = 41 }, .b = scr, .want = .{ .x = 246, .y = 80, .w = 364, .h = 672 } },
+            // 하위 메뉴 — 부모는 앱 메뉴 popup(geometry 원점 화면 (890, 100)). flip_x로 왼쪽(셸 column 위, 화면 526)에 선다.
+            .{ .name = "submenu: flip_x over the shell column", .p = .{ .w = 364, .h = 204, .ax = 0, .ay = 189, .aw = 364, .ah = 1, .anchor = 7, .gravity = 8, .ca = 54 }, .b = .{ .x = -890, .y = -80, .w = 1280, .h = 752 }, .want = .{ .x = -364, .y = 189, .w = 364, .h = 204 } },
+            // 가장자리.
+            .{ .name = "no bounds", .p = .{ .w = 50, .h = 50, .ax = 10, .ay = 10, .aw = 1, .ah = 1, .anchor = 8, .gravity = 8 }, .b = null, .want = .{ .x = 11, .y = 11, .w = 50, .h = 50 } },
+            .{ .name = "constrained, no adjustment", .p = .{ .w = 50, .h = 50, .ax = 90, .ay = 0, .aw = 1, .ah = 1, .anchor = 8, .gravity = 8 }, .b = .{ .x = 0, .y = 0, .w = 100, .h = 100 }, .want = .{ .x = 91, .y = 1, .w = 50, .h = 50 } },
+            .{ .name = "flip_x only", .p = .{ .w = 50, .h = 10, .ax = 80, .ay = 0, .aw = 10, .ah = 1, .anchor = 8, .gravity = 8, .ca = 4 }, .b = .{ .x = 0, .y = 0, .w = 100, .h = 100 }, .want = .{ .x = 30, .y = 1, .w = 50, .h = 10 } },
+            .{ .name = "flip_x fails both ways, kept", .p = .{ .w = 90, .h = 10, .ax = 50, .ay = 0, .aw = 1, .ah = 1, .anchor = 8, .gravity = 8, .ca = 4 }, .b = .{ .x = 0, .y = 0, .w = 100, .h = 100 }, .want = .{ .x = 51, .y = 1, .w = 90, .h = 10 } },
+            .{ .name = "slide_x only", .p = .{ .w = 50, .h = 10, .ax = 80, .ay = 0, .aw = 1, .ah = 1, .anchor = 8, .gravity = 8, .ca = 1 }, .b = .{ .x = 0, .y = 0, .w = 100, .h = 100 }, .want = .{ .x = 50, .y = 1, .w = 50, .h = 10 } },
+            .{ .name = "slide_x to the left edge", .p = .{ .w = 50, .h = 10, .ax = 10, .ay = 0, .aw = 1, .ah = 1, .anchor = 6, .gravity = 6, .ca = 1 }, .b = .{ .x = 0, .y = 0, .w = 100, .h = 100 }, .want = .{ .x = 0, .y = 1, .w = 50, .h = 10 } },
+            .{ .name = "slide wider than bounds keeps the start edge", .p = .{ .w = 150, .h = 10, .ax = 50, .ay = 0, .aw = 1, .ah = 1, .anchor = 8, .gravity = 8, .ca = 1 }, .b = .{ .x = 0, .y = 0, .w = 100, .h = 100 }, .want = .{ .x = 0, .y = 1, .w = 150, .h = 10 } },
+            .{ .name = "resize_x only", .p = .{ .w = 50, .h = 10, .ax = 80, .ay = 0, .aw = 1, .ah = 1, .anchor = 8, .gravity = 8, .ca = 16 }, .b = .{ .x = 0, .y = 0, .w = 100, .h = 100 }, .want = .{ .x = 81, .y = 1, .w = 19, .h = 10 } },
+            .{ .name = "both axes: flip_y and slide_x", .p = .{ .w = 50, .h = 50, .ax = 80, .ay = 80, .aw = 1, .ah = 1, .anchor = 8, .gravity = 8, .ca = 9 }, .b = .{ .x = 0, .y = 0, .w = 100, .h = 100 }, .want = .{ .x = 50, .y = 30, .w = 50, .h = 50 } },
+            .{ .name = "exactly on the edge fits", .p = .{ .w = 50, .h = 50, .ax = 50, .ay = 50, .aw = 0 + 1, .ah = 1, .anchor = 5, .gravity = 8, .ca = 0 }, .b = .{ .x = 0, .y = 0, .w = 100, .h = 100 }, .want = .{ .x = 50, .y = 50, .w = 50, .h = 50 } },
+            .{ .name = "offset", .p = .{ .w = 10, .h = 10, .ax = 0, .ay = 0, .aw = 20, .ah = 20, .anchor = 0, .gravity = 0, .ox = 3, .oy = -2 }, .b = null, .want = .{ .x = 8, .y = 3, .w = 10, .h = 10 } },
+        };
+        for (cases) |c| {
+            const got = logic.placePopup(c.p, c.b);
+            if (!std.meta.eql(got, c.want)) {
+                std.debug.print("FAIL: placePopup {s} = {any}, want {any}\n", .{ c.name, got, c.want });
+                return error.WrongPlace;
+            }
+        }
+        // anchor/gravity 아홉 조합의 대칭 — 가운데 사각형(40, 40, 20 × 20)에서 크기 10을 놓으면 x는 anchor의 x 쪽과 gravity의 x 쪽으로만 정해진다.
+        const xs_anchor = [9]i32{ 50, 50, 50, 40, 60, 40, 40, 60, 60 };
+        const ys_anchor = [9]i32{ 50, 40, 60, 50, 50, 40, 60, 40, 60 };
+        for (0..9) |an| for (0..9) |gr| {
+            const got = logic.placePopup(.{ .w = 10, .h = 10, .ax = 40, .ay = 40, .aw = 20, .ah = 20, .anchor = @intCast(an), .gravity = @intCast(gr) }, null);
+            const gx: i32 = switch (gr) {
+                3, 5, 6 => -10,
+                4, 7, 8 => 0,
+                else => -5,
+            };
+            if (got.x != xs_anchor[an] + gx) {
+                std.debug.print("FAIL: placePopup anchor {d} gravity {d} x = {d}\n", .{ an, gr, got.x });
+                return error.WrongPlace;
+            }
+            // y는 x의 거울 — anchor의 y 쪽(위 40 · 가운데 50 · 아래 60)과 gravity의 y 쪽으로만 정해진다.
+            const gy: i32 = switch (gr) {
+                1, 5, 7 => -10,
+                2, 6, 8 => 0,
+                else => -5,
+            };
+            if (got.y != ys_anchor[an] + gy or got.w != 10 or got.h != 10) {
+                std.debug.print("FAIL: placePopup anchor {d} gravity {d} y = {d}\n", .{ an, gr, got.y });
+                return error.WrongPlace;
+            }
+        };
+        if (!(logic.Positioner{ .w = 1, .h = 1, .aw = 1, .ah = 1 }).complete() or (logic.Positioner{ .w = 1, .h = 1 }).complete()) return error.WrongPlace;
+    }
+    std.debug.print("wl_logic_test: place 16 cases, anchor x gravity 81, complete 2\n", .{});
     std.debug.print("wl_logic_test: all checks passed\n", .{});
 }

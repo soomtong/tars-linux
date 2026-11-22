@@ -970,6 +970,9 @@ fn dumpDrop(fb: drm.Framebuffer, d: DropLine, r: menubar.Rect) void {
     });
 }
 
+/// 한 프레임에 그리는 popup 사각형의 상한(WY-M7 단계 B) — Chromium은 메뉴와 하위 메뉴 · 툴팁 정도다.
+const POPUP_RECTS = 16;
+
 /// 물리로 합성하는 창 하나(WY-M3 확정 7, design 결정 30) — 창 번호와 그 창이 놓인 논리 사각형(셸 프레임은 slot의
 /// `appArea`, app 프레임은 화면 전체). 화면 배율 > 1이고 buffer_scale > 1인 보이는 창만 든다.
 const PhysApp = struct { id: u32, area: wl_logic.Area };
@@ -4060,6 +4063,11 @@ const PointerWire = struct {
 
     /// 포인터 아래 패널과 그 상태(PD-M4). 여백 · 구분선 · 상태 줄이면 null이다.
     fn paneAt(self: *const PointerWire, x: u32, y: u32) ?pointer.Pane {
+        // popup 위의 누름은 그 창의 것이다(WY-M7 단계 B) — 셸 pane 위로 나간 popup이라도.
+        if (self.srv) |srv| if (srv.popupAt(x, y)) |id| for (self.ws.panes, 0..) |maybe, leaf| switch (maybe orelse continue) {
+            .app => |a| if (a.toplevel == id) return .{ .leaf = @intCast(leaf), .wants = true, .copy = false, .alt_keys = false, .app = true },
+            .shell => {},
+        };
         const gc = gridCell(x, y, self.cols, self.rows) orelse return null;
         const h = self.ws.strip.hit(self.whole, gc.col, gc.row) orelse return null;
         // 창 slot(WY-M2 확정 8)은 늘 그 창의 것이다(`ownerOf`가 `app`을 본다). 휠도 그 창으로 간다(`wheel`).
@@ -4122,6 +4130,8 @@ const PointerWire = struct {
 
     /// 화면 좌표 아래 slot이 창이면 그 창 번호(WY-M2). 여백 · 구분선 · 셸 패널이면 null.
     fn appUnder(self: *const PointerWire, x: u32, y: u32) ?u32 {
+        // popup이 먼저다(WY-M7 단계 B, design 결정 52) — column 밖으로 나가 셸 pane을 덮을 수 있다.
+        if (self.srv) |srv| if (srv.popupAt(x, y)) |id| return id;
         const gc = gridCell(x, y, self.cols, self.rows) orelse return null;
         const h = self.ws.strip.hit(self.whole, gc.col, gc.row) orelse return null;
         return switch (self.ws.panes[h.leaf].?) {
@@ -4639,6 +4649,11 @@ const App = struct {
     menu_full: bool = false,
     /// 메뉴가 먹은 버튼 누름(비트 = `pointer.Button`) — 그 뗌도 먹는다.
     menu_grab: u8 = 0,
+    /// grab한 popup의 바깥 누름을 먹었다(WY-M7 단계 B, design 결정 53) — 그 뗌도 먹는다. 버튼마다 한 비트(`menu_grab`과 같은 꼴).
+    popup_grab: u8 = 0,
+    /// 이 프레임에 그린 popup의 화면 사각형(WY-M7 단계 B) — verify 그림자가 실제 fb에서 옮겨 비교에서 뺀다(app slot과 같은 처리).
+    popup_rects: [POPUP_RECTS]wl_logic.Area = undefined,
+    popup_len: usize = 0,
     /// 지난 프레임의 펼친 메뉴 사각형(화살표만 옮기는 바퀴의 `presentComposed`가 쓴다). 닫혀 있으면 null.
     drop_area: ?wl_logic.Area = null,
     /// 지난 `menu> drop` 줄의 내용(바뀐 프레임만 찍는다).
@@ -6001,6 +6016,7 @@ const App = struct {
         for (round.edges[0..round.edge_count]) |e| {
             if (self.menu != null) self.menuHover(e.x, e.y, t_ms) else try wire.moved(e.x, e.y);
             if (self.menuPress(e)) continue;
+            if (self.popupPress(e)) continue;
             try wire.edge(e);
         }
         self.grab.settle(self.pointer_state.buttons);
@@ -6018,6 +6034,7 @@ const App = struct {
         const srv = self.wl orelse return;
         for (round.edges[0..round.edge_count]) |e| {
             srv.pointerMove(id, e.x, e.y, t_ms);
+            if (self.popupPress(e)) continue;
             const code: u32 = switch (e.button) {
                 .left => wl_logic.BTN_LEFT,
                 .right => wl_logic.BTN_RIGHT,
@@ -6447,6 +6464,22 @@ const App = struct {
         self.needs_redraw = true;
     }
 
+    /// grab한 popup이 보이는데 그 클라이언트 밖을 누르면 서버가 그 popup들을 닫고(`popup_done`) 누름을 먹는다(WY-M7 단계 B, design 결정 53). 먹은
+    /// 누름의 뗌도 먹는다(`popup_grab`). 메뉴 바(TK-M5)가 먼저다 — 부르는 자리가 `menuPress` 뒤다.
+    fn popupPress(self: *App, e: PointerEdge) bool {
+        const bit: u8 = @as(u8, 1) << @backingInt(e.button);
+        if (!e.down) {
+            if (self.popup_grab & bit == 0) return false;
+            self.popup_grab &= ~bit;
+            return true;
+        }
+        const srv = self.wl orelse return false;
+        if (!srv.grabPress(e.x, e.y)) return false;
+        self.popup_grab |= bit;
+        self.needs_redraw = true;
+        return true;
+    }
+
     /// 메뉴가 받는 포인터 전이 하나(plan 확정 11). 먹었으면 참 — 패널 · 창으로 안 간다. 메뉴가 열려 있으면 모든 누름 · 뗌을 먹는다
     /// (제목 = 그 메뉴로 옮기기, 열린 제목이면 닫기 · 칸 = 고르기 · 바깥 = 닫기만). 닫혀 있으면 모델 있는 바의 제목 누름만 먹는다(연다).
     /// 먹은 누름의 뗌도 먹는다(`menu_grab`).
@@ -6532,7 +6565,13 @@ const App = struct {
         // strip이 바뀜(분할 · 닫기 · scroll — 구분선과 여백, 보이는 pane이 바뀐다). strip이 같으면 패널의
         // 사각형도 같다(`first`도 비교에 든다, SW-M2).
         // 메뉴를 열었거나 닫았거나 옮긴 프레임도 통째다(TK-M5 단계 C) — 펼친 메뉴 밑의 픽셀을 저장하지 않는다.
-        const full = self.last_current != self.current or self.menu_full or
+        // popup이 보이거나 막 바뀐 프레임도 통째다(WY-M7 단계 B, design 결정 52) — popup은 셸 pane 위로 나가고 그 밑을 따로 들지 않는다.
+        // 경계는 위 띠 아래 · 상태 줄 위의 화면 전체다.
+        const popup_full = if (self.wl) |srv| blk: {
+            srv.beginPopups(.{ .x = 0, .y = menubar.BAR_H, .w = self.fb.width, .h = grid_origin.y + @as(u32, self.rows) * ROW_HEIGHT - menubar.BAR_H });
+            break :blk srv.popupFull();
+        } else false;
+        const full = self.last_current != self.current or self.menu_full or popup_full or
             if (self.last_strip) |t| !std.meta.eql(t, ws.strip) else true;
         const menu_full = self.menu_full;
         self.menu_full = false;
@@ -6695,6 +6734,18 @@ const App = struct {
         // 위 띠(TK-M5 단계 B) — `paintBand`와 같은 꼴. 통째 프레임은 `renderBackdrop`이 띠를 지웠으므로 다시 그린다.
         const menu_start = std.Io.Clock.now(.awake, self.io);
         try paintBar(self.fb, &self.cache, frame.bar_line, full or frame.bar_changed, &clips);
+        // popup(WY-M7 단계 B, design 결정 52) — 보이는 창의 것을 셸 pane · 창 · 프롬프트 · 띠 위에, 펼친 메뉴 아래에.
+        self.popup_len = 0;
+        if (self.wl) |srv| if (popup_full) {
+            for (ws.panes, 0..) |maybe, leaf| switch (maybe orelse continue) {
+                .app => |a| if (ws.strip.visible(@intCast(leaf), self.whole)) {
+                    _ = srv.paintPopups(a.toplevel, self.fb.pixels, self.fb.pitch);
+                },
+                .shell => {},
+            };
+            self.popup_len = srv.shownPopups(&self.popup_rects).len;
+            for (self.popup_rects[0..self.popup_len]) |r| clips.push(r.x, r.y, r.w, r.h);
+        };
         // 펼친 메뉴(TK-M5 단계 C) — 프레임의 마지막 그리기. 열려 있는 동안 매 프레임 다시 그리고 그 사각형을 clip에.
         frame.drop = if (self.menu) |o| if (frame.bar_line.open != null and frame.bar_line.id == o.id) DropLine{ .bar = frame.bar_line, .m = o.m, .hl = o.hl } else null else null;
         self.drop_area = null;
@@ -6828,7 +6879,10 @@ const App = struct {
         const srv = self.wl orelse return error.AppWithoutServer;
         // 다른 워크스페이스나 다른 창에서 왔으면 먼저 화면 전체를 검정으로.
         const before = self.last_app_fit;
-        const full = self.last_current != self.current or self.last_app != id;
+        // popup(WY-M7 단계 B) — 자기 workspace의 창은 화면 전체가 경계다. 보이거나 막 바뀌면 통째.
+        srv.beginPopups(.{ .x = 0, .y = 0, .w = self.fb.width, .h = self.fb.height });
+        const popup_full = srv.popupFull();
+        const full = self.last_current != self.current or self.last_app != id or popup_full;
         if (full) {
             self.fb.fill(APP_BACKDROP);
             clips.all();
@@ -6860,6 +6914,11 @@ const App = struct {
         self.last_app = id;
         self.last_current = self.current;
         self.last_strip = null;
+        self.popup_len = 0;
+        if (popup_full) {
+            _ = srv.paintPopups(id, self.fb.pixels, self.fb.pitch);
+            self.popup_len = srv.shownPopups(&self.popup_rects).len;
+        }
         // 물리 합성(WY-M3 확정 7) — 화면 전체가 그 창의 자리다.
         self.phys = .{};
         if (self.fb.scale > 1 and srv.bufferScale(id) > 1) self.phys.add(id, screen_area);
@@ -7133,6 +7192,15 @@ const App = struct {
             while (y < area.y + area.h) : (y += 1) {
                 const off = y * @as(usize, self.fb.pitch) + @as(usize, area.x) * 4;
                 const len = @as(usize, area.w) * 4;
+                @memcpy(v.fb.pixels[off..][0..len], self.fb.pixels[off..][0..len]);
+            }
+        }
+        // popup(WY-M7 단계 B)도 그림자가 흉내 내지 않는다 — 실제로 덮은 자리를 실제 fb에서 옮긴다(셸 pane 위로 나간 자리까지).
+        for (self.popup_rects[0..self.popup_len]) |r| {
+            var py: usize = r.y;
+            while (py < r.y + r.h) : (py += 1) {
+                const off = py * @as(usize, self.fb.pitch) + @as(usize, r.x) * 4;
+                const len = @as(usize, r.w) * 4;
                 @memcpy(v.fb.pixels[off..][0..len], self.fb.pixels[off..][0..len]);
             }
         }

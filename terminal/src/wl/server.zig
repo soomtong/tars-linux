@@ -56,6 +56,8 @@ const MENU_LINES: u8 = 8;
 const SUB_LINES: u8 = 24;
 /// `wl> tree` 줄(자식을 섞은 옮기기의 시간 — WY-M7 실측 1)의 창마다 상한.
 const TREE_LINES: u8 = 16;
+/// `wl> popup` 줄의 창마다 상한(WY-M7 단계 B). Chromium은 단추 위에 머물 때마다 툴팁 popup을 만들고 지운다.
+const POP_LINES: u8 = 64;
 
 /// 파이프의 깃발(값은 asm-generic/fcntl.h — x86_64도 같다). 받기의 읽기 끝만 비블록이다 — epoll이 깨운 만큼만 읽는다.
 /// `pipe2`에 O_NONBLOCK을 주면 클라이언트가 받는 쓰기 끝까지 비블록이 되어, EAGAIN을 다루지 않는 클라이언트가 64 KiB를
@@ -175,6 +177,12 @@ pub const Server = struct {
     ptr_sr: ?*Surface = null,
     /// `wl> subsurface sub=N`의 번호(서버 수명 동안 는다).
     next_sub: u32 = 1,
+    /// popup(WY-M7 단계 B, design 결정 52 · 53). 경계는 앞 workspace의 화면에서 위 띠와 상태 줄을 뺀 사각형이다 — App이 프레임마다 준다
+    /// (`beginPopups`). `popup_changed`는 popup이 보이거나 사라지거나 움직였다 — 다음 프레임은 통째다(밑의 셸 pane을 다시 그린다).
+    popup_bounds: ?logic.Area = null,
+    popup_changed: bool = false,
+    /// `wl> popup pop=N`의 번호.
+    next_pop: u32 = 1,
     ptr_x: u32 = 0,
     ptr_y: u32 = 0,
     /// 클립보드(WY-M4). 모든 `wl_data_device` — offer(단계 B)는 키보드처럼 클라이언트로 골라 보낸다.
@@ -305,6 +313,8 @@ pub const Server = struct {
         self.mods = mods;
         if (self.focused == want) return;
         const old_id = self.focused;
+        // 키보드 포커스가 그 창을 떠나면 그 창의 popup을 닫는다(design 결정 53 — 서버 쪽 닫기 셋의 첫째). Chromium은 스스로도 닫는다.
+        if (old_id) |o| if (self.find(o)) |t| dismissPopups(t, "focus");
         if (self.focused) |old| if (self.find(old)) |t| if (surfaceOf(t)) |sr| {
             // text_input `leave`는 키보드 `leave` 바로 앞이다(design 결정 42 — 확정은 App이 이 앞에서 `imeSend`로 끝냈다).
             self.textLeave(sr);
@@ -512,6 +522,7 @@ pub const Server = struct {
         self.ptr_under = under: {
             const id = cand orelse break :under null;
             const t = self.find(id) orelse break :under null;
+            if (popupHit(t, x, y) != null) break :under id;
             const f = t.last_fit orelse break :under null;
             break :under if (logic.inside(f, x, y)) id else null;
         };
@@ -617,6 +628,11 @@ pub const Server = struct {
     /// 창 `t` 안에서 지금 포인터 자리의 surface(design 결정 51). 뿌리 surface 좌표로 바꾼 점을 위의 자식부터 `logic.pick`에 묻고, 아무것도
     /// 아니면 뿌리다. 아직 안 옮긴 창은 뿌리의 (0, 0)이다.
     fn pickAt(self: *const Server, t: *const Toplevel) ?Hit {
+        // popup이 먼저다(design 결정 51 — 위에서부터 geometry 사각형). 좌표는 popup surface 기준(그림자 여백 포함).
+        if (popupHit(t, self.ptr_x, self.ptr_y)) |pp| if (pp.xs) |pxs| if (pxs.surface) |ps| if (pp.origin) |o| {
+            const k: i64 = pp.k;
+            return .{ .s = ps, .x = @divFloor((@as(i64, self.ptr_x) - o[0]) * 256, k), .y = @divFloor((@as(i64, self.ptr_y) - o[1]) * 256, k) };
+        };
         const xs = t.xdg orelse return null;
         const root = xs.surface orelse return null;
         const f = t.last_fit orelse return .{ .s = root, .x = 0, .y = 0 };
@@ -643,6 +659,10 @@ pub const Server = struct {
     /// 버튼을 쥔 동안 — 들어가 있던 surface 그대로, 좌표만 그 surface 기준으로.
     fn sameAt(self: *const Server, t: *const Toplevel) ?Hit {
         const s = self.ptr_sr orelse return self.pickAt(t);
+        if (s.role) |sxs| if (sxs.popup) |pp| if (pp.origin) |o| {
+            const k: i64 = pp.k;
+            return .{ .s = s, .x = @divFloor((@as(i64, self.ptr_x) - o[0]) * 256, k), .y = @divFloor((@as(i64, self.ptr_y) - o[1]) * 256, k) };
+        };
         const f = t.last_fit orelse return null;
         const at = logic.surfacePoint(f, self.ptr_x, self.ptr_y);
         const off = offsetOf(s);
@@ -701,6 +721,7 @@ pub const Server = struct {
         t.place = .workspace;
         t.area_w = self.fb_w;
         t.area_h = self.fb_h;
+        if (t.sent) |was| if (was.w != self.fb_w or was.h != self.fb_h) dismissPopups(t, "resize");
         sendConfigure(t, self.fb_w, self.fb_h, true);
     }
 
@@ -719,6 +740,8 @@ pub const Server = struct {
         if (t.place != .column or t.area_w == 0 or t.area_h == 0) return;
         const want: Toplevel.Sent = .{ .w = t.area_w, .h = t.area_h, .act = self.focused == t.id };
         if (t.sent) |was| if (std.meta.eql(was, want)) return;
+        // 부모의 크기가 바뀌면 그 popup을 닫는다(design 결정 53 — 다시 셈하지 않는다).
+        if (t.sent) |was| if (was.w != want.w or was.h != want.h) dismissPopups(t, "resize");
         sendConfigure(t, want.w, want.h, want.act);
     }
 
@@ -840,6 +863,9 @@ pub const Server = struct {
             logic.blitClip(out, out_pitch, fp, data, @intCast(shm.getStride()), sf.scale, logic.scaleArea(clip, s));
         }
         if (inner) |c| _ = drawChildren(sf, o[0], o[1], fp.k, out, out_pitch, logic.scaleArea(c, s), .above);
+        // popup(WY-M7 단계 B)은 이 창 위에 걸친 자리만 물리로 다시 섞는다 — 방금 창을 새로 옮긴 자리라 두 번 섞이지 않는다. 그 밖(셸 pane 위)은
+        // `stage`가 그림자(popup이 이미 섞인 것)에서 늘렸다.
+        if (inner) |c| self.physPopups(out, out_pitch, s, c);
     }
 
     /// toplevel `id`가 든 프레임을 화면에 냈다(확정 9) — 그 commit들의 frame 콜백에 `done`을 보낸다. 자식들의 것도(WY-M7 — Chromium은
@@ -849,6 +875,133 @@ pub const Server = struct {
         const xs = t.xdg orelse return;
         const s = xs.surface orelse return;
         framesDone(s, ms);
+        for (t.popups.items) |pp| if (pp.xs) |pxs| if (pxs.surface) |ps| framesDone(ps, ms);
+    }
+
+    // ── popup(WY-M7 단계 B, design 결정 52 · 53) ──
+
+    /// 프레임의 처음(App) — 경계를 주고 지난 프레임에 그린 자리를 비운다. 이번 프레임에 그리는 것(`paintPopups`)만 보이고 포인터가 닿는다.
+    pub fn beginPopups(self: *Server, bounds: logic.Area) void {
+        self.popup_bounds = bounds;
+        for (self.toplevels.items) |t| for (t.popups.items) |pp| {
+            pp.shown = null;
+            pp.hit = null;
+        };
+    }
+
+    /// 이 프레임을 통째로 그려야 하나 — 보이는 popup이 있거나 지난 프레임 뒤 popup이 보이거나 사라지거나 움직였다(design 결정 52 — popup은 셸 pane을
+    /// 덮고, 밑의 픽셀을 따로 들지 않는다). 읽으면 "바뀜"을 지운다.
+    pub fn popupFull(self: *Server) bool {
+        var any = self.popup_changed;
+        self.popup_changed = false;
+        for (self.toplevels.items) |t| for (t.popups.items) |pp| {
+            if (pp.mapped and !pp.dismissed) any = true;
+        };
+        return any;
+    }
+
+    /// 창 `id`의 보이는 popup을 만든 순으로 그린다(그림자 · 논리 프레임버퍼). 프레임의 셸 pane · 창 · 프롬프트 · 띠 뒤, 펼친 메뉴(TK-M5) 앞에 부른다.
+    /// 경계 밖은 자른다. 그린 수.
+    pub fn paintPopups(self: *Server, id: u32, dst: [*]u8, pitch: u32) usize {
+        const t = self.find(id) orelse return 0;
+        const b = self.popup_bounds orelse return 0;
+        var n: usize = 0;
+        for (t.popups.items) |pp| {
+            if (!pp.mapped or pp.dismissed) continue;
+            const xs = pp.xs orelse continue;
+            const ps = xs.surface orelse continue;
+            if (ps.current == null) continue;
+            const go = geomOrigin(xs, 0) orelse continue;
+            const sz = surfaceSizeOf(ps);
+            const k: i64 = go.k;
+            const g = xs.geom orelse logic.Rect{ .x = 0, .y = 0, .w = @intCast(sz[0]), .h = @intCast(sz[1]) };
+            const ox = go.x - @as(i64, g.x) * k;
+            const oy = go.y - @as(i64, g.y) * k;
+            const shown = clampArea(ox, oy, @as(i64, sz[0]) * k, @as(i64, sz[1]) * k, b) orelse continue;
+            pp.origin = .{ ox, oy };
+            pp.k = go.k;
+            pp.shown = shown;
+            pp.hit = clampArea(go.x, go.y, @as(i64, g.w) * k, @as(i64, g.h) * k, b);
+            const t0 = monoNs();
+            _ = drawChildren(ps, ox, oy, go.k, dst, pitch, shown, .below);
+            blendSurface(ps, ox, oy, go.k, dst, pitch, shown);
+            _ = drawChildren(ps, ox, oy, go.k, dst, pitch, shown, .above);
+            n += 1;
+            // 실측 줄(WY-M7 실측 1) — popup마다 처음 두 번의 섞기.
+            if (pp.paint_lines < 2) {
+                pp.paint_lines += 1;
+                const us = (monoNs() - t0) / 1000;
+                var buf: [96]u8 = undefined;
+                const text = std.fmt.bufPrint(&buf, "paint x={d} y={d} w={d} h={d} us={d}", .{ shown.x, shown.y, shown.w, shown.h, us }) catch "paint";
+                logPop(pp, text);
+            }
+        }
+        return n;
+    }
+
+    /// 이 프레임에 그린 popup의 자리(화면, 경계 안) — App이 clip과 verify 그림자 복사에 쓴다.
+    pub fn shownPopups(self: *const Server, out: []logic.Area) []logic.Area {
+        var n: usize = 0;
+        for (self.toplevels.items) |t| for (t.popups.items) |pp| {
+            const r = pp.shown orelse continue;
+            if (n == out.len) break;
+            out[n] = r;
+            n += 1;
+        };
+        return out[0..n];
+    }
+
+    /// 화면 점 위의 popup의 창(포인터 — App이 app slot보다 먼저 묻는다, design 결정 52). 없으면 null.
+    pub fn popupAt(self: *const Server, x: u32, y: u32) ?u32 {
+        for (self.toplevels.items) |t| if (popupHit(t, x, y) != null) return t.id;
+        return null;
+    }
+
+    /// 누름 하나(App이 셸 · 창의 길보다 먼저 묻는다). grab한 popup이 보이는데 그 클라이언트의 surface(창 · popup) 밖이면 그 클라이언트의 popup을
+    /// 위에서부터 닫고 참 — 누름은 삼킨다(design 결정 53). grab 없는 popup(툴팁)은 바깥 누름에 안 닫는다. 그 클라이언트 안의 누름은 보통 길이다
+    /// (xml의 owner-events).
+    pub fn grabPress(self: *Server, x: u32, y: u32) bool {
+        var client: ?*wl.Client = null;
+        for (self.toplevels.items) |t| for (t.popups.items) |pp| {
+            if (pp.grabbed and pp.mapped and !pp.dismissed) client = t.resource.getClient();
+        };
+        const c = client orelse return false;
+        for (self.toplevels.items) |t| {
+            if (t.resource.getClient() != c) continue;
+            if (popupHit(t, x, y) != null) return false;
+            if (t.last_fit) |f| if (logic.inside(f, x, y)) return false;
+        }
+        for (self.toplevels.items) |t| if (t.resource.getClient() == c) dismissPopups(t, "outside");
+        return true;
+    }
+
+    /// 물리 합성(`paintPhys`)의 popup — 논리 `inner`(방금 다시 옮긴 창 사각형 안)와 겹친 보이는 popup을 × `s`로 섞는다.
+    fn physPopups(self: *Server, out: [*]u8, out_pitch: u32, s: u32, inner: logic.Area) void {
+        for (self.toplevels.items) |t| for (t.popups.items) |pp| {
+            const shown = pp.shown orelse continue;
+            const o = pp.origin orelse continue;
+            const cl = logic.intersect(inner, shown) orelse continue;
+            const xs = pp.xs orelse continue;
+            const ps = xs.surface orelse continue;
+            const k = pp.k * s;
+            const ss: i64 = s;
+            _ = drawChildren(ps, o[0] * ss, o[1] * ss, k, out, out_pitch, logic.scaleArea(cl, s), .below);
+            blendSurface(ps, o[0] * ss, o[1] * ss, k, out, out_pitch, logic.scaleArea(cl, s));
+            _ = drawChildren(ps, o[0] * ss, o[1] * ss, k, out, out_pitch, logic.scaleArea(cl, s), .above);
+        };
+    }
+
+    /// popup의 부모 `xs`의 geometry를 경계 안 좌표로(부모 geometry 좌표의 경계 — `logic.placePopup`). 부모가 아직 안 그려졌으면 null(제약 없음).
+    fn boundsFor(self: *const Server, xs: *XdgSurface) ?logic.Rect {
+        const b = self.popup_bounds orelse return null;
+        const o = geomOrigin(xs, 0) orelse return null;
+        const k: i64 = o.k;
+        return .{
+            .x = @intCast(@divFloor(@as(i64, b.x) - o.x, k)),
+            .y = @intCast(@divFloor(@as(i64, b.y) - o.y, k)),
+            .w = @intCast(@divFloor(@as(i64, b.w), k)),
+            .h = @intCast(@divFloor(@as(i64, b.h), k)),
+        };
     }
 
     // ── 클립보드: 앱 → 셸(WY-M4 단계 A, design 결정 33 · 36) ──
@@ -1476,6 +1629,7 @@ fn apply(s: *Surface) void {
         if (!std.meta.eql(xs.geom, xs.pending_geom)) changed = true;
         xs.geom = xs.pending_geom;
     }
+    if (xs.popup) |pp| return popupApplied(pp, xs, s, changed, waiting);
     const t = xs.toplevel orelse return;
     const step = logic.onCommit(xs.phase, xs.acked, s.current != null);
     switch (step.action) {
@@ -1784,6 +1938,8 @@ fn rootToplevel(s0: *Surface) ?*Toplevel {
         s = ss.parent orelse return null;
     }
     const xs = s.role orelse return null;
+    // popup의 자식은 popup의 창으로(WY-M7 단계 B).
+    if (xs.popup) |pp| return pp.top;
     return xs.toplevel;
 }
 
@@ -1962,6 +2118,236 @@ fn collectSub(s: *Surface, x: i64, y: i64, list: *TreeList, depth: usize) void {
     }
 }
 
+// ── xdg_popup(WY-M7 단계 B, design 결정 52 · 53) ─────────────────────────────
+
+/// popup 하나. 자리 `at`은 부모 window geometry 좌표의 configure 값이다(`logic.placePopup`). 그린 자리(`origin` · `shown` · `hit`)는 App의 프레임이
+/// 정한다 — `beginPopups`가 비우고 `paintPopups`가 채운다. `xs` · `parent` · `top`은 약한 참조다(먼저 사라지면 null).
+const Popup = struct {
+    srv: *Server,
+    resource: *xdg.Popup,
+    xs: ?*XdgSurface,
+    parent: ?*XdgSurface,
+    top: ?*Toplevel,
+    /// `wl> popup pop=N`의 번호.
+    num: u32,
+    pos: logic.Positioner,
+    at: logic.Rect = .{ .x = 0, .y = 0, .w = 0, .h = 0 },
+    grabbed: bool = false,
+    mapped: bool = false,
+    /// 서버가 `popup_done`을 보냈다 — 클라이언트가 지울 때까지 안 그린다.
+    dismissed: bool = false,
+    /// 이번 프레임에 그린 popup surface의 화면 원점과 늘림, 그 surface의 화면 사각형(경계 안 — verify 복사 · 물리), geometry 사각형(포인터).
+    origin: ?[2]i64 = null,
+    k: u32 = 1,
+    shown: ?logic.Area = null,
+    hit: ?logic.Area = null,
+    paint_lines: u8 = 0,
+};
+
+/// 화면 원점과 늘림(`geomOrigin`).
+const GeomOrigin = struct { x: i64, y: i64, k: u32 };
+
+/// `xs`의 window geometry 왼쪽 위가 놓인 화면 자리. 창이면 마지막으로 옮긴 `fit`의 surface 원점 + geometry, popup이면 그 부모의 geometry 원점 +
+/// configure의 (x, y)(× 늘림). 부모가 아직 안 그려졌으면 null.
+fn geomOrigin(xs: *const XdgSurface, depth: usize) ?GeomOrigin {
+    if (depth > TREE_DEPTH) return null;
+    if (xs.toplevel) |t| {
+        const f = t.last_fit orelse return null;
+        const o = logic.rootOrigin(f);
+        const g = xs.geom orelse logic.Rect{ .x = 0, .y = 0, .w = 0, .h = 0 };
+        return .{ .x = o[0] + @as(i64, g.x) * f.k, .y = o[1] + @as(i64, g.y) * f.k, .k = f.k };
+    }
+    if (xs.popup) |pp| {
+        const par = pp.parent orelse return null;
+        const po = geomOrigin(par, depth + 1) orelse return null;
+        return .{ .x = po.x + @as(i64, pp.at.x) * po.k, .y = po.y + @as(i64, pp.at.y) * po.k, .k = po.k };
+    }
+    return null;
+}
+
+/// 화면 사각형(원점은 음수일 수 있다)을 `b` 안으로 자른다. 겹치지 않으면 null.
+fn clampArea(x: i64, y: i64, w: i64, h: i64, b: logic.Area) ?logic.Area {
+    const x0 = @max(x, @as(i64, b.x));
+    const y0 = @max(y, @as(i64, b.y));
+    const x1 = @min(x + w, @as(i64, b.x) + b.w);
+    const y1 = @min(y + h, @as(i64, b.y) + b.h);
+    if (x1 <= x0 or y1 <= y0) return null;
+    return .{ .x = @intCast(x0), .y = @intCast(y0), .w = @intCast(x1 - x0), .h = @intCast(y1 - y0) };
+}
+
+/// 창 `t`의 popup 가운데 화면 점 위의 맨 위 것(보이는 것만 — geometry 사각형).
+fn popupHit(t: *const Toplevel, x: u32, y: u32) ?*Popup {
+    var i = t.popups.items.len;
+    while (i > 0) {
+        i -= 1;
+        const pp = t.popups.items[i];
+        if (!pp.mapped or pp.dismissed) continue;
+        const h = pp.hit orelse continue;
+        if (x >= h.x and x < h.x + h.w and y >= h.y and y < h.y + h.h) return pp;
+    }
+    return null;
+}
+
+fn topOf(xs: *const XdgSurface) ?*Toplevel {
+    if (xs.toplevel) |t| return t;
+    if (xs.popup) |pp| return pp.top;
+    return null;
+}
+
+/// `wl> popup id=창 pop=N …` — 만들기 · grab · 매핑 · 해제 · 다시 놓기 · 닫힘 · 지움, 그리고 처음 두 번의 섞기. 창마다 `POP_LINES`번.
+fn logPop(pp: *Popup, what: []const u8) void {
+    const id: u32 = if (pp.top) |t| blk: {
+        if (t.pop_lines >= POP_LINES) return;
+        t.pop_lines += 1;
+        break :blk t.id;
+    } else 0;
+    logline.print("terminal: wl> popup id={d} pop={d} {s}\n", .{ id, pp.num, what });
+}
+
+/// 클라이언트의 `xdg_wm_base`에 에러(`invalid_positioner` · `not_the_topmost_popup` · `invalid_popup_parent`).
+fn postWm(srv: *Server, client: *wl.Client, err: xdg.WmBase.Error, msg: [*:0]const u8) void {
+    for (srv.wm_bases.items) |wm| if (wm.getClient() == client) return wm.postError(err, msg);
+}
+
+/// `get_popup`(xml). positioner가 완전해야 하고(`invalid_positioner`), 자리는 그때 셈한다 — 부모 geometry의 화면 자리와 경계로(design 결정 52).
+/// 부모가 없거나(다른 프로토콜의 부모 — 우리는 모른다) 이미 닫힌 popup이면 곧 닫는다(xml).
+fn getPopup(res: *xdg.Surface, xs: *XdgSurface, id: u32, parent_res: ?*xdg.Surface, positioner: *xdg.Positioner) void {
+    const srv = xs.srv;
+    if (xs.toplevel != null or xs.popup != null) return res.postError(.already_constructed, "xdg_surface already has a role object");
+    const po: *PosObj = @ptrCast(@alignCast(positioner.getUserData() orelse return));
+    if (!po.p.complete()) return postWm(srv, res.getClient(), .invalid_positioner, "the positioner has no size or no anchor rectangle");
+    const parent: ?*XdgSurface = if (parent_res) |pr| @ptrCast(@alignCast(pr.getUserData() orelse return)) else null;
+    const top: ?*Toplevel = if (parent) |px| topOf(px) else null;
+    if (top) |t| t.popups.ensureUnusedCapacity(srv.allocator, 1) catch return res.postNoMemory();
+    const p = xdg.Popup.create(res.getClient(), res.getVersion(), id) catch return res.postNoMemory();
+    const pp = srv.allocator.create(Popup) catch {
+        p.destroy();
+        return res.postNoMemory();
+    };
+    pp.* = .{ .srv = srv, .resource = p, .xs = xs, .parent = parent, .top = top, .num = srv.next_pop, .pos = po.p };
+    srv.next_pop += 1;
+    pp.at = logic.placePopup(po.p, if (parent) |px| srv.boundsFor(px) else null);
+    xs.popup = pp;
+    p.setHandler(*Popup, popupRequest, popupDestroyed, pp);
+    if (top) |t| t.popups.appendAssumeCapacity(pp);
+    var buf: [96]u8 = undefined;
+    const kind = if (parent) |px| (if (px.popup != null) "popup" else "main") else "none";
+    const text = std.fmt.bufPrint(&buf, "new parent={s} at={d},{d} w={d} h={d} ca={d}", .{ kind, pp.at.x, pp.at.y, pp.at.w, pp.at.h, po.p.ca }) catch "new";
+    logPop(pp, text);
+    const parent_gone = if (parent) |px| (if (px.popup) |ppp| ppp.dismissed else false) else true;
+    if (top == null or parent_gone) dismiss(pp, "parent");
+}
+
+fn popupRequest(res: *xdg.Popup, req: xdg.Popup.Request, pp: *Popup) void {
+    switch (req) {
+        // 맨 위 popup만 지울 수 있다(xml) — 이 popup을 부모로 둔 popup이 살아 있으면 에러.
+        .destroy => {
+            if (pp.top) |t| if (pp.xs) |xs| for (t.popups.items) |c| if (c.parent == xs)
+                return postWm(pp.srv, res.getClient(), .not_the_topmost_popup, "a child popup is still alive");
+            res.destroy();
+        },
+        // grab은 받되 키보드 포커스를 안 옮긴다(design 결정 53 — xml과 다른 점). 매핑 뒤면 `invalid_grab`, 부모가 grab 안 한 popup이면 `invalid_popup_parent`.
+        .grab => {
+            if (pp.mapped) return res.postError(.invalid_grab, "grab after the popup was mapped");
+            if (pp.parent) |px| if (px.popup) |par| if (!par.grabbed)
+                return postWm(pp.srv, res.getClient(), .invalid_popup_parent, "the parent popup did not grab");
+            pp.grabbed = true;
+            logPop(pp, "grab");
+        },
+        // 새 positioner로 다시 셈한다 — repositioned → configure → xdg_surface.configure(xml 순서).
+        .reposition => |r| {
+            const po: *PosObj = @ptrCast(@alignCast(r.positioner.getUserData() orelse return));
+            if (!po.p.complete()) return postWm(pp.srv, res.getClient(), .invalid_positioner, "the positioner has no size or no anchor rectangle");
+            pp.pos = po.p;
+            pp.at = logic.placePopup(po.p, if (pp.parent) |px| pp.srv.boundsFor(px) else null);
+            res.sendRepositioned(r.token);
+            res.sendConfigure(pp.at.x, pp.at.y, pp.at.w, pp.at.h);
+            if (pp.xs) |xs| xs.resource.sendConfigure(pp.srv.display.nextSerial());
+            pp.srv.popup_changed = true;
+            var buf: [64]u8 = undefined;
+            const text = std.fmt.bufPrint(&buf, "reposition at={d},{d} w={d} h={d}", .{ pp.at.x, pp.at.y, pp.at.w, pp.at.h }) catch "reposition";
+            logPop(pp, text);
+        },
+    }
+}
+
+fn popupDestroyed(_: *xdg.Popup, pp: *Popup) void {
+    const srv = pp.srv;
+    logPop(pp, "gone");
+    if (pp.top) |t| {
+        for (t.popups.items, 0..) |x, i| if (x == pp) {
+            _ = t.popups.orderedRemove(i);
+            break;
+        };
+        // 지운 popup이 보였으면 그 자리를 다시 그린다(통째 — `popup_changed`).
+        srv.push(.{ .commit = t.id });
+    }
+    srv.popup_changed = true;
+    if (pp.xs) |xs| xs.popup = null;
+    srv.allocator.destroy(pp);
+}
+
+/// 서버가 popup을 닫는다(`popup_done`) — 다시 안 그리고 클라이언트가 지우기를 기다린다.
+fn dismiss(pp: *Popup, why: []const u8) void {
+    if (pp.dismissed) return;
+    pp.dismissed = true;
+    pp.mapped = false;
+    pp.resource.sendPopupDone();
+    pp.srv.popup_changed = true;
+    var buf: [32]u8 = undefined;
+    const text = std.fmt.bufPrint(&buf, "done why={s}", .{why}) catch "done";
+    logPop(pp, text);
+    if (pp.top) |t| pp.srv.push(.{ .commit = t.id });
+}
+
+/// 창 `t`의 popup을 위에서부터(만든 순의 거꾸로 — xml의 닫는 순서) 닫는다.
+fn dismissPopups(t: *Toplevel, why: []const u8) void {
+    var i = t.popups.items.len;
+    while (i > 0) {
+        i -= 1;
+        dismiss(t.popups.items[i], why);
+    }
+}
+
+/// popup의 상태가 적용됐다(`apply`). configure 순서는 toplevel과 같다(`logic.onCommit` — 첫 commit에 configure, ack 뒤 버퍼가 매핑). 매핑 ·
+/// 해제는 다음 프레임을 통째로, 보이는 것이 바뀌면 창을 다시 그린다.
+fn popupApplied(pp: *Popup, xs: *XdgSurface, s: *Surface, changed: bool, waiting: bool) void {
+    const srv = pp.srv;
+    const step = logic.onCommit(xs.phase, xs.acked, s.current != null);
+    switch (step.action) {
+        .unconfigured_buffer => return xs.resource.postError(.unconfigured_buffer, "buffer before the first ack_configure"),
+        .send_configure => {
+            if (!pp.dismissed) {
+                pp.resource.sendConfigure(pp.at.x, pp.at.y, pp.at.w, pp.at.h);
+                xs.resource.sendConfigure(srv.display.nextSerial());
+            }
+        },
+        .wait => {},
+        .map, .update => {
+            const shown = s.current != null and !pp.dismissed;
+            const flipped = shown != pp.mapped;
+            if (flipped) {
+                pp.mapped = shown;
+                srv.popup_changed = true;
+                if (shown) {
+                    if (!s.entered_output) {
+                        s.entered_output = true;
+                        var it = srv.outputs.iterator(.forward);
+                        while (it.next()) |o| if (o.getClient() == s.resource.getClient()) s.resource.sendEnter(o);
+                    }
+                    const sz = surfaceSizeOf(s);
+                    const g = xs.geom orelse logic.Rect{ .x = 0, .y = 0, .w = @intCast(sz[0]), .h = @intCast(sz[1]) };
+                    var buf: [96]u8 = undefined;
+                    const text = std.fmt.bufPrint(&buf, "map w={d} h={d} bs={d} geom={d},{d} {d}x{d} grab={d}", .{ sz[0], sz[1], s.scale, g.x, g.y, g.w, g.h, @intFromBool(pp.grabbed) }) catch "map";
+                    logPop(pp, text);
+                } else if (!pp.dismissed) logPop(pp, "unmap");
+            }
+            if (pp.top) |t| if (changed or waiting or flipped) srv.push(.{ .commit = t.id });
+        },
+    }
+    xs.phase = step.next;
+}
+
 // ── wl_output ──────────────────────────────────────────────────────────
 
 /// mode는 물리 크기("physical hardware units"), scale은 HS 배율이다(WY-M3 확정 2, design 결정 27). 이 클라이언트의 창이
@@ -2096,7 +2482,12 @@ fn wmBaseRequest(wm: *xdg.WmBase, req: xdg.WmBase.Request, srv: *Server) void {
         .destroy => wm.destroy(),
         .create_positioner => |r| {
             const p = xdg.Positioner.create(client, wm.getVersion(), r.id) catch return wm.postNoMemory();
-            p.setHandler(?*anyopaque, positionerRequest, null, null);
+            const po = srv.allocator.create(PosObj) catch {
+                p.destroy();
+                return wm.postNoMemory();
+            };
+            po.* = .{ .srv = srv };
+            p.setHandler(*PosObj, positionerRequest, positionerDestroyed, po);
         },
         .get_xdg_surface => |r| {
             const s: *Surface = @ptrCast(@alignCast(r.surface.getUserData() orelse return));
@@ -2134,12 +2525,58 @@ fn surfaceOf(t: *Toplevel) ?*wl.Surface {
     return s.resource;
 }
 
-/// popup의 자리 셈은 M5(R-WY-14)다. 받기만 한다.
-fn positionerRequest(p: *xdg.Positioner, req: xdg.Positioner.Request, _: ?*anyopaque) void {
+/// positioner 하나의 상태(WY-M7 단계 B). `get_popup` · `reposition`이 그때의 값을 복사한다(xml — 그 뒤의 바뀜은 앞의 popup에 안 간다).
+const PosObj = struct {
+    srv: *Server,
+    p: logic.Positioner = .{},
+    /// 판 3의 셋 — 받아서 담기만 한다(design 결정 53: 다시 셈하지 않고 부모 크기가 바뀌면 닫는다).
+    reactive: bool = false,
+    parent_w: i32 = 0,
+    parent_h: i32 = 0,
+    parent_serial: u32 = 0,
+};
+
+fn positionerRequest(p: *xdg.Positioner, req: xdg.Positioner.Request, po: *PosObj) void {
     switch (req) {
         .destroy => p.destroy(),
-        else => {},
+        .set_size => |r| {
+            if (r.width <= 0 or r.height <= 0) return p.postError(.invalid_input, "positioner size must be greater than zero");
+            po.p.w = r.width;
+            po.p.h = r.height;
+        },
+        .set_anchor_rect => |r| {
+            if (r.width < 0 or r.height < 0) return p.postError(.invalid_input, "anchor rectangle size must not be negative");
+            po.p.ax = r.x;
+            po.p.ay = r.y;
+            po.p.aw = r.width;
+            po.p.ah = r.height;
+        },
+        .set_anchor => |r| {
+            const v = @backingInt(r.anchor);
+            if (v < 0 or v > 8) return p.postError(.invalid_input, "unknown anchor");
+            po.p.anchor = @intCast(v);
+        },
+        .set_gravity => |r| {
+            const v = @backingInt(r.gravity);
+            if (v < 0 or v > 8) return p.postError(.invalid_input, "unknown gravity");
+            po.p.gravity = @intCast(v);
+        },
+        .set_constraint_adjustment => |r| po.p.ca = @bitCast(r.constraint_adjustment),
+        .set_offset => |r| {
+            po.p.ox = r.x;
+            po.p.oy = r.y;
+        },
+        .set_reactive => po.reactive = true,
+        .set_parent_size => |r| {
+            po.parent_w = r.parent_width;
+            po.parent_h = r.parent_height;
+        },
+        .set_parent_configure => |r| po.parent_serial = r.serial,
     }
+}
+
+fn positionerDestroyed(_: *xdg.Positioner, po: *PosObj) void {
+    po.srv.allocator.destroy(po);
 }
 
 // ── xdg_surface · xdg_toplevel ─────────────────────────────────────────
@@ -2151,6 +2588,8 @@ const XdgSurface = struct {
     toplevel: ?*Toplevel = null,
     phase: logic.Phase = .fresh,
     acked: bool = false,
+    /// popup 역할(WY-M7 단계 B). toplevel과 둘 중 하나다.
+    popup: ?*Popup = null,
     /// window geometry(WY-M7, design 결정 50) — `set_window_geometry`가 pending을 고치고 wl_surface의 commit이 옮긴다. null이면 보낸 적 없다
     /// (버퍼 전체 — 둠 · SDL · tars-wl-test).
     pending_geom: ?logic.Rect = null,
@@ -2195,6 +2634,10 @@ const Toplevel = struct {
     sub_lines: u8 = 0,
     /// `wl> tree` 줄을 찍은 수(WY-M7 실측 1).
     tree_lines: u8 = 0,
+    /// 이 창의 popup(만든 순 — 나중 것이 위다, xml). popup의 popup도 여기 든다.
+    popups: std.ArrayList(*Popup) = .empty,
+    /// `wl> popup` 줄을 찍은 수.
+    pop_lines: u8 = 0,
 
     const Sig = struct { w: i32, h: i32, fit: logic.Fit, bs: u32 };
     const Name = struct {
@@ -2254,12 +2697,7 @@ fn xdgSurfaceRequest(res: *xdg.Surface, req: xdg.Surface.Request, xs: *XdgSurfac
             xs.toplevel = t;
             tr.setHandler(*Toplevel, toplevelRequest, toplevelDestroyed, t);
         },
-        // popup은 M5(R-WY-14). 만들자마자 닫혔다고 알린다.
-        .get_popup => |r| {
-            const p = xdg.Popup.create(client, res.getVersion(), r.id) catch return res.postNoMemory();
-            p.setHandler(?*anyopaque, popupRequest, null, null);
-            p.sendPopupDone();
-        },
+        .get_popup => |r| getPopup(res, xs, r.id, r.parent, r.positioner),
         .set_window_geometry => |g| {
             if (g.width <= 0 or g.height <= 0) return res.postError(.invalid_size, "window geometry must be greater than zero");
             xs.pending_geom = .{ .x = g.x, .y = g.y, .w = g.width, .h = g.height };
@@ -2271,16 +2709,14 @@ fn xdgSurfaceRequest(res: *xdg.Surface, req: xdg.Surface.Request, xs: *XdgSurfac
     }
 }
 
-fn popupRequest(p: *xdg.Popup, req: xdg.Popup.Request, _: ?*anyopaque) void {
-    switch (req) {
-        .destroy => p.destroy(),
-        .grab, .reposition => {},
-    }
-}
-
 fn xdgSurfaceDestroyed(_: *xdg.Surface, xs: *XdgSurface) void {
     if (xs.surface) |s| s.role = null;
     if (xs.toplevel) |t| t.xdg = null;
+    if (xs.popup) |pp| pp.xs = null;
+    // 이 xdg_surface를 부모로 둔 popup은 부모를 잃는다(자리 셈 · 그리기에서 빠진다).
+    for (xs.srv.toplevels.items) |t| for (t.popups.items) |pp| if (pp.parent == xs) {
+        pp.parent = null;
+    };
     xs.srv.allocator.destroy(xs);
 }
 
@@ -2449,6 +2885,10 @@ fn toplevelDestroyed(_: *xdg.Toplevel, t: *Toplevel) void {
             srv.logEnabled(ti, was, t.id);
         };
     }
+    // popup은 창을 잃는다(클라이언트가 지운다). 다음 프레임은 통째 — 셸 pane 위에 걸쳐 있었을 수 있다.
+    for (t.popups.items) |pp| pp.top = null;
+    if (t.popups.items.len > 0) srv.popup_changed = true;
+    t.popups.deinit(srv.allocator);
     // 포인터도 같다 — leave 없이 포커스와 grab을 버린다.
     if (srv.ptr.focus == t.id) srv.ptr_sr = null;
     srv.ptr.drop(t.id);

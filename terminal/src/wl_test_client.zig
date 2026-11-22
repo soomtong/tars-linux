@@ -33,6 +33,9 @@
 //! 걸음 1의 "부모 commit 전"이 없다. 포인터가 자식 위면 `sub enter x= y=`(자식 좌표) · `sub leave`, 부모 위는 지금처럼 `pointer enter`.
 //! `--second`(WY-M7 판정 43)면 첫 configure 뒤 같은 클라이언트의 둘째 창(단색 669933)을 연다 — 한 클라이언트의 창 둘에서 text-input 줄의
 //! `to=`가 포커스 창을 가리키는지 본다(창마다 다른 프로세스는 다른 클라이언트라 드러나지 않는다). 둘째 창의 configure는 `second configure w= h=`.
+//! WY-M7 단계 B(plan 확정 8): `--popup`이면 창 위 왼쪽 누름이 그 자리(1 × 1 anchor, anchor bottom_left · gravity bottom_right — `--popup-left`면
+//! bottom_left)에 120 × 80 popup(33CC66)을 연다. `--popup-ca N`은 constraint_adjustment, `--popup-grab`이면 그 누름의 serial로 grab. popup이 열린 채 창을
+//! 누르면 Chromium처럼 스스로 지운다(`popup closed`). 줄: `popup configure x= y= w= h=` · `popup done` · `popup enter x= y=` · `popup leave` · `popup press`.
 //! `wl_surface.enter`의 줄에 `enter`라는 낱말을 안 쓰는 것은 wayland 체인 판정 16이 이 로그의 `enter`(키보드)를 세기 때문이다.
 //!
 //! 바인딩은 terminal의 서버와 같은 스캐너가 만든 것이다(`build.zig`의 `wayland` 모듈 — 서버는 `server`, 이쪽은
@@ -141,6 +144,11 @@ const Args = struct {
     sub_scale: u32 = 0,
     /// `--second`(WY-M7) — 같은 클라이언트의 둘째 창.
     second: bool = false,
+    /// `--popup` · `--popup-grab` · `--popup-ca N` · `--popup-left`(WY-M7 단계 B).
+    popup: bool = false,
+    popup_grab: bool = false,
+    popup_ca: u32 = 0,
+    popup_left: bool = false,
 };
 
 /// 바둑판의 둘째 색. 둘레의 검정과 갈리게 흰색이다.
@@ -195,6 +203,19 @@ fn parseArgs(argv: []const []const u8) ?Args {
             args.damage = true;
         } else if (std.mem.eql(u8, a, "--menu")) {
             args.menu = true;
+        } else if (std.mem.eql(u8, a, "--popup")) {
+            args.popup = true;
+        } else if (std.mem.eql(u8, a, "--popup-grab")) {
+            args.popup = true;
+            args.popup_grab = true;
+        } else if (std.mem.eql(u8, a, "--popup-left")) {
+            args.popup = true;
+            args.popup_left = true;
+        } else if (std.mem.eql(u8, a, "--popup-ca")) {
+            i += 1;
+            if (i == argv.len) return null;
+            args.popup_ca = std.fmt.parseInt(u32, argv[i], 10) catch return null;
+            if (args.popup_ca > 63) return null;
         } else if (std.mem.eql(u8, a, "--second")) {
             args.second = true;
         } else if (std.mem.eql(u8, a, "--subsurface")) {
@@ -228,6 +249,7 @@ fn usage() u8 {
         \\usage: tars-wl-test [--color RRGGBB] [--size WxH] [--ignore-close] [--follow-size] [--fullscreen]
         \\       [--hide-cursor] [--buffer-scale N] [--checker] [--copy TEXT] [--paste] [--paste-drop]
         \\       [--text-input] [--native] [--damage] [--menu] [--subsurface | --subsurface-sync] [--sub-scale N] [--second]
+        \\       [--popup] [--popup-grab] [--popup-ca N] [--popup-left]
         \\  open one xdg_toplevel filled with one colour (default 3366CC, 320x200) and
         \\  print what the compositor sends, one line each. Ends on close, unless
         \\  --ignore-close (then close and ping are ignored). The buffer keeps its
@@ -257,6 +279,10 @@ fn usage() u8 {
         \\  --sub-scale N (1..3) is the child's buffer scale (default: --buffer-scale).
         \\  --second opens a second window (669933) of the same client after the first
         \\  configure.
+        \\  --popup opens a 120x80 33CC66 popup where the window is clicked (anchor
+        \\  bottom left, gravity bottom right; --popup-left: gravity bottom left);
+        \\  --popup-ca N sets the constraint adjustment, --popup-grab grabs. A click on
+        \\  the window while it is open destroys it.
         \\
     );
     return EXIT_USAGE;
@@ -338,7 +364,96 @@ const State = struct {
     /// `--second`(WY-M7). 만들 때 쓰는 wm_base와 둘째 창.
     wm_base: ?*xdg.WmBase = null,
     second: ?*Second = null,
+    /// `--popup`(WY-M7 단계 B). 창의 xdg_surface(부모), seat(grab), 마지막 포인터 자리(창 surface 좌표), 열린 popup.
+    xdg_main: ?*xdg.Surface = null,
+    seat: ?*wl.Seat = null,
+    ptr_x: i32 = 0,
+    ptr_y: i32 = 0,
+    on_popup: bool = false,
+    pop: ?*Pop = null,
 };
+
+/// 열린 popup 하나(`--popup`).
+const Pop = struct {
+    state: *State,
+    surface: *wl.Surface,
+    xdg_surface: *xdg.Surface,
+    popup: *xdg.Popup,
+    buffer: ?*wl.Buffer = null,
+    w: i32 = 0,
+    h: i32 = 0,
+};
+const POP_COLOR: u32 = 0x33CC66;
+const POP_W: i32 = 120;
+const POP_H: i32 = 80;
+
+/// 누른 자리에 popup을 연다(`--popup`). grab이면 그 누름의 serial로 — 첫 commit 앞이다(xml).
+fn popOpen(state: *State, serial: u32) void {
+    const comp = state.compositor orelse return;
+    const wm = state.wm_base orelse return;
+    const parent = state.xdg_main orelse return;
+    const sf = comp.createSurface() catch return;
+    const xs = wm.getXdgSurface(sf) catch return;
+    const pos = wm.createPositioner() catch return;
+    pos.setSize(POP_W, POP_H);
+    pos.setAnchorRect(state.ptr_x, state.ptr_y, 1, 1);
+    pos.setAnchor(.bottom_left);
+    pos.setGravity(if (state.args.popup_left) .bottom_left else .bottom_right);
+    pos.setConstraintAdjustment(@bitCast(state.args.popup_ca));
+    const pp = xs.getPopup(parent, pos) catch return;
+    pos.destroy();
+    const pop = std.heap.page_allocator.create(Pop) catch return;
+    pop.* = .{ .state = state, .surface = sf, .xdg_surface = xs, .popup = pp };
+    xs.setListener(*Pop, popSurfaceListener, pop);
+    pp.setListener(*Pop, popListener, pop);
+    if (state.args.popup_grab) if (state.seat) |seat| pp.grab(seat, serial);
+    sf.commit();
+    state.pop = pop;
+    say("popup open at={d},{d} grab={d}", .{ state.ptr_x, state.ptr_y, @intFromBool(state.args.popup_grab) });
+}
+
+fn popClose(state: *State) void {
+    const pop = state.pop orelse return;
+    pop.popup.destroy();
+    pop.xdg_surface.destroy();
+    pop.surface.destroy();
+    if (pop.buffer) |b| b.destroy();
+    std.heap.page_allocator.destroy(pop);
+    state.pop = null;
+    state.on_popup = false;
+}
+
+fn popSurfaceListener(xs: *xdg.Surface, event: xdg.Surface.Event, pop: *Pop) void {
+    switch (event) {
+        .configure => |c| {
+            xs.ackConfigure(c.serial);
+            const bs = pop.state.args.buffer_scale;
+            const w: u32 = if (pop.w > 0) @intCast(pop.w) else POP_W;
+            const h: u32 = if (pop.h > 0) @intCast(pop.h) else POP_H;
+            if (pop.buffer) |old| old.destroy();
+            pop.buffer = solidBuffer(pop.state.shm, w * bs, h * bs, POP_COLOR) catch return;
+            if (bs != 1) pop.surface.setBufferScale(@intCast(bs));
+            pop.surface.attach(pop.buffer.?, 0, 0);
+            pop.surface.damageBuffer(0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
+            pop.surface.commit();
+        },
+    }
+}
+
+fn popListener(_: *xdg.Popup, event: xdg.Popup.Event, pop: *Pop) void {
+    switch (event) {
+        .configure => |c| {
+            pop.w = c.width;
+            pop.h = c.height;
+            say("popup configure x={d} y={d} w={d} h={d}", .{ c.x, c.y, c.width, c.height });
+        },
+        .popup_done => {
+            say("popup done", .{});
+            popClose(pop.state);
+        },
+        .repositioned => |r| say("popup repositioned token={d}", .{r.token}),
+    }
+}
 
 /// 둘째 창(`--second`). 단색 버퍼 하나를 configure의 크기로 다시 만든다.
 const Second = struct {
@@ -876,17 +991,45 @@ fn seatListener(seat: *wl.Seat, event: wl.Seat.Event, state: *State) void {
 fn pointerListener(p: *wl.Pointer, event: wl.Pointer.Event, state: *State) void {
     switch (event) {
         .enter => |e| {
+            if (state.pop) |pop| if (e.surface == pop.surface) {
+                state.on_popup = true;
+                return say("popup enter x={d} y={d}", .{ e.surface_x.toInt(), e.surface_y.toInt() });
+            };
+            state.on_popup = false;
+            state.ptr_x = e.surface_x.toInt();
+            state.ptr_y = e.surface_y.toInt();
             if (state.sub_surface != null and e.surface == state.sub_surface) {
                 say("sub enter x={d} y={d}", .{ e.surface_x.toInt(), e.surface_y.toInt() });
             } else say("pointer enter x={d} y={d}", .{ e.surface_x.toInt(), e.surface_y.toInt() });
             if (state.args.hide_cursor) p.setCursor(e.serial, null, 0, 0);
         },
-        .leave => |l| if (state.sub_surface != null and l.surface == state.sub_surface) say("sub leave", .{}) else say("pointer leave", .{}),
+        .leave => |l| {
+            if (state.pop) |pop| if (l.surface == pop.surface) {
+                state.on_popup = false;
+                return say("popup leave", .{});
+            };
+            if (state.sub_surface != null and l.surface == state.sub_surface) say("sub leave", .{}) else say("pointer leave", .{});
+        },
         .motion => |m| {
+            if (!state.on_popup) {
+                state.ptr_x = m.surface_x.toInt();
+                state.ptr_y = m.surface_y.toInt();
+            }
             state.motions += 1;
             if (state.motions <= MOTION_LINES) say("motion x={d} y={d}", .{ m.surface_x.toInt(), m.surface_y.toInt() });
         },
-        .button => |b| say("button code={d} state={d}", .{ b.button, @backingInt(b.state) }),
+        .button => |b| {
+            say("button code={d} state={d}", .{ b.button, @backingInt(b.state) });
+            // `--popup`: 왼쪽 누름이 연다 · 닫는다(창 위), popup 위의 누름은 줄만.
+            if (state.args.popup and b.button == 0x110 and b.state == .pressed) {
+                if (state.on_popup) {
+                    say("popup press", .{});
+                } else if (state.pop != null) {
+                    popClose(state);
+                    say("popup closed", .{});
+                } else popOpen(state, b.serial);
+            }
+        },
         .axis => |a| say("axis v={d}", .{a.value.toInt()}),
         else => {},
     }
@@ -1127,6 +1270,8 @@ fn run(args: Args) !u8 {
 
     const xdg_surface = try wm_base.getXdgSurface(surface);
     xdg_surface.setListener(*State, xdgSurfaceListener, &state);
+    state.xdg_main = xdg_surface;
+    state.seat = g.seat;
     const toplevel = try xdg_surface.getToplevel();
     toplevel.setListener(*State, toplevelListener, &state);
     toplevel.setTitle("tars-wl-test");

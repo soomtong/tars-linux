@@ -648,6 +648,23 @@ pub fn blendClip(dst: [*]u8, dst_pitch: u32, ox: i64, oy: i64, k: u32, src: [*]c
         const sy: usize = @intCast(@divFloor((y - oy) * b, kk));
         const srow: [*]align(1) const u32 = @ptrCast(src + sy * src_stride);
         const drow: [*]align(1) u32 = @ptrCast(dst + @as(usize, @intCast(y)) * dst_pitch);
+        // 1:1(k == bs — 배율 1의 bs 1, 물리의 bs 2)은 나눗셈 없이 같은 자리를 읽는다(WY-M7 단계 B 실측 — 메뉴 한 장이 이 길이다). XRGB는 행 복사.
+        if (k == bs) {
+            const from: usize = @intCast(x0 - ox);
+            const n: usize = @intCast(x1 - x0);
+            const d0: usize = @intCast(x0);
+            if (!argb) {
+                @memcpy(drow[d0..][0..n], srow[from..][0..n]);
+                continue;
+            }
+            for (0..n) |i| {
+                const sp = srow[from + i];
+                if (sp >> 24 == 0xFF) {
+                    drow[d0 + i] = sp;
+                } else if (sp >> 24 != 0) drow[d0 + i] = over(sp, drow[d0 + i]);
+            }
+            continue;
+        }
         var x = x0;
         while (x < x1) : (x += 1) {
             const sp = srow[@intCast(@divFloor((x - ox) * b, kk))];
@@ -726,4 +743,111 @@ pub fn restack(comptime T: type, items: []T, who: T, ref: T, above: bool) bool {
 pub fn effectiveSync(chain: []const bool) bool {
     for (chain) |s| if (s) return true;
     return false;
+}
+
+// ── popup의 자리(WY-M7 단계 B, design 결정 52) ────────────────────────────────
+
+/// `xdg_positioner`의 상태(xml). 크기는 popup의 window geometry, anchor 사각형은 부모 window geometry 좌표다. `anchor` · `gravity`는 enum 값(0 ~ 8),
+/// `ca`는 constraint_adjustment 비트(slide_x 1 · slide_y 2 · flip_x 4 · flip_y 8 · resize_x 16 · resize_y 32).
+pub const Positioner = struct {
+    w: i32 = 0,
+    h: i32 = 0,
+    ax: i32 = 0,
+    ay: i32 = 0,
+    aw: i32 = 0,
+    ah: i32 = 0,
+    anchor: u32 = 0,
+    gravity: u32 = 0,
+    ca: u32 = 0,
+    ox: i32 = 0,
+    oy: i32 = 0,
+
+    /// xml: 크기와 anchor 사각형이 있어야 완전하다(`invalid_positioner`).
+    pub fn complete(self: Positioner) bool {
+        return self.w > 0 and self.h > 0 and self.aw > 0 and self.ah > 0;
+    }
+};
+
+pub const CA_SLIDE_X: u32 = 1;
+pub const CA_SLIDE_Y: u32 = 2;
+pub const CA_FLIP_X: u32 = 4;
+pub const CA_FLIP_Y: u32 = 8;
+pub const CA_RESIZE_X: u32 = 16;
+pub const CA_RESIZE_Y: u32 = 32;
+
+/// enum 값(anchor · gravity 같다)의 x 쪽 — 왼쪽 -1, 가운데 0, 오른쪽 1.
+fn sideX(v: u32) i32 {
+    return switch (v) {
+        3, 5, 6 => -1,
+        4, 7, 8 => 1,
+        else => 0,
+    };
+}
+
+/// y 쪽 — 위 -1, 가운데 0, 아래 1.
+fn sideY(v: u32) i32 {
+    return switch (v) {
+        1, 5, 7 => -1,
+        2, 6, 8 => 1,
+        else => 0,
+    };
+}
+
+/// 한 축의 제약 없는 자리: anchor 점(사각형의 그 쪽 끝 · 가운데) + offset에서 gravity 쪽으로 놓는다.
+fn axisAt(a0: i32, alen: i32, aside: i32, gside: i32, size: i32, off: i32) i32 {
+    const pt = a0 + switch (aside) {
+        -1 => @as(i32, 0),
+        1 => alen,
+        else => @divTrunc(alen, 2),
+    };
+    return pt + off - switch (gside) {
+        -1 => size,
+        1 => @as(i32, 0),
+        else => @divTrunc(size, 2),
+    };
+}
+
+const Span = struct { pos: i32, size: i32 };
+
+fn fits(pos: i32, size: i32, lo: i32, hi: i32) bool {
+    return pos >= lo and pos + size <= hi;
+}
+
+/// 한 축(xml의 순서 flip → slide → resize). flip은 뒤집은 자리가 안 걸릴 때만 쓴다(걸리면 뒤집기 전으로 — xml). slide는 넘친 쪽을 안으로 밀고, 그래도
+/// 넘치면(경계보다 크다) 시작 쪽(왼쪽 · 위)을 맞춘다. resize는 경계 밖을 잘라 낸다(남는 크기가 0 이하면 그대로).
+fn axisPlace(a0: i32, alen: i32, aside: i32, gside: i32, size: i32, off: i32, lo: i32, hi: i32, flip: bool, slide: bool, resize: bool) Span {
+    var pos = axisAt(a0, alen, aside, gside, size, off);
+    var len = size;
+    if (fits(pos, len, lo, hi)) return .{ .pos = pos, .size = len };
+    if (flip) {
+        const fp = axisAt(a0, alen, -aside, -gside, size, off);
+        if (fits(fp, len, lo, hi)) return .{ .pos = fp, .size = len };
+    }
+    if (slide) {
+        if (pos + len > hi) pos = hi - len;
+        if (pos < lo) pos = lo;
+    }
+    if (resize and !fits(pos, len, lo, hi)) {
+        const x0 = @max(pos, lo);
+        const x1 = @min(pos + len, hi);
+        if (x1 > x0) {
+            pos = x0;
+            len = x1 - x0;
+        }
+    }
+    return .{ .pos = pos, .size = len };
+}
+
+/// popup의 자리와 크기(부모 window geometry 좌표 — `xdg_popup.configure`의 값). `bounds`도 부모 geometry 좌표의 경계(앞 workspace의 화면에서 위 띠와 상태 줄을
+/// 뺀 것 — design 결정 52)이고, null이면 제약 없이 놓는다(부모가 아직 안 그려졌다).
+pub fn placePopup(p: Positioner, bounds: ?Rect) Rect {
+    const b = bounds orelse return .{
+        .x = axisAt(p.ax, p.aw, sideX(p.anchor), sideX(p.gravity), p.w, p.ox),
+        .y = axisAt(p.ay, p.ah, sideY(p.anchor), sideY(p.gravity), p.h, p.oy),
+        .w = p.w,
+        .h = p.h,
+    };
+    const x = axisPlace(p.ax, p.aw, sideX(p.anchor), sideX(p.gravity), p.w, p.ox, b.x, b.x + b.w, p.ca & CA_FLIP_X != 0, p.ca & CA_SLIDE_X != 0, p.ca & CA_RESIZE_X != 0);
+    const y = axisPlace(p.ay, p.ah, sideY(p.anchor), sideY(p.gravity), p.h, p.oy, b.y, b.y + b.h, p.ca & CA_FLIP_Y != 0, p.ca & CA_SLIDE_Y != 0, p.ca & CA_RESIZE_Y != 0);
+    return .{ .x = x.pos, .y = y.pos, .w = x.size, .h = y.size };
 }
