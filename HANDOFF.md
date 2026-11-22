@@ -1,24 +1,23 @@
-# HANDOFF: App Layer(0.3) — WY-M7 단계 A 끝(`9b945c7`, 루트 게이트 37/37), 단계 B(popup)는 구현이 작업 트리에 commit 안 된 채 있다. 다음: 단계 B 대조 · commit · 게이트 → CR-M2. 브랜치 `app-layer-0-3`(origin과 같음 `6552d54` + 이 commit)
+# HANDOFF: App Layer(0.3) — WY 서브프로젝트 끝(WY-M7 단계 B `f0f3524`, 루트 게이트 37/37). CR-M2(녹화 D의 장면) 진행 중 — plan `0c9e93a`, 단계 A(앱 풀스크린 = 자기 workspace)를 서브에이전트 `cr-m2a`가 구현 중. 브랜치 `app-layer-0-3`
 
-## 지금 멈춘 자리 (2026-11-22, Claude Code 앱 업데이트로 세션을 다시 시작 — 먼저 읽는다)
+## 지금 멈춘 자리 (2026-11-22 — 먼저 읽는다)
 
-- commit된 것은 전부 push했다(`origin/app-layer-0-3`). push는 필요한 만큼만(기억 `feedback_push_sparingly` — 이 브랜치의 맨 push는 CI를 안 부른다).
-- 작업 트리에 commit 안 된 변경이 있다 — WY-M7 단계 B(popup)다. 서브에이전트 `wy-m7`(Herdr pane `w3J:pR`)이 넣은 것이고 lead는 아직 대조하지 않았다:
-  `terminal/src/main.zig` · `terminal/src/wl/server.zig` · `terminal/src/wl_logic.zig` · `wl_logic_test.zig` · `wl_test_client.zig` · `wayland/check.sh` · `hidpi/check.sh` ·
-  `browser/check.sh` · `docs/help/desk.md`(약 +1,080줄). 버리지 않는다. 멈출 때의 상태: 호스트 검사 · `make quick` 통과, 체인 wayland 1회차를 도는 중이었다
-  (남은 것: wayland 2회차 · terminal · toolkit · hidpi · pointer · display · browser, 그리고 `measurements.md`와 보고서).
+- WY-M7 단계 B(popup)는 대조 · commit(`f0f3524`) · 루트 게이트 37/37 첫 판(`out/gate-logs/20261122-025252`) · 마감 문서(`fb1604c` — plan 결과 · WY design Status "끝" ·
+  `completed.md` · 기억 `project_wayland_server` · carryover "WY-M7이 남긴 것")까지 끝났다. manifest의 tars-doom 주석도 고쳤다(`16f6073`). 여기까지 push했다
+  (`origin/app-layer-0-3` = `16f6073`). 그 뒤 commit은 push 안 함(기억 `feedback_push_sparingly` — 다음 push는 CR-M2가 끝나 게이트가 초록일 때).
+- CR-M2: plan `docs/plans/2026-11-22-tars-chromium-cr-m2.md`(`0c9e93a` — 확정 1~13, 조사 2부의 값), WY design 결정 56~58 · CR design 결정 10 · 11.
+  조사(서브에이전트 `cr-m2`, 끝나고 pane 닫음)의 결과: 주소창 한글 · 클립보드 양방향 · `restrict=on` SLIRP의 http stub은 지금 코드로 이미 돈다. 막힌 것은 둘 —
+  `wl> title` 줄 상한 4, 그리고 `Cmd+Ctrl+F`가 셸 chrome만 끄고 F11은 configure 없이 페이지가 10픽셀 잘리는 것(요구사항 결정 1 · 6이 코드에 없었다).
+- 단계 A(서버 · App · `tars-wl-test --fullscreen-later` · wayland 판정 45~47)는 Herdr 서브에이전트 `cr-m2a`(Opus, pane `w3J:pT`)가 하고 있다. 지시서 · 보고는 세션 scratchpad
+  `/private/tmp/claude-501/-Users-dp-Repository-tars-linux/f6c52fd8-3cff-43a3-a569-502f72310af7/scratchpad/cr2/`의 `task-a.md` · `report-a.md`(조사 `research.md`,
+  시험 VM 도구 `scripts/vm.sh` · stub 시제품 `scripts/http_stub.pl` · 페이지 `page/page.html`. `/private/tmp`라 재부팅하면 없다 — 결정과 값은 plan에 다 있다).
 - 이어 가는 순서:
-  1. `herdr pane list`로 `w3J:pR`의 에이전트 `wy-m7`이 살아 있는지 본다. 살아 있으면 보고 파일을 기다린다 —
-     `/private/tmp/claude-501/-Users-dp-Repository-tars-linux/dfcf0c26-e50b-4fcb-8c7e-3eabec33689d/scratchpad/wy7/report-b.md`(지시서는 같은 폴더의 `task-b.md`,
-     조사 `research.md`, 단계 A 보고 `report-a.md`. `/private/tmp`라 재부팅하면 없다 — 결정은 plan과 WY design 48~55에 다 있다).
-  2. 에이전트가 사라졌고 보고서도 없으면: 작업 트리의 변경이 단계 B의 구현이다. plan `docs/plans/2026-11-22-tars-wayland-server-wy-m7.md` 확정 7~10과 design 결정 52 · 53에
-     맞는지 읽고(positioner 셈의 호스트 표 · column 밖 합성 · verify 그림자의 fb 복사 · 포인터가 popup 먼저 · grab은 포커스 안 옮김 · 서버 쪽 닫기 셋), 새 에이전트에게
-     "남은 체인을 돌리고 판정 40~42 · hidpi 10 · browser 3b의 좌표와 실제 값을 보고"하게 한다. 체인은 하나씩(겹치면 `terminal/.zig-cache`가 경합한다).
-  3. 대조 → commit(좁은 경로) → `make gate`(37 체인, 약 45분 — BT-M2의 `btvirt` 간헐 크래시는 알려진 것, 그 체인만 다시) → plan 결과 · WY design Status ·
-     CR design 확인 9 고침(text-input은 이미 surface 귀속이었다) · carryover "WY-M7이 남긴 것" · HANDOFF → 끝난 pane 닫기(`herdr pane close w3J:pR`).
-  4. 그 뒤 `devlayer/manifest.toml`의 tars-doom 주석("임시: release 전")을 사실대로 고친다(v0.1.0은 2026-11-22에 냈다 — 체인이 도는 동안은 manifest를 안 건드렸다).
-  5. 다음 milestone은 CR-M2(주소창 한글 · 셸과 클립보드 양방향 · `net` · 풀스크린 workspace — 녹화 D의 장면을 체인 판정으로). web 판 ISO(browser 포함 · lang-native 뺌)는
-     버전을 낼 때.
+  1. `herdr agent list`로 `cr-m2a`가 살아 있는지. 살아 있으면 `report-a.md`를 기다린다. 사라졌으면 작업 트리의 commit 안 된 변경이 단계 A의 구현이다 — plan 확정 1~10과
+     결정 56~58에 맞는지 읽고, 남은 체인을 새 에이전트에게.
+  2. 대조(지운 줄 · 주석 자리 · 호스트 검사가 실제로 단언하는가) → commit(좁은 경로) → `make gate`(37 체인, 약 45분, 출력은 scratchpad로) → plan 결과.
+  3. 단계 B(browser 체인 판정 7~11 · `browser/http_stub.pl` · `net=dhcp` · 페이지 스크립트 · `desk.md` · `measurements.md` 118)를 새 에이전트에게 → 대조 · commit · 게이트.
+  4. CR 닫기: CR design Status · `completed.md` · 기억 `project_chromium` · carryover · 로드맵 · HANDOFF. 그러면 App Layer(0.3)의 코드는 끝이고 남는 것은 사람 녹화 넷(A~D),
+     web 판 ISO(버전을 낼 때), 0.3 줄을 `main`에 넣는 방법(사용자에게 묻는다), 소개 페이지.
 - docker에 측정용 이미지 둘(`cr0-chromium-img` · `cr0-dbg`)이 남아 있다 — CR이 끝나면 `docker rmi`.
 
 ## 목표
@@ -187,12 +186,13 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 - [x] tars-doom v0.1.0 release(2026-11-22, 사용자 "로컬에서 빌드 후 업로드 정도면 충분함"): 브랜치 `wayland`를 push하고(`5179493` 포트 + `5ca8edd` workflow를 수동 실행
       전용으로 — 태그가 다시 빌드해 자산을 덮지 않게) 로컬 tarball을 `gh release create v0.1.0`으로 올렸다. 내려받은 파일의 sha256이 manifest의 `0da0b4a7…`과 같다.
       남은 것: `devlayer/manifest.toml`의 tars-doom 주석("임시: release 전")을 사실대로 고친다 — 체인이 도는 동안은 manifest를 건드리지 않는다
-- [ ] push(사용자 2026-11-22): `app-layer-0-3`은 필요한 만큼만 push한다(CI 비용 — 기억 `feedback_push_sparingly`). 지금 origin보다 110여 commit 앞서 있다.
-      이 브랜치의 맨 push는 CI를 안 부른다(`checks.yml`은 `main` push · PR · 수동) — WY-M7이 끝나 게이트가 초록일 때 한 번 올리는 것이 다음 자리다
+- [ ] push(사용자 2026-11-22): `app-layer-0-3`은 필요한 만큼만 push한다(CI 비용 — 기억 `feedback_push_sparingly`). WY-M7이 끝난 `16f6073`까지 올렸다.
+      이 브랜치의 맨 push는 CI를 안 부른다(`checks.yml`은 `main` push · PR · 수동) — 다음 자리는 CR-M2가 끝나 게이트가 초록일 때
 - [ ] web 판 ISO(사용자 2026-11-22): browser를 실은 ISO는 `web` 식별자로 따로 짓는다, lang-native는 뺀다 — 절차는 `project_release` 절차 3. 아직 굽지 않았다
       (셈 약 1.87 GiB) — 다음 버전을 낼 때 실제 크기 · 설치 smoke
-- [ ] WY-M7(CR design 결정 7): `wl_subcompositor` · `wl_subsurface` → `xdg_popup` · `xdg_positioner` → text-input의 귀속을 포커스 surface로. browser 체인에서
-      "주소창에 글자를 쳐도 안 죽는다"까지. 그 뒤 CR-M2(주소창 한글 · 클립보드 양방향 · `net` · 풀스크린 — 녹화 D)
+- [x] WY-M7(2026-11-22, plan `docs/plans/2026-11-22-tars-wayland-server-wy-m7.md` 결과 1 · 2): A `9b945c7` subsurface · geometry · surface 단위 포인터 · 호환 Cmd 키,
+      B `f0f3524` `xdg_popup` · `xdg_positioner`(column 밖 합성 · 서버 쪽 닫기 셋). 루트 게이트 둘 다 37/37 첫 판. WY 서브프로젝트 끝
+- [ ] CR-M2(plan `docs/plans/2026-11-22-tars-chromium-cr-m2.md`): 단계 A 앱 풀스크린 = 자기 workspace(진행 중) → 단계 B browser 체인의 장면 다섯 → CR 닫기
 - [ ] 녹화 C(사람 녹화 — `tars-files`: column에 뜸 · 방향키 · `Cmd+L` 한글 경로 · `Cmd+K` · `Cmd+C` → 셸 `Cmd+V` · 메뉴 바 · 강조 애니메이션. 장면은 toolkit 체인
       판정 15~34가 돈다). 녹화 A(둠)도 아직 안 찍었다
 - [ ] 녹화 B(사람 녹화 — strip + SDL3 column + 클립보드 + 한글, 조사 `wy-m5/research.md` 6절 끝에 보일 것)
