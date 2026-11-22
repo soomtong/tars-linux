@@ -128,4 +128,25 @@ HTTPS-Upgrades의 되돌림이 끼는가(시간). 6. 배율 2에서 자기 works
 
 ## 결과
 
-(단계가 끝나면 적는다.)
+구현은 `cr-m2a`(Herdr, Opus), 조사는 `cr-m2`. lead는 plan · 대조 · 게이트 · commit.
+
+1. 단계 A `1965553`: `wl_logic`의 `Place`를 `fullscreen · maximized · column` 셋으로(`toplevelStates`의 maximized 갈래) · 순수 함수 `pickReturn`(호스트 표 다섯) ·
+   서버의 `Event.fullscreen`(매핑 뒤의 `set_fullscreen` · `unset_fullscreen`) · `placeWorkspace(id, state)` · `setWorkspaceState` · `answerFullscreen` · `TITLE_LINES` 16 ·
+   App의 `ShellWs.uid` · `AppWs.home` · `by`, `enterOwn`(옮기기 · 아홉이면 거절과 폭 최대) · `leaveOwn`(되돌리기) · `fullscreenRequest` · `runPanes`의 `Cmd+Ctrl+F` 앱 갈래 ·
+   `settleAppPreedit`(옮기기 앞의 조합 확정 — `focusTo`의 블록을 함수로) · `layout.Strip.lastColumnTop` · `tars-wl-test --fullscreen-later` · 도움말.
+   확정 5의 실측(Chromium 156, 시험 VM): `maximized` configure(1280 × 800, states `1,4`)에 Chromium은 그림자를 버린 `buf=1280x800 at=0,0`을 그리고 탭 줄(y 0..40)과
+   주소창(y 40..87)이 산다 — 페이지 원점 (0, 88). `fullscreen`(F11, states `2,4`)은 탭 줄 · 주소창을 감추고 페이지 원점 (0, 0). 되돌리면 처음 column과 픽셀까지 같다.
+   조사가 본 "F11에 페이지가 10픽셀 잘림"은 사라졌다(이제 F11이 configure를 받는다). 결정 58 그대로 갔다.
+   판정의 실제 값(wayland): 45 `ctrl-alt-f` → `wl> fullscreen id=23 on ws=2 from=1 by=key` · `configure id=23 w=1280 h=800 act=1` · `commit … buf=1280x800 … at=0,0` · 상자 다섯이
+   `3366cc` · `Cmd+1`의 `pane> ws=1/2 panes=1` → 다시 `ctrl-alt-f` → `off ws=1 slot=1 by=key` · `configure … w=616 h=752`. 46 `f` → `by=client`(states `2,4`) · `u` → `off … by=client`,
+   둘째 셸 workspace에서 옮긴 창(`from=2`)은 그 셸을 `exit`로 닫은 뒤 `u`에 `off ws=1 slot=1`(왼쪽 셸 workspace의 오른쪽 끝). 47 workspace 아홉에서 `refused` 둘 ·
+   `configure … w=1240 h=752` 둘(F에도 답한다). 클라이언트 로그 `c45-1-1-1-0`.
+   체인 wayland 두 번 연속 · terminal · fullscreen · pane · toolkit · hidpi · pointer · display · browser PASS, verify mismatch 0. wayland 첫 판은 FAIL(46) — 판정 쪽:
+   `disown`한 클라이언트가 PTY를 표준 입력 · 에러로 물고 있어 `exit`한 셸 pane의 EOF가 안 왔다(`2>&1 < /dev/null & disown`으로 고침).
+   실측: 옮긴 프레임 12 ~ 19 ms · 그 뒤 Chromium의 첫 1280 × 800 commit까지 218 ~ 290 ms(나오기 38 ~ 71 ms · 292 ~ 398 ms). 옮긴 첫 프레임은 옛 버퍼를 새 자리 가운데에 그린다.
+   부모 크기 바뀜에 닫힌 popup을 Chromium은 다시 열지 않는다(WY-M7 실측 5 닫힘). 배율 2의 자기 workspace(논리 640 × 400)는 `set_min_size(500)`을 넘어 주소창이 산다(실측 6 닫힘).
+   조합 중 `Cmd+Ctrl+F`는 옮기기 앞에 `commit=한`을 보내고, 옮긴 뒤 같은 창에서 조합이 이어진다(leave · enter 없음).
+   plan과 달라진 것: (가) 실측 줄 `wl> fullscreen frame us=` · `commit ms=`(옮긴 뒤 한 번씩 — 판정은 안 쓴다). (나) 거절의 "가장 넓은 폭"은 `cycleWidth`를 `full`까지 돌린다.
+   (다) 옮길 때의 조합 확정은 그 창이 키보드 포커스일 때만. (라) app workspace 프레임은 메뉴 바를 안 그려 `menu> bar hidden` 줄이 없다(판정에서 뺌).
+   lead의 대조: 확정 1~10 · 결정 56~58과 맞다, 지운 51줄은 다시 쓴 선언 · 주석과 함수로 뽑은 블록. 화면 판정 — maximized의 Chromium이 탭 줄 · 주소창이 산 채 화면 전체.
+   루트 게이트 37/37 첫 판(`out/gate-logs/20261122-052448`, lanes 1,657초 — wayland 353초 · browser 76초), verify mismatch 0.
