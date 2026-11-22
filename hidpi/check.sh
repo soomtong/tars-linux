@@ -24,6 +24,7 @@ cd "$(dirname "$0")" || exit 1
 #     놓인다 — 그 사각형이 물리 1픽셀 바둑판이다. 셸의 부분 프레임 · 통째 프레임 · 창 위의
 #     화살표가 그 그림을 덮지 않는다. 배율을 안 쓰는 창(`--buffer-scale 1`)은 HS의 늘린 길
 #     그대로 2 × 2 블록 바둑판이다. 배율 1(부팅 B)에서는 서버가 1을 알린다
+#   → (WY-M7) bs 2 창의 자식(subsurface)도 물리로 합성된다 — 자식이 bs 2여도 bs 1이어도 물리 화면의 그 자리에 자식의 색이 있다(판정 9)
 #
 # 판정의 도구가 넷이다.
 #   kms: · terminal: grid 줄 — 무엇이 골라졌고 격자가 몇 칸인가.
@@ -549,6 +550,35 @@ BLK="$(ppm_blocks "$SHOT7E" 2 "$X0" "$Y0" "$X1" "$Y1")"
 type_keys alt-q
 wait_for_log "terminal: wl> unmap id=${ID7} ws=1 slot=1" || report_failure "(7d) Cmd+Q did not close the second window"
 echo "(7d): configure ${CW}x${CH}, buffer ${CW}x${CH} without bs=, (${X0},${Y0})-(${X1},${Y1}) is a 2-pixel checkerboard in 2x2 blocks"
+
+# ── 판정 9: 자식(subsurface)도 물리로 합성된다(WY-M7 단계 A, plan 확정 9) ─────────────────────
+#
+# bs 2 창(`--subsurface`)의 64 × 64 자식(CC3366)은 논리 (40, 40) — 물리로는 창 원점 + (80, 80)에 128 × 128이다. 자식을 그림자에만 섞으면
+# 물리 합성(부모 bs 2)이 그 자리를 덮어 자식이 사라진다(조사 시제품이 그랬다). (a) 자식도 bs 2, (b) 자식은 bs 1(`--sub-scale 1` — 물리로 늘린다).
+# 상자는 자식 안쪽(가장자리 8을 비켜 112 × 112)과 그 오른쪽 부모 자리다.
+for sub_scale in 2 1; do
+  echo "=== boot A (9): a subsurface with buffer scale ${sub_scale} on a buffer-scale-2 window is on the physical screen ==="
+  COLS9="$(tlog | grep -acE 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+  type_text "tars-wl-test --buffer-scale 2 --follow-size --subsurface --sub-scale ${sub_scale} --color ${WL_COLOR^^} > /tmp/hs9.log &"
+  type_keys ret
+  wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS9 + 1)) || report_failure "(9) the window did not open as a column"
+  ID9="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+' | tail -n 1 | sed 's/.*id=//')"
+  wait_for_log "terminal: wl> subsurface id=${ID9} sub=[0-9]+ map w=64 h=64 bs=${sub_scale} at=40,40" ||
+    report_failure "(9) no 'wl> subsurface id=${ID9} … map w=64 h=64 bs=${sub_scale} at=40,40'"
+  wait_for_log "terminal: pane> ws=1/1 panes=2 focus=1 slot=1 app id=${ID9} " || report_failure "(9) the pane> line does not show the window"
+  read -r X0 Y0 X1 Y1 < <(app_rect "$ID9") || report_failure "(9) could not read the window's rectangle"
+  sleep 1
+  SHOT9="${SCREENS_DIR}/bs2-sub${sub_scale}.ppm"
+  screendump "$SHOT9" || report_failure "(9) screendump did not write ${SHOT9}"
+  IN9="$(ppm_ink "$SHOT9" $(( X0 + 88 )) $(( Y0 + 88 )) 112 112)"
+  OUT9="$(ppm_ink "$SHOT9" $(( X0 + 216 )) $(( Y0 + 88 )) 112 112)"
+  echo "(9) bs ${sub_scale}: child at physical $(( X0 + 80 )),$(( Y0 + 80 )): ${IN9}; parent right of it: ${OUT9}"
+  [ "$IN9" = "bg=cc3366 ink=0" ] || report_failure "(9) the bs ${sub_scale} child is not on the physical screen (${IN9})"
+  [ "$OUT9" = "bg=${WL_COLOR} ink=0" ] || report_failure "(9) the parent right of the child is not the window's colour (${OUT9})"
+  type_keys alt-q
+  wait_for_log "terminal: wl> unmap id=${ID9} ws=1 slot=1" || report_failure "(9) Cmd+Q did not close the window"
+done
+echo "(9): a bs 2 and a bs 1 child of a bs 2 window are both on the physical screen"
 tlog | grep -aoE 'terminal: wl> (frame full|phys arrow) [^|]*' | tr -d '\r' | sed 's/^/measure: /'
 
 stop_boot

@@ -26,6 +26,13 @@
 //! TK-M5(plan 확정 13): `--menu`면 `tars_menu_manager_v1`을 판 2로 bind하고(원래 모드 — `native` 줄도 찍는다) 창에 `get_menu`로 고정
 //! 모델을 보낸다 — File[Open id 1 Cmd+O, 구분선, Quit id 2 비활성], Edit[Copy id 3 Cmd+C, 한글 id 4]. 보낸 뒤 `menu sent menus=2 items=5`,
 //! 서버가 판 1만 내면 `menu unsupported`. 서버가 고른 항목을 알리면 `menu activated id=N`. `--native`는 판 1 그대로다(툴킷과 같은 판).
+//! WY-M7(plan 확정 8): `--subsurface`면 첫 그림과 함께 자식 하나를 붙인다 — 64 × 64 단색(CC3366, 알파 FF) `set_position(40, 40)`, desync.
+//! S 키(evdev 31)를 누를 때마다 한 걸음: 1 `set_position(120, 40)`만(부모 commit 없음 — 자리는 아직 안 바뀐다), 2 부모 commit(이제 옮겨진다).
+//! `--subsurface-sync`면 자식이 sync 그대로이고 걸음 1은 자식의 색을 33CC66으로 바꿔 자식만 commit(부모 commit 전에는 안 보인다), 2는 부모 commit.
+//! `--sub-scale N`은 자식의 buffer_scale(없으면 `--buffer-scale`과 같다). 자식이 있으면 frame 고리를 안 돈다 — 부모가 frame마다 commit하면
+//! 걸음 1의 "부모 commit 전"이 없다. 포인터가 자식 위면 `sub enter x= y=`(자식 좌표) · `sub leave`, 부모 위는 지금처럼 `pointer enter`.
+//! `--second`(WY-M7 판정 43)면 첫 configure 뒤 같은 클라이언트의 둘째 창(단색 669933)을 연다 — 한 클라이언트의 창 둘에서 text-input 줄의
+//! `to=`가 포커스 창을 가리키는지 본다(창마다 다른 프로세스는 다른 클라이언트라 드러나지 않는다). 둘째 창의 configure는 `second configure w= h=`.
 //! `wl_surface.enter`의 줄에 `enter`라는 낱말을 안 쓰는 것은 wayland 체인 판정 16이 이 로그의 `enter`(키보드)를 세기 때문이다.
 //!
 //! 바인딩은 terminal의 서버와 같은 스캐너가 만든 것이다(`build.zig`의 `wayland` 모듈 — 서버는 `server`, 이쪽은
@@ -127,6 +134,13 @@ const Args = struct {
     damage: bool = false,
     /// `--menu`(TK-M5) — 판 2로 bind하고 고정 메뉴 모델을 보낸다.
     menu: bool = false,
+    /// `--subsurface` · `--subsurface-sync`(WY-M7) — 자식 하나. sync면 자식이 sync 모드 그대로다.
+    subsurface: bool = false,
+    sub_sync: bool = false,
+    /// `--sub-scale N`(WY-M7) — 자식의 buffer_scale. 0이면 `buffer_scale`과 같다.
+    sub_scale: u32 = 0,
+    /// `--second`(WY-M7) — 같은 클라이언트의 둘째 창.
+    second: bool = false,
 };
 
 /// 바둑판의 둘째 색. 둘레의 검정과 갈리게 흰색이다.
@@ -181,6 +195,19 @@ fn parseArgs(argv: []const []const u8) ?Args {
             args.damage = true;
         } else if (std.mem.eql(u8, a, "--menu")) {
             args.menu = true;
+        } else if (std.mem.eql(u8, a, "--second")) {
+            args.second = true;
+        } else if (std.mem.eql(u8, a, "--subsurface")) {
+            args.subsurface = true;
+        } else if (std.mem.eql(u8, a, "--subsurface-sync")) {
+            args.subsurface = true;
+            args.sub_sync = true;
+        } else if (std.mem.eql(u8, a, "--sub-scale")) {
+            i += 1;
+            if (i == argv.len) return null;
+            const n = std.fmt.parseInt(u32, argv[i], 10) catch return null;
+            if (n < 1 or n > 3) return null;
+            args.sub_scale = n;
         } else if (std.mem.eql(u8, a, "--copy")) {
             i += 1;
             if (i == argv.len) return null;
@@ -200,7 +227,7 @@ fn usage() u8 {
     writeAll(2,
         \\usage: tars-wl-test [--color RRGGBB] [--size WxH] [--ignore-close] [--follow-size] [--fullscreen]
         \\       [--hide-cursor] [--buffer-scale N] [--checker] [--copy TEXT] [--paste] [--paste-drop]
-        \\       [--text-input] [--native] [--damage] [--menu]
+        \\       [--text-input] [--native] [--damage] [--menu] [--subsurface | --subsurface-sync] [--sub-scale N] [--second]
         \\  open one xdg_toplevel filled with one colour (default 3366CC, 320x200) and
         \\  print what the compositor sends, one line each. Ends on close, unless
         \\  --ignore-close (then close and ping are ignored). The buffer keeps its
@@ -223,6 +250,13 @@ fn usage() u8 {
         \\  --menu binds tars_menu_manager_v1 version 2 (native mode) and sends a
         \\  fixed menu model for the window: File (Open, -, Quit disabled) and
         \\  Edit (Copy, 한글). It prints the ids the compositor sends back.
+        \\  --subsurface adds a 64x64 CC3366 child at (40, 40), desynchronized; each S
+        \\  press is one step: 1 moves it to (120, 40) without a parent commit, 2 commits
+        \\  the parent. --subsurface-sync keeps the child synchronized: step 1 recolours
+        \\  it 33CC66 and commits the child only, step 2 commits the parent.
+        \\  --sub-scale N (1..3) is the child's buffer scale (default: --buffer-scale).
+        \\  --second opens a second window (669933) of the same client after the first
+        \\  configure.
         \\
     );
     return EXIT_USAGE;
@@ -238,6 +272,8 @@ const Globals = struct {
     output: ?*wl.Output = null,
     data_device_manager: ?*wl.DataDeviceManager = null,
     text_input_manager: ?*zwp.TextInputManagerV3 = null,
+    /// `wl_subcompositor`(WY-M7) — `--subsurface`일 때만 쓴다.
+    subcompositor: ?*wl.Subcompositor = null,
     /// `tars_menu_manager_v1`의 global 이름과 판(WY-M6). bind는 `--native`일 때만 `run`이 한다 — 기본은 호환 모드다.
     menu_global: ?struct { name: u32, version: u32 } = null,
     /// output의 mode · scale을 `done`까지 모은다. listener는 bind하는 자리에서 건다 — output의 이벤트는 첫 roundtrip이 끝난
@@ -292,7 +328,77 @@ const State = struct {
     ring: [RING]RingBuf = @splat(.{}),
     boxes: [4]?Box = @splat(null),
     dmg_step: u32 = 0,
+    /// `--subsurface`(WY-M7). 자식의 surface · 객체 · 걸음. compositor는 자식을 만들 때 쓴다.
+    compositor: ?*wl.Compositor = null,
+    subcompositor: ?*wl.Subcompositor = null,
+    sub_surface: ?*wl.Surface = null,
+    subsurface: ?*wl.Subsurface = null,
+    sub_buffer: ?*wl.Buffer = null,
+    sub_step: u32 = 0,
+    /// `--second`(WY-M7). 만들 때 쓰는 wm_base와 둘째 창.
+    wm_base: ?*xdg.WmBase = null,
+    second: ?*Second = null,
 };
+
+/// 둘째 창(`--second`). 단색 버퍼 하나를 configure의 크기로 다시 만든다.
+const Second = struct {
+    state: *State,
+    surface: *wl.Surface,
+    xdg_surface: *xdg.Surface,
+    toplevel: *xdg.Toplevel,
+    buffer: ?*wl.Buffer = null,
+    w: i32 = 0,
+    h: i32 = 0,
+};
+const SECOND_COLOR: u32 = 0x669933;
+
+fn secondOpen(state: *State) void {
+    if (state.second != null) return;
+    const comp = state.compositor orelse return;
+    const wm = state.wm_base orelse return;
+    const sec = std.heap.page_allocator.create(Second) catch return;
+    const sf = comp.createSurface() catch return;
+    const xs = wm.getXdgSurface(sf) catch return;
+    const tl = xs.getToplevel() catch return;
+    sec.* = .{ .state = state, .surface = sf, .xdg_surface = xs, .toplevel = tl };
+    xs.setListener(*Second, secondSurfaceListener, sec);
+    tl.setListener(*Second, secondToplevelListener, sec);
+    tl.setTitle("tars-wl-test second");
+    tl.setAppId("tars-wl-test");
+    sf.commit();
+    state.second = sec;
+    say("second opened", .{});
+}
+
+fn secondSurfaceListener(xs: *xdg.Surface, event: xdg.Surface.Event, sec: *Second) void {
+    switch (event) {
+        .configure => |c| {
+            xs.ackConfigure(c.serial);
+            const w: u32 = if (sec.w > 0) @intCast(sec.w) else 200;
+            const h: u32 = if (sec.h > 0) @intCast(sec.h) else 200;
+            say("second configure w={d} h={d}", .{ w, h });
+            if (sec.buffer) |old| old.destroy();
+            sec.buffer = solidBuffer(sec.state.shm, w, h, SECOND_COLOR) catch return;
+            sec.surface.attach(sec.buffer.?, 0, 0);
+            sec.surface.damageBuffer(0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
+            sec.surface.commit();
+        },
+    }
+}
+
+fn secondToplevelListener(_: *xdg.Toplevel, event: xdg.Toplevel.Event, sec: *Second) void {
+    switch (event) {
+        .configure => |c| {
+            sec.w = c.width;
+            sec.h = c.height;
+        },
+        .close => {
+            say("second close", .{});
+            sec.state.running = false;
+        },
+        else => {},
+    }
+}
 
 // ── `--damage`의 고리(WY-M6 단계 B) ───────────────────────────────────
 
@@ -513,6 +619,86 @@ fn requestFrame(state: *State) void {
     cb.setListener(*State, frameListener, state);
 }
 
+// ── 자식(WY-M7) ──────────────────────────────────────────────────────
+
+const SUB_COLOR: u32 = 0xCC3366;
+const SUB_COLOR_2: u32 = 0x33CC66;
+const SUB_SIZE: u32 = 64;
+/// evdev KEY_S — 걸음의 방아쇠.
+const KEY_S: u32 = 31;
+
+/// 단색 ARGB8888(알파 FF) 버퍼 `w` × `h`(버퍼 픽셀).
+fn solidBuffer(shm: *wl.Shm, w: u32, h: u32, color: u32) !*wl.Buffer {
+    const stride = w * 4;
+    const size = stride * h;
+    const fd_rc = linux.memfd_create("tars-wl-test-sub", 0);
+    if (linux.errno(fd_rc) != .SUCCESS) return error.MemfdFailed;
+    const fd: i32 = @intCast(fd_rc);
+    defer _ = linux.close(fd);
+    if (linux.errno(linux.ftruncate(fd, size)) != .SUCCESS) return error.FtruncateFailed;
+    const addr = linux.mmap(null, size, .{ .READ = true, .WRITE = true }, .{ .TYPE = .SHARED }, fd, 0);
+    if (linux.errno(addr) != .SUCCESS) return error.MmapFailed;
+    const ptr: [*]u32 = @ptrFromInt(addr);
+    @memset(ptr[0 .. size / 4], 0xFF000000 | color);
+    _ = linux.munmap(@ptrFromInt(addr), size);
+    const pool = try shm.createPool(fd, @intCast(size));
+    defer pool.destroy();
+    return pool.createBuffer(0, @intCast(w), @intCast(h), @intCast(stride), .argb8888);
+}
+
+fn subScale(state: *const State) u32 {
+    return if (state.args.sub_scale != 0) state.args.sub_scale else state.args.buffer_scale;
+}
+
+/// 자식의 버퍼를 (다시) 붙이고 자식만 commit한다.
+fn subDraw(state: *State, color: u32) !void {
+    const cs = state.sub_surface orelse return;
+    const bs = subScale(state);
+    if (state.sub_buffer) |old| old.destroy();
+    state.sub_buffer = try solidBuffer(state.shm, SUB_SIZE * bs, SUB_SIZE * bs, color);
+    if (bs != 1) cs.setBufferScale(@intCast(bs));
+    cs.attach(state.sub_buffer.?, 0, 0);
+    cs.damageBuffer(0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
+    cs.commit();
+}
+
+/// 첫 그림 앞(부모의 첫 버퍼 commit 앞)에 자식을 만든다 — 자식을 더하는 것은 부모의 다음 commit에 적용된다(xml).
+fn subCreate(state: *State) void {
+    if (state.sub_surface != null) return;
+    const sc = state.subcompositor orelse return say("sub unsupported", .{});
+    const comp = state.compositor orelse return;
+    const cs = comp.createSurface() catch return say("sub error surface", .{});
+    const ss = sc.getSubsurface(cs, state.surface) catch return say("sub error subsurface", .{});
+    state.sub_surface = cs;
+    state.subsurface = ss;
+    ss.setPosition(40, 40);
+    if (!state.args.sub_sync) ss.setDesync();
+    subDraw(state, SUB_COLOR) catch |e| return say("sub error buffer={s}", .{@errorName(e)});
+    say("sub made at=40,40 sync={d} scale={d}", .{ @intFromBool(state.args.sub_sync), subScale(state) });
+}
+
+/// S 키 한 번 — 파일 머리의 걸음.
+fn subStep(state: *State) void {
+    const ss = state.subsurface orelse return;
+    switch (state.sub_step) {
+        0 => {
+            if (state.args.sub_sync) {
+                subDraw(state, SUB_COLOR_2) catch return;
+                say("sub step=1 child commit", .{});
+            } else {
+                ss.setPosition(120, 40);
+                say("sub step=1 position pending", .{});
+            }
+        },
+        1 => {
+            state.surface.commit();
+            say("sub step=2 parent commit", .{});
+        },
+        else => return,
+    }
+    state.sub_step += 1;
+}
+
 // ── 메뉴(TK-M5) ───────────────────────────────────────────────────
 
 /// evdev KEY_O — `Open`의 단축키(Cmd+O).
@@ -561,6 +747,8 @@ fn registryListener(registry: *wl.Registry, event: wl.Registry.Event, g: *Global
                 g.data_device_manager = registry.bind(global.name, wl.DataDeviceManager, @min(global.version, DATA_DEVICE_MANAGER_VERSION)) catch return;
             } else if (std.mem.eql(u8, name, std.mem.span(zwp.TextInputManagerV3.interface.name))) {
                 g.text_input_manager = registry.bind(global.name, zwp.TextInputManagerV3, @min(global.version, TEXT_INPUT_MANAGER_VERSION)) catch return;
+            } else if (std.mem.eql(u8, name, std.mem.span(wl.Subcompositor.interface.name))) {
+                g.subcompositor = registry.bind(global.name, wl.Subcompositor, 1) catch return;
             } else if (std.mem.eql(u8, name, std.mem.span(tars.MenuManagerV1.interface.name))) {
                 g.menu_global = .{ .name = global.name, .version = global.version };
             }
@@ -595,7 +783,9 @@ fn xdgSurfaceListener(xdg_surface: *xdg.Surface, event: xdg.Surface.Event, state
                 }
             }
             state.configured = true;
+            if (state.args.subsurface) subCreate(state);
             draw(state, fresh);
+            if (state.args.second) secondOpen(state);
         },
     }
 }
@@ -649,6 +839,8 @@ fn frameListener(cb: *wl.Callback, event: wl.Callback.Event, state: *State) void
             state.frames += 1;
             if (state.frames <= FRAME_LINES) say("frame n={d}", .{state.frames});
             if (state.args.damage) return damageStep(state);
+            // 자식이 있으면 고리를 멈춘다(파일 머리 — 걸음 1의 "부모 commit 전"이 있어야 한다).
+            if (state.args.subsurface) return;
             // 내용은 같다 — 콜백이 계속 도는지 보려고 다음 프레임을 다시 건다.
             requestFrame(state);
             state.surface.commit();
@@ -684,10 +876,12 @@ fn seatListener(seat: *wl.Seat, event: wl.Seat.Event, state: *State) void {
 fn pointerListener(p: *wl.Pointer, event: wl.Pointer.Event, state: *State) void {
     switch (event) {
         .enter => |e| {
-            say("pointer enter x={d} y={d}", .{ e.surface_x.toInt(), e.surface_y.toInt() });
+            if (state.sub_surface != null and e.surface == state.sub_surface) {
+                say("sub enter x={d} y={d}", .{ e.surface_x.toInt(), e.surface_y.toInt() });
+            } else say("pointer enter x={d} y={d}", .{ e.surface_x.toInt(), e.surface_y.toInt() });
             if (state.args.hide_cursor) p.setCursor(e.serial, null, 0, 0);
         },
-        .leave => say("pointer leave", .{}),
+        .leave => |l| if (state.sub_surface != null and l.surface == state.sub_surface) say("sub leave", .{}) else say("pointer leave", .{}),
         .motion => |m| {
             state.motions += 1;
             if (state.motions <= MOTION_LINES) say("motion x={d} y={d}", .{ m.surface_x.toInt(), m.surface_y.toInt() });
@@ -708,6 +902,7 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, state: *State) vo
             say("key code={d} state={d}", .{ k.key, @backingInt(k.state) });
             if (k.key == KEY_C and k.state == .pressed) copySelection(state, k.serial);
             if (k.key == KEY_V and k.state == .pressed) pasteSelection(state);
+            if (k.key == KEY_S and k.state == .pressed and state.args.subsurface) subStep(state);
         },
         .modifiers => |m| say("mods depressed=0x{x}", .{m.mods_depressed}),
         // 키보드 포커스(WY-M2 확정 9) — column 창은 포커스 slot이 될 때 enter, 셸로 옮기면 leave.
@@ -895,6 +1090,9 @@ fn run(args: Args) !u8 {
         .height = args.height,
     };
     surface.setListener(*State, surfaceListener, &state);
+    state.compositor = compositor;
+    state.subcompositor = g.subcompositor;
+    state.wm_base = wm_base;
     wm_base.setListener(*State, wmBaseListener, &state);
     // seat가 없어도 창은 뜬다 — 키 줄만 안 나온다.
     if (g.seat) |seat| seat.setListener(*State, seatListener, &state);

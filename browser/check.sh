@@ -14,6 +14,7 @@ cd "$(dirname "$0")" || exit 1
 #     글자다(두부가 아니다 — 아래 "한글 상자")(3)
 #   → 렌더러가 seccomp 필터 안(`Seccomp: 2`)에서, 브라우저와 다른 user namespace(uid_map `1000 1000 1`)로 돈다 — 화면 셸(같은 uid)이 /proc로
 #     읽는다(4 — CR design 결정 5 · 요구사항 결정 8: sandbox를 끄지 않는다)
+#   → (WY-M7) 주소창에 글자를 치면 자동 완성 bubble이 subsurface로 뜨고 Chromium이 살아 있다(3a — 3 뒤 · 4 앞)
 #   → Cmd+Q가 close를 보내 Chromium이 스스로 끝나고(kill 없음) chromium 프로세스가 하나도 남지 않는다(5)
 #
 # 부팅 하나, NIC 없음(R-CR-5의 망은 CR-M2). 설정 디스크 `shell=fish keyboard=apple user=cruser` + 라벨 tars-home의 홈 디스크(display 체인
@@ -305,6 +306,55 @@ cp "$SHOT" "${SCREENS_DIR}/first.ppm"
 convert "$SHOT" "${JUDGE_DIR}/cr-first.png" || report_failure "(3) could not write ${JUDGE_DIR}/cr-first.png"
 convert "$SHOT" -crop 616x665+644+107 +repage -scale 200% "${JUDGE_DIR}/cr-page-2x.png" || report_failure "(3) could not write ${JUDGE_DIR}/cr-page-2x.png"
 echo "(3) ${PAGE_STATE}; the screens are ${JUDGE_DIR}/cr-first.png and cr-page-2x.png"
+
+# ── 판정 3a: 주소창에 글자를 쳐도 안 죽는다(WY-M7 단계 A, plan 확정 10) ──────────────────────────
+#
+# Cmd+L(호환 모드라 Ctrl+L — 주소창) · `a`이면 자동 완성 bubble이 뜬다 — Chromium은 그것을 toplevel surface의 subsurface(desync)로 그린다
+# (WY-M7 전에는 `wl_subcompositor`가 없어 여기서 죽었다). 서버의 `wl> subsurface … map` 줄, `wl> gone pid=` 0, 화면 셸에서 본 crash report 0,
+# 그리고 bubble 첫 줄의 오른쪽(글자가 없는 자리 — 화면 (1000, 112) 150 × 10)이 페이지 색 2e8b57에서 바뀐다. Esc 둘(목록 닫기 · 주소 되돌리기).
+echo "=== (3a) typing in the address bar opens the suggestion bubble as a subsurface and chromium lives ==="
+BUBBLE_PROBE="1000 112 150 10"
+# shellcheck disable=SC2086 # 상자는 낱말로 갈라 넘긴다.
+BEFORE3A="$(ppm_ink "$SHOT" $BUBBLE_PROBE)"
+[ "$BEFORE3A" = "bg=${PAGE_BG} ink=0" ] || report_failure "(3a) the probe ${BUBBLE_PROBE} is not the page colour before typing (${BEFORE3A})"
+# Ctrl+L의 포커스 이동은 Chromium 안에서 비동기다 — 주소창이 text input을 켤 때(`ti enable`, purpose 5 = url)까지 기다린 뒤 친다. 안 기다리면 `a`가
+# 페이지로 간다(1회차).
+EN3A="$(count_log "terminal: wl> ti enable to=${CR_ID}([^0-9]|$)")"
+type_keys meta_l-l
+wait_for_count "terminal: wl> ti enable to=${CR_ID}([^0-9]|$)" $((EN3A + 1)) || report_failure "(3a) Cmd+L did not focus the address bar (no new 'wl> ti enable to=${CR_ID}')"
+type_keys a
+wait_for_log "terminal: wl> subsurface id=${CR_ID} sub=[0-9]+ new parent=main" || report_failure "(3a) no 'wl> subsurface id=${CR_ID} … new parent=main' after typing a"
+wait_for_log "terminal: wl> subsurface id=${CR_ID} sub=[0-9]+ map " || report_failure "(3a) the bubble was never mapped"
+AFTER3A=""
+for _ in $(seq 1 20); do
+  sleep 0.5
+  screendump "$SHOT" || report_failure "(3a) screendump did not write ${SHOT}"
+  # shellcheck disable=SC2086
+  AFTER3A="$(ppm_ink "$SHOT" $BUBBLE_PROBE)"
+  [ "$AFTER3A" != "bg=${PAGE_BG} ink=0" ] && break
+done
+[ "$AFTER3A" != "bg=${PAGE_BG} ink=0" ] || report_failure "(3a) the bubble is not on the screen (the probe is still the page colour)"
+cp "$SHOT" "${SCREENS_DIR}/bubble.ppm"
+convert "$SHOT" "${JUDGE_DIR}/cr-bubble.png" || report_failure "(3a) could not write ${JUDGE_DIR}/cr-bubble.png"
+convert "$SHOT" -crop 480x320+734+40 +repage -scale 200% "${JUDGE_DIR}/cr-bubble-2x.png" || report_failure "(3a) could not write ${JUDGE_DIR}/cr-bubble-2x.png"
+sleep 2
+[ "$(count_log 'terminal: wl> gone pid=')" -eq 0 ] || report_failure "(3a) a Wayland client went away after typing in the address bar"
+MAP3A="$(tlog | grep -aoE "terminal: wl> subsurface id=${CR_ID} sub=[0-9]+ map [^|]*" | head -n 1 | tr -d '\r')"
+type_keys esc esc
+wait_for_log "terminal: wl> subsurface id=${CR_ID} sub=[0-9]+ (unmap|gone)" || report_failure "(3a) Esc did not take the bubble away"
+ACT3A="terminal: wl> configure id=${CR_ID} w=616 h=752 act=0"
+n_act3a="$(count_log "$ACT3A")"
+type_keys meta_l-bracket_left
+wait_for_count "$ACT3A" $((n_act3a + 1)) || report_failure "(3a) Cmd+[ did not take the keyboard from chromium"
+# shellcheck disable=SC2016 # 게스트의 fish가 펼칠 글자다.
+type_line 'echo cr3a-(count (ls $HOME'"'"'/.config/chromium/Crash Reports/pending'"'"' 2>/dev/null))'
+wait_for_screen 'cr3a-[0-9]+' || report_failure "(3a) the crash report count did not come"
+[ "$(joined_screen_dump | grep -aoE 'cr3a-[0-9]+' | tail -n 1)" = "cr3a-0" ] || report_failure "(3a) chromium wrote a crash report"
+ACT3B="terminal: wl> configure id=${CR_ID} w=616 h=752 act=1"
+n_act3b="$(count_log "$ACT3B")"
+type_keys meta_l-bracket_right
+wait_for_count "$ACT3B" $((n_act3b + 1)) || report_failure "(3a) Cmd+] did not give chromium the keyboard back"
+echo "(3a) ${MAP3A#terminal: }; probe ${BEFORE3A} -> ${AFTER3A}; no client gone, no crash report; the screens are ${JUDGE_DIR}/cr-bubble.png and cr-bubble-2x.png"
 
 # ── 판정 4: 렌더러의 sandbox ──────────────────────────────────────────────
 #

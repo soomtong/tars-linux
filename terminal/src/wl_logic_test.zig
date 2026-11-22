@@ -504,5 +504,87 @@ pub fn main() !void {
         if (!t.activeOn(11) or t.commits != 9) return error.WrongTextInput;
     }
     std.debug.print("wl_logic_test: text_input 13 cases\n", .{});
+    // ── surface 트리(WY-M7 단계 A) ──
+    {
+        const pane: logic.Area = .{ .x = 644, .y = 20, .w = 616, .h = 752 };
+        // geometry가 없으면 `fitIn` 그대로(둠 · SDL · tars-wl-test).
+        if (!std.meta.eql(logic.fitGeom(pane, 616, 752, null), logic.fitIn(pane, 616, 752))) return error.WrongFitGeom;
+        // Chromium — 버퍼 636 × 772, geometry (10, 10, 616, 752). 그림자 10이 대칭이라 지금(버퍼 가운데를 자름)과 같은 자리다.
+        const chrome = logic.fitGeom(pane, 636, 772, .{ .x = 10, .y = 10, .w = 616, .h = 752 });
+        if (!std.meta.eql(chrome, logic.Fit{ .k = 1, .x = 644, .y = 20, .w = 616, .h = 752, .ox = 10, .oy = 10 })) return error.WrongFitGeom;
+        if (!std.meta.eql(chrome, logic.fitIn(pane, 636, 772))) return error.WrongFitGeom;
+        // 비대칭 geometry(configure 전 첫 값) — 그림자가 화면에 안 실린다: 왼쪽 위 16 · 10이 잘린 쪽이다.
+        const asym = logic.fitGeom(pane, 636, 772, .{ .x = 16, .y = 10, .w = 604, .h = 730 });
+        if (!std.meta.eql(asym, logic.Fit{ .k = 1, .x = 650, .y = 31, .w = 604, .h = 730, .ox = 16, .oy = 10 })) return error.WrongFitGeom;
+        // surface 밖으로 나간 geometry는 surface 안으로 자른다, 아예 밖이면 버퍼 전체.
+        const cut = logic.fitGeom(pane, 300, 200, .{ .x = -20, .y = 0, .w = 100, .h = 400 });
+        if (!std.meta.eql(cut, logic.fitIn(pane, 80, 200))) return error.WrongFitGeom;
+        if (!std.meta.eql(logic.fitGeom(pane, 300, 200, .{ .x = 400, .y = 0, .w = 10, .h = 10 }), logic.fitIn(pane, 300, 200))) return error.WrongFitGeom;
+        // 뿌리 원점 — Chromium의 surface (0, 0)은 화면 (634, 10)이다.
+        if (!std.meta.eql(logic.rootOrigin(chrome.?), [2]i64{ 634, 10 })) return error.WrongOrigin;
+    }
+    std.debug.print("wl_logic_test: fitGeom 7 cases\n", .{});
+    {
+        if (logic.over(0xFF112233, 0xFF445566) != 0xFF112233) return error.WrongOver;
+        if (logic.over(0x00000000, 0xFF445566) != 0xFF445566) return error.WrongOver;
+        if (logic.over(0x80404040, 0xFF000000) != 0xFF404040) return error.WrongOver;
+        // 반투명 검정 그림자 위의 흰 바탕 — 255 · 127 / 255.
+        if (logic.over(0x80000000, 0xFFFFFFFF) != 0xFF7F7F7F) return error.WrongOver;
+        // 2 × 2 화면에 원점 (-1, 0)의 2 × 2 surface — 오른쪽 열만 그 왼쪽 열을 받는다(XRGB는 덮기, ARGB는 섞기).
+        var dst = [4]u32{ 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000 };
+        const src = [4]u32{ 0xFF0000AA, 0x80000080, 0xFF0000CC, 0x00000000 };
+        logic.blendClip(@ptrCast(&dst), 8, -1, 0, 1, @ptrCast(&src), 8, 1, 2, 2, .{ .x = 0, .y = 0, .w = 2, .h = 2 }, true);
+        if (dst[0] != 0xFF000080 or dst[1] != 0xFF000000 or dst[2] != 0xFF000000 or dst[3] != 0xFF000000) return error.WrongBlend;
+        // bs 2 버퍼를 k 1로 — 솎는다(버퍼 픽셀 0, 2만).
+        var d2 = [2]u32{ 0, 0 };
+        const s2 = [4]u32{ 0xFF000001, 0xFF000002, 0xFF000003, 0xFF000004 };
+        logic.blendClip(@ptrCast(&d2), 8, 0, 0, 1, @ptrCast(&s2), 16, 2, 2, 1, .{ .x = 0, .y = 0, .w = 2, .h = 1 }, true);
+        if (d2[0] != 0xFF000001 or d2[1] != 0xFF000003) return error.WrongBlend;
+        // clip 밖은 안 건드린다.
+        var d3 = [2]u32{ 7, 7 };
+        logic.blendClip(@ptrCast(&d3), 8, 0, 0, 1, @ptrCast(&s2), 16, 2, 2, 1, .{ .x = 1, .y = 0, .w = 1, .h = 1 }, false);
+        if (d3[0] != 7 or d3[1] != 0xFF000003) return error.WrongBlend;
+    }
+    std.debug.print("wl_logic_test: over · blendClip 7 cases\n", .{});
+    {
+        const slot: logic.Area = .{ .x = 644, .y = 20, .w = 616, .h = 752 };
+        // bubble(454 × 89, 부모 (109, 35)) — 화면 (743, 45).
+        if (!std.meta.eql(logic.damageAt(743, 45, 1, 1, .{ .x = 0, .y = 0, .w = 454, .h = 89 }, slot), logic.Area{ .x = 743, .y = 45, .w = 454, .h = 89 })) return error.WrongDamageAt;
+        // bs 2 버퍼 676 × 178은 논리 338 × 89다.
+        if (!std.meta.eql(logic.damageAt(743, 45, 1, 2, .{ .x = 0, .y = 0, .w = 676, .h = 178 }, slot), logic.Area{ .x = 743, .y = 45, .w = 338, .h = 89 })) return error.WrongDamageAt;
+        // 홀수 버퍼 픽셀은 바깥으로 반올림한다.
+        if (!std.meta.eql(logic.damageAt(0, 0, 1, 2, .{ .x = 1, .y = 1, .w = 1, .h = 1 }, .{ .x = 0, .y = 0, .w = 9, .h = 9 }), logic.Area{ .x = 0, .y = 0, .w = 1, .h = 1 })) return error.WrongDamageAt;
+        // clip 밖이면 null, 걸치면 잘린다.
+        if (logic.damageAt(0, 0, 1, 1, .{ .x = 0, .y = 0, .w = 10, .h = 10 }, slot) != null) return error.WrongDamageAt;
+        if (!std.meta.eql(logic.damageAt(1250, 20, 1, 1, .{ .x = 0, .y = 0, .w = 30, .h = 5 }, slot), logic.Area{ .x = 1250, .y = 20, .w = 10, .h = 5 })) return error.WrongDamageAt;
+        if (!logic.within(743, 45, 454, 89, slot) or logic.within(1250, 20, 30, 5, slot) or logic.within(640, 20, 5, 5, slot)) return error.WrongWithin;
+    }
+    std.debug.print("wl_logic_test: damageAt · within 6 cases\n", .{});
+    {
+        // bubble의 입력 영역 (0, 44, 454, 45) — 위 44줄은 부모(주소창)의 자리다.
+        const bubble: logic.Cand = .{ .x = 109, .y = 35, .w = 454, .h = 89, .input = .{ .all = false, .box = .{ .x0 = 0, .y0 = 44, .x1 = 454, .y1 = 89 } } };
+        const cands = [_]logic.Cand{bubble};
+        if (logic.pick(&cands, 200 * 256, 50 * 256) != null) return error.WrongPick;
+        if (logic.pick(&cands, 200 * 256, 100 * 256) != 0) return error.WrongPick;
+        if (logic.pick(&cands, 600 * 256, 100 * 256) != null) return error.WrongPick;
+        // 위에서부터 — 겹치면 앞의 것.
+        const top: logic.Cand = .{ .x = 0, .y = 0, .w = 1000, .h = 1000, .input = .{} };
+        const two = [_]logic.Cand{ top, bubble };
+        if (logic.pick(&two, 200 * 256, 100 * 256) != 0) return error.WrongPick;
+        // 빈 입력 영역(region에 add가 없다)은 아무것도 안 받는다.
+        const none = [_]logic.Cand{.{ .x = 0, .y = 0, .w = 10, .h = 10, .input = .{ .all = false, .box = null } }};
+        if (logic.pick(&none, 256, 256) != null) return error.WrongPick;
+    }
+    std.debug.print("wl_logic_test: pick 5 cases\n", .{});
+    {
+        // 0이 부모 자신, 1 · 2가 자식(새 자식은 맨 위).
+        var st = [_]u32{ 0, 1, 2 };
+        if (!logic.restack(u32, &st, 2, 0, false) or !std.mem.eql(u32, &st, &[_]u32{ 2, 0, 1 })) return error.WrongRestack;
+        if (!logic.restack(u32, &st, 2, 1, true) or !std.mem.eql(u32, &st, &[_]u32{ 0, 1, 2 })) return error.WrongRestack;
+        if (!logic.restack(u32, &st, 0, 2, true) or !std.mem.eql(u32, &st, &[_]u32{ 1, 2, 0 })) return error.WrongRestack;
+        if (logic.restack(u32, &st, 9, 0, true) or logic.restack(u32, &st, 1, 1, true)) return error.WrongRestack;
+        if (!logic.effectiveSync(&[_]bool{ false, true }) or logic.effectiveSync(&[_]bool{ false, false }) or !logic.effectiveSync(&[_]bool{true})) return error.WrongSync;
+    }
+    std.debug.print("wl_logic_test: restack · effectiveSync 5 cases\n", .{});
     std.debug.print("wl_logic_test: all checks passed\n", .{});
 }

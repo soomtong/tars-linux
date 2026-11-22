@@ -122,6 +122,8 @@ pub fn build(b: *std.Build) void {
     scanner.addCustomProtocol(b.path("vendor/wayland/xdg-decoration-unstable-v1.xml"));
     scanner.generate("wl_compositor", 6);
     scanner.generate("wl_shm", 1);
+    // WY-M7(design 결정 48): subsurface. 판 1이 유일한 판이다. 자식 `wl_subsurface`가 같은 판으로 함께 생긴다.
+    scanner.generate("wl_subcompositor", 1);
     scanner.generate("wl_output", 4);
     scanner.generate("wl_seat", 7);
     scanner.generate("xdg_wm_base", 5);

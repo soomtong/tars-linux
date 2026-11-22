@@ -35,6 +35,9 @@ cd "$(dirname "$0")" || exit 1
 #   잉크), 셸로 옮기면 바가 빈다. 판정 35(31 뒤 · 9 앞) — 모델이 없는 창(호환)은 이름만, 여는 키는 아무 일 없음.
 #   단계 C: 판정 32~34(31 뒤 · 35 앞) — Cmd+Shift+/로 열고 방향키 · Enter로 고르면 `activated`, Esc로 닫으면 밑이 되살아나고, 제목 ·
 #   항목 클릭과 바깥 클릭(닫기만, 창에 안 감). 판정 36(35 뒤) — 조합 중에 열면 먼저 확정.
+# WY-M7 단계 A: 판정 37~39(36 뒤 · 9 앞) — `--subsurface` 창의 64 × 64 자식이 부모의 (40, 40)에 그려지고, `set_position`과 sync 자식의 commit은
+#   부모의 commit을 기다리며, 포인터가 자식의 입력 영역 위면 enter가 자식 surface의 좌표로 간다. 판정 43 — 한 클라이언트의 둘째 창에서
+#   `ti enable to=`가 그 창이다. 판정 44 — 호환 창에는 Cmd 키 자체(125 · 126)가 안 가고 Cmd+V는 Ctrl+V로 간다.
 # WY-M2(단계 B): 창 모드로 띄운 창은 셸 오른쪽 column이 된다(판정 16 · 17 · 22) — `wl> column`, pane 픽셀 크기의 configure
 #   (activated · tiled), 포커스 slot이 창이면 키가 그 창으로, Cmd+[로 셸에 오면 activated를 잃고 keyboard leave, Cmd+R의 새
 #   configure, Cmd+Q에 slot이 닫히고 셸이 전체 폭을 되찾는다. 자기 workspace를 보는 판정 2~8은 `--fullscreen`으로 띄운다.
@@ -1053,6 +1056,133 @@ wait_for_log "terminal: menu> close id=${IM_ID} why=esc" || report_failure "(36)
 type_keys alt-q
 wait_for_log "terminal: wl> unmap id=${IM_ID} ws=1 slot=1" || report_failure "(36) Cmd+Q did not close the window"
 echo "(36): 한 was committed to the window before the menu opened"
+
+# ── 판정 37 · 38 · 39: subsurface — 좌표 색, 부모 commit에 묶인 위치 · sync, 포인터(WY-M7 단계 A, plan 확정 8 · 9) ──────────────
+# 셸만 남은 자리다(판정 36 끝). `--subsurface` 창은 판정 16과 같은 자리(x 644 · y 20, 616 × 752, 3366CC)에 서고 그 위 (40, 40)에 64 × 64
+# 자식(CC3366, desync)이 있다 — 화면 (684, 60)..(747, 123). S 한 번은 `set_position(120, 40)`만 보내고 부모는 commit하지 않는다 — 자식은
+# 그대로다. 둘째 S가 부모를 commit하면 (764, 60)으로 옮겨진다. `--subsurface-sync`의 자식은 sync라 첫 S의 색 바꿈(33CC66, 자식만 commit)이
+# 둘째 S(부모 commit) 전에는 안 보인다. 판정 39: 옮긴 자식 아래 (796, 200)에서 한 번에 위로 108 — 자식의 (32, 32)에 `sub enter`, 다시 아래로
+# 100이면 `sub leave`와 부모의 (152, 172)에 `pointer enter`. 좌표 판정은 화살표를 비켜 셸 위(200, 600)에 포인터를 둔 채 본다.
+SUB_IN="690 66 52 52"
+SUB_OUT="770 66 52 52"
+SHOT37="${SCREENS_DIR}/subsurface-now.ppm"
+# 화면 덤프의 좌표 색이 바랄 때까지 기다린다(자식의 자리 · 색은 서버 줄로 안 나온다 — 다시 그린 프레임을 본다).
+wait_for_ink() {
+  local label="$1" box="$2" want="$3" got="" i x y w h
+  read -r x y w h <<<"$box"
+  for i in $(seq 1 20); do
+    screendump "$SHOT37" || return 1
+    got="$(ppm_ink "$SHOT37" "$x" "$y" "$w" "$h")"
+    [ "$got" = "$want" ] && return 0
+    sleep 0.3
+  done
+  echo "(${label}) at ${x},${y} ${w}x${h}: ${got}, want ${want}"
+  return 1
+}
+echo "=== (37) a subsurface is drawn at its parent's (40, 40) ==="
+# 판정 36이 한글을 켠 채 끝났다 — 셸에 명령을 치기 전에 끈다(36과 같은 모양의 확인).
+if tlog | tr -d '\r' | grep -aoE 'terminal: hangul> on=(true|false)' | tail -n 1 | grep -a 'on=true' > /dev/null; then
+  OFFS="$(count_log 'terminal: hangul> on=false')"
+  type_keys shift-spc
+  wait_for_count 'terminal: hangul> on=false' $((OFFS + 1)) || report_failure "(37) Shift+Space did not turn hangul off"
+fi
+move_to 200 600 || report_failure "(37) the pointer did not reach 200,600"
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size --subsurface > /tmp/wl15.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(37) the client did not open as a column"
+SUB_ID="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+wait_for_log "terminal: wl> subsurface id=${SUB_ID} sub=[0-9]+ new parent=main" || report_failure "(37) no 'wl> subsurface id=${SUB_ID} … new parent=main'"
+wait_for_log "terminal: wl> subsurface id=${SUB_ID} sub=[0-9]+ map w=64 h=64 bs=1 at=40,40" || report_failure "(37) no 'wl> subsurface … map w=64 h=64 bs=1 at=40,40'"
+wait_for_ink 37 "$SUB_IN" "bg=cc3366 ink=0" || report_failure "(37) the child's colour is not at its place"
+wait_for_ink 37 "$SUB_OUT" "bg=3366cc ink=0" || report_failure "(37) the parent's colour is not right of the child"
+cp "$SHOT37" "${SCREENS_DIR}/subsurface.ppm"
+echo "(37): the child CC3366 is at the window's (40, 40), the parent around it"
+
+echo "=== (38) the child's place waits for the parent's commit; a synchronized child's commit too ==="
+type_keys s
+sleep 1
+wait_for_ink 38 "$SUB_IN" "bg=cc3366 ink=0" || report_failure "(38) set_position moved the child before the parent's commit"
+wait_for_ink 38 "$SUB_OUT" "bg=3366cc ink=0" || report_failure "(38) set_position moved the child before the parent's commit"
+type_keys s
+wait_for_ink 38 "$SUB_OUT" "bg=cc3366 ink=0" || report_failure "(38) the parent's commit did not move the child to (120, 40)"
+wait_for_ink 38 "$SUB_IN" "bg=3366cc ink=0" || report_failure "(38) the old place of the child is not the parent's colour again"
+echo "(38a): the child moved to (120, 40) only on the parent's commit"
+
+echo "=== (39) the pointer enters the child at child coordinates ==="
+ENTERS="$(count_log "terminal: wl> pointer enter id=${SUB_ID}")"
+move_to 796 200 || report_failure "(39) the pointer did not reach 796,200"
+wait_for_count "terminal: wl> pointer enter id=${SUB_ID}" $((ENTERS + 1)) || report_failure "(39) no 'wl> pointer enter id=${SUB_ID}'"
+hmp "mouse_move 0 -108"
+wait_for_at "^terminal: pointer> at x=796 y=92 " || report_failure "(39) the pointer did not reach 796,92"
+hmp "mouse_move 0 100"
+wait_for_at "^terminal: pointer> at x=796 y=192 " || report_failure "(39) the pointer did not come back to 796,192"
+move_to 200 600 || report_failure "(39) the pointer did not go back to the shell"
+type_keys alt-bracket_left
+wait_for_log 'terminal: pane> ws=1/1 panes=2 focus=0 ' || report_failure "(39) Cmd+[ did not focus the shell"
+type_text 'echo c39-(grep -c sub.enter.x.32.y.32 /tmp/wl15.log)-(grep -c sub.leave /tmp/wl15.log)-(grep -c pointer.enter.x.152.y.172 /tmp/wl15.log)'
+type_keys ret
+wait_for_screen '\| c39-1-1-1' || report_failure "(39) the client's log does not have sub enter (32, 32), sub leave and pointer enter (152, 172)"
+type_keys alt-bracket_right
+wait_for_log "terminal: pane> ws=1/1 panes=2 focus=1 slot=1 app id=${SUB_ID} " || report_failure "(39) Cmd+] did not focus the window"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${SUB_ID} ws=1 slot=1" || report_failure "(39) Cmd+Q did not close the window"
+wait_for_log "terminal: wl> subsurface id=${SUB_ID} sub=[0-9]+ gone" || report_failure "(39) no 'wl> subsurface … gone' when the client left"
+echo "(39): the pointer entered the child at (32, 32), left it and entered the parent at (152, 172)"
+
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size --subsurface-sync > /tmp/wl16.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(38) the sync client did not open as a column"
+SYNC_ID="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+wait_for_log "terminal: wl> subsurface id=${SYNC_ID} sub=[0-9]+ map w=64 h=64 bs=1 at=40,40" || report_failure "(38) the synchronized child was not mapped on the parent's first commit"
+wait_for_ink 38 "$SUB_IN" "bg=cc3366 ink=0" || report_failure "(38) the synchronized child is not at its place"
+type_keys s
+sleep 1
+wait_for_ink 38 "$SUB_IN" "bg=cc3366 ink=0" || report_failure "(38) the synchronized child's commit showed before the parent's commit"
+type_keys s
+wait_for_ink 38 "$SUB_IN" "bg=33cc66 ink=0" || report_failure "(38) the parent's commit did not apply the synchronized child's colour"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${SYNC_ID} ws=1 slot=1" || report_failure "(38) Cmd+Q did not close the sync window"
+echo "(38): a set_position and a synchronized child's commit both waited for the parent's commit"
+
+# ── 판정 43: text-input 줄의 창은 들어가 있는 surface의 창이다(WY-M7, design 결정 55) ─────────────────────────────
+# 셸만 남은 자리다. 한 클라이언트(`--text-input --second`)가 창 둘을 연다 — 첫 창이 slot 1, 둘째가 그 오른쪽 slot 2이고 포커스다. 둘째의 enable은
+# `to=<둘째>`다(전에는 클라이언트의 첫 창을 찍었다).
+echo "=== (43) ti enable names the window the text input is in ==="
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size --text-input --second > /tmp/wl17.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(43) the first window did not open as a column"
+TI_A="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+wait_for_log 'terminal: wl> column id=[0-9]+ slot=2 ws=1' || report_failure "(43) the second window did not open as slot 2"
+TI_B="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=2 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+[ "$TI_A" != "$TI_B" ] || report_failure "(43) the two windows have one id (${TI_A})"
+wait_for_log "terminal: wl> ti enable to=${TI_B}([^0-9]|$)" || report_failure "(43) no 'wl> ti enable to=${TI_B}' for the focused second window"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${TI_B} ws=1 slot=" || report_failure "(43) Cmd+Q did not close the second window"
+wait_for_log "terminal: wl> unmap id=${TI_A} ws=1 slot=" || report_failure "(43) the first window did not go with its client"
+echo "(43): the second window's enable said to=${TI_B} (the first is ${TI_A})"
+
+# ── 판정 44: 호환 창에는 Cmd 키 자체가 안 간다(WY-M7, design 결정 54) ─────────────────────────────────────────
+# 셸만 남은 자리다. 호환 창(`tars_menu_v1` 없음)에 Cmd 단독 tap(`alt` — 이 체인의 Cmd)과 Cmd+V — 서버 줄에도 클라이언트 로그에도 evdev 125 · 126이
+# 없고, V(47)는 Ctrl(0x4)과 함께 간다.
+echo "=== (44) a compat window gets no Cmd key events, Cmd+V still as Ctrl+V ==="
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size > /tmp/wl18.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(44) the client did not open as a column"
+CMD_ID="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+wait_for_log "terminal: wl> configure id=${CMD_ID} w=[0-9]+ h=[0-9]+ act=1" || report_failure "(44) the window did not get the keys"
+type_keys alt alt-v
+wait_for_log "terminal: wl> key code=47 state=1 to=${CMD_ID}([^0-9]|$)" || report_failure "(44) Cmd+V did not reach the window as 47"
+[ "$(count_log "terminal: wl> key code=12[56] state=[01] to=${CMD_ID}([^0-9]|$)")" -eq 0 ] || report_failure "(44) the Cmd key itself reached the compat window"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${CMD_ID} ws=1 slot=1" || report_failure "(44) Cmd+Q did not close the window"
+type_text 'echo c44-(grep -c code.12. /tmp/wl18.log)-(grep -cw depressed.0x4 /tmp/wl18.log)'
+type_keys ret
+wait_for_screen '\| c44-0-[1-9]' || report_failure "(44) the client's log has a Cmd key or no Ctrl"
+echo "(44): no Cmd key event reached the compat window, Cmd+V came as 47 with Ctrl"
 
 # ── 판정 9: render verify ───────────────────────────────────────────────
 #

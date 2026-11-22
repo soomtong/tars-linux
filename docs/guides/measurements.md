@@ -675,3 +675,9 @@ buff/cache 1,174 MiB, QEMU 프로세스 RSS 2.27 GiB(VmHWM 2.36 — 게스트 �
 (644, 107) → (644, 197). 렌더러는 화면 셸(같은 uid)에서 `/proc/<pid>/status`(`Seccomp: 2`, `NSpid: 173 14 1`) · `uid_map`(`1000 1000 1`, 브라우저 `0 0 4294967295`) ·
 `ns/user` 모두 읽힌다. Chromium의 공유 메모리는 memfd이고 `/dev/shm`을 붙여도 그 안에 아무것도 안 만든다(`/tmp/org.chromium.Chromium.*`은 ProcessSingleton 소켓 자리).
 체인 browser 354 · 358초(`make check`, dev-layers 캐시 확인 약 156초 포함).
+116. 자식(subsurface) 합성의 비용(WY-M7 단계 A, TCG 한 CPU · ReleaseSafe, 1280 × 800 배율 1, `wl> tree id= kids= x y w h us=` 줄 — 부모 복사 + 자식 섞기). Chromium의
+주소창 bubble(454 × 89 ARGB, 반투명 그림자)이 처음 보인 통째 옮기기 616 × 752가 17,459 µs — 부모만의 통째 옮기기(같은 창, 같은 부팅) 1,021 ~ 1,234 µs의 열다섯 배쯤이고,
+그 차이가 자식 한 장의 premultiplied over(약 4만 픽셀, 픽셀마다 나눗셈 셋 — 0.4 µs/px)다. bubble이 떠 있는 동안 부모의 캐럿 깜빡임(1 × 17)은 그 자리만 부모를 다시 옮기고
+자식을 다시 섞어 26 ~ 34 µs(구멍 없음 — `cr-bubble-2x.png`), 툴바 쪽 부분 495 × 246은 1,040 µs, 자식 안의 줄 하나(410 × 34)는 353 µs. 자식이 매핑 · 해제 · 크기 바뀜이면
+통째로 간다(그 프레임만). tars-wl-test의 불투명 64 × 64 자식은 통째 616 × 752에 695 ~ 1,760 µs(wayland 체인). 섞기는 정수 루프 그대로다 — 메뉴 한 장(412 × 735, 단계 B)이면
+약 12만 픽셀이라 같은 셈으로 50 ms 안팎이 될 것 [추정] — 단계 B가 잰다.

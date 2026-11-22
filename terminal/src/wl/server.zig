@@ -40,6 +40,8 @@ const DECORATION_VERSION = 1;
 const DATA_DEVICE_MANAGER_VERSION = 2;
 /// 한글 IME(WY-M5, design 결정 38). 판 1뿐이다.
 const TEXT_INPUT_MANAGER_VERSION = 1;
+/// subsurface(WY-M7, design 결정 48). 판 1이 유일한 판이다.
+const SUBCOMPOSITOR_VERSION = 1;
 /// 원래 모드의 문(WY-M6, design 결정 46). 판 1은 `destroy` 하나 — bind가 곧 "Cmd를 Super로 받는다"다. 판 2(TK-M5, plan 확정 3)가
 /// 메뉴 모델(`get_menu` · `tars_menu_v1`)을 더한다. 판 1로 bind한 클라이언트는 그대로 원래 모드이고 모델이 없다(바에 이름만).
 const MENU_MANAGER_VERSION = 2;
@@ -50,6 +52,10 @@ const NAME_BYTES = 64;
 const TITLE_LINES: u8 = 4;
 /// `wl> menu` 줄의 창마다 상한(plan 확정 14).
 const MENU_LINES: u8 = 8;
+/// `wl> subsurface` 줄의 창마다 상한(WY-M7 확정 2) — 만들기 · 매핑 · 해제 · 닫기만 찍는다. Chromium의 bubble은 주소창에 글자를 칠 때마다 넷이다.
+const SUB_LINES: u8 = 24;
+/// `wl> tree` 줄(자식을 섞은 옮기기의 시간 — WY-M7 실측 1)의 창마다 상한.
+const TREE_LINES: u8 = 16;
 
 /// 파이프의 깃발(값은 asm-generic/fcntl.h — x86_64도 같다). 받기의 읽기 끝만 비블록이다 — epoll이 깨운 만큼만 읽는다.
 /// `pipe2`에 O_NONBLOCK을 주면 클라이언트가 받는 쓰기 끝까지 비블록이 되어, EAGAIN을 다루지 않는 클라이언트가 64 KiB를
@@ -58,6 +64,10 @@ const O_NONBLOCK: usize = 0o4000;
 const O_CLOEXEC: c_int = 0o2000000;
 const F_SETFL = 4;
 const F_GETFL = 3;
+
+/// Cmd 키(evdev `KEY_LEFTMETA` · `KEY_RIGHTMETA`). 호환 창에는 이 둘의 key 이벤트를 안 보낸다(design 결정 54).
+const KEY_LEFTMETA: u16 = 125;
+const KEY_RIGHTMETA: u16 = 126;
 
 /// 키 반복(design 결정 6 — terminal의 반복 설정과 같은 값). terminal은 반복을 스스로 안 하고 커널 evdev의
 /// 자동 반복을 받는다. 그 기본값이 지연 250ms · 간격 33ms(초당 약 30)이다.
@@ -160,6 +170,11 @@ pub const Server = struct {
     /// 포인터 포커스와 버튼 grab(`logic.PointerFocus`), 마지막 아래 창(창 안일 때만)과 자리(화면 좌표).
     ptr: logic.PointerFocus = .{},
     ptr_under: ?u32 = null,
+    /// 포인터가 들어가 있는 surface(WY-M7, design 결정 51) — 창 안의 부모나 자식. 창 단위의 enter · leave는 `ptr`가 정하고, 창 안에서 surface가
+    /// 바뀌면 이것이 바뀐다. surface가 사라지면 `surfaceDestroyed`가 null로 둔다(그 뒤 leave는 안 보낸다 — 객체가 없다).
+    ptr_sr: ?*Surface = null,
+    /// `wl> subsurface sub=N`의 번호(서버 수명 동안 는다).
+    next_sub: u32 = 1,
     ptr_x: u32 = 0,
     ptr_y: u32 = 0,
     /// 클립보드(WY-M4). 모든 `wl_data_device` — offer(단계 B)는 키보드처럼 클라이언트로 골라 보낸다.
@@ -233,6 +248,7 @@ pub const Server = struct {
         self.data_devices.init();
         display.addClientCreatedListener(&self.client_created);
         _ = try wl.Global.create(display, wl.Compositor, COMPOSITOR_VERSION, *Server, self, bindCompositor);
+        _ = try wl.Global.create(display, wl.Subcompositor, SUBCOMPOSITOR_VERSION, *Server, self, bindSubcompositor);
         _ = try wl.Global.create(display, wl.Output, OUTPUT_VERSION, *Server, self, bindOutput);
         _ = try wl.Global.create(display, wl.Seat, SEAT_VERSION, *Server, self, bindSeat);
         _ = try wl.Global.create(display, xdg.WmBase, WM_BASE_VERSION, *Server, self, bindWmBase);
@@ -367,7 +383,8 @@ pub const Server = struct {
         const was = ti.state.enabled;
         ti.resource.sendEnter(sr);
         ti.state.enter(@intFromPtr(sr));
-        self.logEnabled(ti, was);
+        ti.to = self.toplevelOn(@intFromPtr(sr));
+        self.logEnabled(ti, was, ti.to);
     }
 
     /// 포커스를 잃는 surface에 들어가 있던 text_input 모두에 `leave`.
@@ -377,15 +394,23 @@ pub const Server = struct {
             const was = ti.state.enabled;
             ti.resource.sendLeave(sr);
             ti.state.leave();
-            self.logEnabled(ti, was);
+            self.logEnabled(ti, was, ti.to);
         }
     }
 
-    /// current enabled가 바뀌었으면 줄 하나(plan 확정 3) — `wl> ti enable to=ID` · `wl> ti disable to=ID`.
-    fn logEnabled(self: *const Server, ti: *const TextInput, was: bool) void {
+    /// current enabled가 바뀌었으면 줄 하나(plan 확정 3) — `wl> ti enable to=ID` · `wl> ti disable to=ID`. `to`는 그 text_input이 들어가 있는
+    /// (또는 막 나온) surface의 창이다(WY-M7, design 결정 55) — 전에는 클라이언트의 첫 창을 찍어 창이 둘인 Chromium에서 어긋나 보였다.
+    fn logEnabled(_: *const Server, ti: *const TextInput, was: bool, to: u32) void {
         if (was == ti.state.enabled) return;
         const verb = if (ti.state.enabled) "enable" else "disable";
-        logline.print("terminal: wl> ti {s} to={d}\n", .{ verb, self.toplevelOf(ti.resource.getClient()) });
+        logline.print("terminal: wl> ti {s} to={d}\n", .{ verb, to });
+    }
+
+    /// `wl_surface`(포인터 값 — `logic.TextInput.entered`)가 뿌리인 창의 번호. 없으면 0.
+    fn toplevelOn(self: *const Server, surface: usize) u32 {
+        if (surface == 0) return 0;
+        for (self.toplevels.items) |t| if (surfaceOf(t)) |sr| if (@intFromPtr(sr) == surface) return t.id;
+        return 0;
     }
 
     /// 키보드 하나에 `enter`와 수정키. 눌린 키 목록은 비운다(R-KEY-7 — 포커스 전에 누른 키는 클라이언트의 것이 아니다).
@@ -429,7 +454,11 @@ pub const Server = struct {
         const id = self.focused orelse return;
         const t = self.find(id) orelse return;
         const sr = surfaceOf(t) orelse return;
-        const send = if (pressed) self.held.press(code) else self.held.release(code);
+        // 호환 창에는 Cmd(evdev 125 · 126) 자체의 key 이벤트를 안 보낸다(WY-M7, design 결정 54 — 결정 45를 고침). 수정키(아래)는 Ctrl로 간다 —
+        // 웹 페이지가 `key=Meta`를 안 보고, 둠에서 Cmd가 안 쏜다. 누름을 안 보냈으므로 `Held`에도 없고 뗌도 안 간다.
+        const native = self.isNative(sr.getClient());
+        const quiet = !native and (code == KEY_LEFTMETA or code == KEY_RIGHTMETA);
+        const send = if (quiet) false else if (pressed) self.held.press(code) else self.held.release(code);
         // 호환 모드면 Super가 Ctrl로 보인다(WY-M6, design 결정 45). 비교도 보낼 값으로 한다 — 이미 Ctrl을 보낸 뒤 Cmd를
         // 누르면 보이는 값이 같아 `modifiers`를 다시 보내지 않는다.
         const shown = self.maskFor(sr.getClient());
@@ -535,43 +564,89 @@ pub const Server = struct {
         return t.cursor_hidden;
     }
 
-    /// `logic.PointerFocus.move`가 정한 것을 보낸다 — leave, enter(surface 좌표와 함께), motion, 그리고 frame.
+    /// `logic.PointerFocus.move`가 정한 것을 보낸다 — leave, enter(surface 좌표와 함께), motion, 그리고 frame. 창 안에서는 surface를
+    /// 고른다(WY-M7, design 결정 51): 자식의 입력 영역 위면 그 자식, 아니면 부모. 창 안에서 surface가 바뀌면 같은 frame에 leave · enter,
+    /// 버튼을 쥔 동안(`ptr.held`)은 surface를 안 바꾼다. 줄(`wl> pointer enter · leave id=`)은 지금처럼 창 단위다.
     fn applyMove(self: *Server, m: logic.PointerFocus.Move, time_ms: u32) void {
-        if (m.leave) |id| if (self.find(id)) |t| if (surfaceOf(t)) |sr| {
-            const serial = self.display.nextSerial();
-            var it = self.pointers.iterator(.forward);
-            while (it.next()) |p| if (p.getClient() == sr.getClient()) {
-                p.sendLeave(serial, sr);
-                if (p.getVersion() >= 5) p.sendFrame();
-            };
+        if (m.leave) |id| {
+            if (self.ptr_sr) |old| self.sendPointer(old, null, time_ms);
+            self.ptr_sr = null;
             logline.print("terminal: wl> pointer leave id={d}\n", .{id});
-        };
-        if (m.enter) |id| if (self.find(id)) |t| if (surfaceOf(t)) |sr| {
-            var it = self.pointers.iterator(.forward);
-            while (it.next()) |p| if (p.getClient() == sr.getClient()) self.enterPointer(p, t, sr);
+        }
+        if (m.enter) |id| if (self.find(id)) |t| {
+            if (self.pickAt(t)) |h| self.sendPointer(null, h, time_ms);
             logline.print("terminal: wl> pointer enter id={d}\n", .{id});
         };
-        if (m.motion) |id| if (self.find(id)) |t| if (surfaceOf(t)) |sr| {
-            const at = self.surfaceAt(t);
-            var it = self.pointers.iterator(.forward);
-            while (it.next()) |p| if (p.getClient() == sr.getClient()) {
-                p.sendMotion(time_ms, @fromBackingInt(@intCast(at.x)), @fromBackingInt(@intCast(at.y)));
-                if (p.getVersion() >= 5) p.sendFrame();
-            };
+        if (m.motion) |id| if (self.find(id)) |t| {
+            const h = (if (self.ptr.held > 0) self.sameAt(t) else self.pickAt(t)) orelse return;
+            if (self.ptr_sr != h.s) {
+                self.sendPointer(self.ptr_sr, h, time_ms);
+            } else {
+                var it = self.pointers.iterator(.forward);
+                while (it.next()) |p| if (p.getClient() == h.s.resource.getClient()) {
+                    p.sendMotion(time_ms, @fromBackingInt(@intCast(h.x)), @fromBackingInt(@intCast(h.y)));
+                    if (p.getVersion() >= 5) p.sendFrame();
+                };
+            }
         };
     }
 
-    /// 포인터 하나에 `enter`(지금 자리의 surface 좌표)와 frame.
-    fn enterPointer(self: *Server, p: *wl.Pointer, t: *Toplevel, sr: *wl.Surface) void {
-        const at = self.surfaceAt(t);
-        p.sendEnter(self.display.nextSerial(), sr, @fromBackingInt(@intCast(at.x)), @fromBackingInt(@intCast(at.y)));
-        if (p.getVersion() >= 5) p.sendFrame();
+    /// 포인터가 놓인 surface와 그 surface의 좌표(`wl_fixed`).
+    const Hit = struct { s: *Surface, x: i64, y: i64 };
+
+    /// `old`에 leave(있으면), `new`에 enter(있으면), 그리고 frame 하나. `ptr_sr`을 `new`로.
+    fn sendPointer(self: *Server, old: ?*Surface, new: ?Hit, _: u32) void {
+        const client = if (new) |h| h.s.resource.getClient() else if (old) |o| o.resource.getClient() else return;
+        var it = self.pointers.iterator(.forward);
+        while (it.next()) |p| if (p.getClient() == client) {
+            if (old) |o| p.sendLeave(self.display.nextSerial(), o.resource);
+            if (new) |h| p.sendEnter(self.display.nextSerial(), h.s.resource, @fromBackingInt(@intCast(h.x)), @fromBackingInt(@intCast(h.y)));
+            if (p.getVersion() >= 5) p.sendFrame();
+        };
+        self.ptr_sr = if (new) |h| h.s else null;
     }
 
-    /// 지금 포인터 자리를 창 `t`의 surface 좌표로(마지막으로 옮긴 자리 기준). 아직 안 옮긴 창은 0, 0이다.
-    fn surfaceAt(self: *const Server, t: *const Toplevel) logic.Point {
-        const f = t.last_fit orelse return .{ .x = 0, .y = 0 };
-        return logic.surfacePoint(f, self.ptr_x, self.ptr_y);
+    /// 포인터 하나에 `enter`(지금 자리의 surface와 좌표)와 frame — 포인터를 늦게 얻은 클라이언트(`get_pointer`).
+    fn enterPointer(self: *Server, p: *wl.Pointer, t: *Toplevel) void {
+        const h = self.pickAt(t) orelse return;
+        p.sendEnter(self.display.nextSerial(), h.s.resource, @fromBackingInt(@intCast(h.x)), @fromBackingInt(@intCast(h.y)));
+        if (p.getVersion() >= 5) p.sendFrame();
+        self.ptr_sr = h.s;
+    }
+
+    /// 창 `t` 안에서 지금 포인터 자리의 surface(design 결정 51). 뿌리 surface 좌표로 바꾼 점을 위의 자식부터 `logic.pick`에 묻고, 아무것도
+    /// 아니면 뿌리다. 아직 안 옮긴 창은 뿌리의 (0, 0)이다.
+    fn pickAt(self: *const Server, t: *const Toplevel) ?Hit {
+        const xs = t.xdg orelse return null;
+        const root = xs.surface orelse return null;
+        const f = t.last_fit orelse return .{ .s = root, .x = 0, .y = 0 };
+        const at = logic.surfacePoint(f, self.ptr_x, self.ptr_y);
+        var list: TreeList = .{};
+        collectAbove(root, 0, 0, &list);
+        var cands: [TREE_MAX]logic.Cand = undefined;
+        // 위에서부터 — 그린 순서의 거꾸로.
+        var n: usize = 0;
+        var i = list.len;
+        while (i > 0) {
+            i -= 1;
+            const e = list.items[i];
+            cands[n] = .{ .x = e.x, .y = e.y, .w = e.w, .h = e.h, .input = e.s.input };
+            n += 1;
+        }
+        if (logic.pick(cands[0..n], at.x, at.y)) |k| {
+            const e = list.items[list.len - 1 - k];
+            return .{ .s = e.s, .x = @as(i64, at.x) - e.x * 256, .y = @as(i64, at.y) - e.y * 256 };
+        }
+        return .{ .s = root, .x = at.x, .y = at.y };
+    }
+
+    /// 버튼을 쥔 동안 — 들어가 있던 surface 그대로, 좌표만 그 surface 기준으로.
+    fn sameAt(self: *const Server, t: *const Toplevel) ?Hit {
+        const s = self.ptr_sr orelse return self.pickAt(t);
+        const f = t.last_fit orelse return null;
+        const at = logic.surfacePoint(f, self.ptr_x, self.ptr_y);
+        const off = offsetOf(s);
+        return .{ .s = s, .x = @as(i64, at.x) - off[0] * 256, .y = @as(i64, at.y) - off[1] * 256 };
     }
 
     /// `Cmd+Q`(확정 11, design 결정 12). 창 `id`에 `xdg_toplevel.close`, 그 클라이언트의 `xdg_wm_base`에 `ping`, 그리고
@@ -650,33 +725,40 @@ pub const Server = struct {
     /// 다음 프레임에 창 `id`를 사각형 `area` 안에 어떻게 옮길지(WY-M6 단계 B, design 결정 47). `whole`이면 통째(둘레 검정 + 창 전체),
     /// `part`면 그 화면 사각형만(둘레는 안 건드린다 — 프레임버퍼에 이 창의 직전 그림이 그 자리 그대로 있다), `none`이면 옮길 것이 없다
     /// (frame 콜백만 기다린 commit). 통째인 때: 첫 그림, 버퍼 크기나 buffer_scale이 바뀜, 놓는 자리(`fit`)가 마지막으로 옮긴 자리와
-    /// 다름, damage가 버퍼 전체. 통째 프레임 · 앞 창이 바뀐 프레임은 부르는 쪽이 이것을 묻지 않고 통째로 옮긴다.
+    /// 다름, damage가 버퍼 전체, 자식이 매핑/해제/움직임/크기 바뀜(WY-M7). 통째 프레임 · 앞 창이 바뀐 프레임은 부르는 쪽이 이것을 묻지 않고
+    /// 통째로 옮긴다. 자식의 damage는 화면 좌표로 바꿔 같은 사각형에 더한다(design 결정 49) — 캐럿 하나가 바뀐 자식은 그 자리만 옮긴다.
     pub fn damageFor(self: *Server, id: u32, area: logic.Area) Damage {
         const t = self.find(id) orelse return .whole;
         const xs = t.xdg orelse return .whole;
         const s = xs.surface orelse return .whole;
         const buf = s.current orelse return .whole;
         const shm = wl.shm.Buffer.get(@ptrCast(buf)) orelse return .whole;
-        if (s.damage_whole) return .whole;
+        if (s.damage_whole or t.tree_dirty) return .whole;
         const bw: u32 = @intCast(shm.getWidth());
         const bh: u32 = @intCast(shm.getHeight());
         const sz = logic.surfaceSize(bw, bh, s.scale);
-        const f = logic.fitIn(area, sz.w, sz.h) orelse return .whole;
+        const f = logic.fitGeom(area, sz.w, sz.h, xs.geom) orelse return .whole;
         const last = t.last_fit orelse return .whole;
         if (!std.meta.eql(last, f)) return .whole;
-        const d = s.damage orelse return .none;
-        if (d.x == 0 and d.y == 0 and d.w == bw and d.h == bh) return .whole;
-        const r = logic.damageScreen(f, s.scale, d) orelse {
-            // damage가 보이는 자리 밖이다(잘린 창의 가장자리) — 옮길 것이 없다. 쌓인 것은 버린다.
-            s.damage = null;
-            return .none;
-        };
-        return .{ .part = r };
+        var out: ?logic.Area = null;
+        if (s.damage) |d| {
+            if (d.x == 0 and d.y == 0 and d.w == bw and d.h == bh) return .whole;
+            if (logic.damageScreen(f, s.scale, d)) |r| out = r;
+        }
+        const o = logic.rootOrigin(f);
+        if (!childDamage(s, o[0], o[1], f.k, .{ .x = f.x, .y = f.y, .w = f.w, .h = f.h }, &out)) return .whole;
+        if (out) |r| return .{ .part = r };
+        // damage가 보이는 자리 밖이다(잘린 창의 가장자리) — 옮길 것이 없다. 쌓인 것은 버린다.
+        clearDamage(s);
+        return .none;
     }
 
     /// toplevel `id`의 버퍼를 프레임버퍼의 사각형 `area` 안에 옮긴다(확정 8, WY-M2 확정 5). 그린 사각형을 돌려준다.
     /// 버퍼가 없거나 받지 않는 형식이면 null이다 — 그 자리는 부르는 쪽이 검정으로 둔다. `clip`이 있으면(WY-M6 `damageFor`의
     /// `part`) 그 화면 사각형만 옮긴다. 옮긴 뒤 쌓인 damage를 비운다 — 이제 화면이 이 버퍼와 같다.
+    /// 자식(WY-M7, design 결정 49): 부모 아래의 자식 → 부모(복사) → 위의 자식(z 순, ARGB는 섞음). 자식은 통째면 slot 사각형(`area`), 부분이면
+    /// clip과 창 사각형이 겹친 자리 안에서 그린다 — 부모를 다시 옮긴 바로 그 자리에만 섞으므로 같은 픽셀을 두 번 섞지 않고, 부모의 캐럿이
+    /// 자식 위에 구멍을 내지 않는다.
     pub fn paint(self: *Server, id: u32, dst: [*]u8, pitch: u32, area: logic.Area, clip: ?logic.Area) ?logic.Fit {
         const t = self.find(id) orelse return null;
         const xs = t.xdg orelse return null;
@@ -686,9 +768,13 @@ pub const Server = struct {
         if (!logic.formatOk(shm.getFormat())) return null;
         // 창의 크기는 surface 크기(버퍼 ÷ buffer_scale)다(WY-M3, design 결정 29) — `last_fit`과 포인터 좌표가 이 단위다.
         const sz = logic.surfaceSize(@intCast(shm.getWidth()), @intCast(shm.getHeight()), s.scale);
-        const f = logic.fitIn(area, sz.w, sz.h) orelse return null;
-        const rect: logic.Area = if (clip) |c| logic.intersect(c, .{ .x = f.x, .y = f.y, .w = f.w, .h = f.h }) orelse c else .{ .x = f.x, .y = f.y, .w = f.w, .h = f.h };
+        const f = logic.fitGeom(area, sz.w, sz.h, xs.geom) orelse return null;
+        const box: logic.Area = .{ .x = f.x, .y = f.y, .w = f.w, .h = f.h };
+        const rect: logic.Area = if (clip) |c| logic.intersect(c, box) orelse c else box;
+        const tree_clip: logic.Area = if (clip != null) (logic.intersect(rect, area) orelse rect) else area;
+        const o = logic.rootOrigin(f);
         const t0 = monoNs();
+        var kids = drawChildren(s, o[0], o[1], f.k, dst, pitch, tree_clip, .below);
         {
             // 클라이언트가 풀을 줄였으면 읽기가 SIGBUS다 — libwayland이 그 틈을 막는다(begin · end).
             shm.beginAccess();
@@ -696,11 +782,17 @@ pub const Server = struct {
             const data: [*]const u8 = @ptrCast(shm.getData() orelse return null);
             logic.blitClip(dst, pitch, f, data, @intCast(shm.getStride()), s.scale, rect);
         }
+        kids += drawChildren(s, o[0], o[1], f.k, dst, pitch, tree_clip, .above);
         const us = (monoNs() - t0) / 1000;
+        // 실측 줄(WY-M7 실측 1) — 자식을 섞은 옮기기의 시간(부모 복사 + 섞기). 창마다 처음 `TREE_LINES`번.
+        if (kids > 0 and t.tree_lines < TREE_LINES) {
+            t.tree_lines += 1;
+            logline.print("terminal: wl> tree id={d} kids={d} x={d} y={d} w={d} h={d} us={d}\n", .{ id, kids, rect.x, rect.y, rect.w, rect.h, us });
+        }
         // 포인터 좌표를 거꾸로 셀 자리(단계 C).
         t.last_fit = f;
-        s.damage = null;
-        s.damage_whole = false;
+        clearDamage(s);
+        t.tree_dirty = false;
         // 실측 줄(WY-M6 확정 7) — 창마다 통째 · 부분을 따로 처음 몇 번만(같은 창의 통째와 부분을 맞대려고 창마다다).
         const n = if (clip != null) &t.blit_lines.part else &t.blit_lines.whole;
         const cap: u8 = if (clip != null) BLIT_PART_LINES else BLIT_WHOLE_LINES;
@@ -711,44 +803,52 @@ pub const Server = struct {
         return f;
     }
 
-    /// 창 `id`의 buffer_scale(WY-M3). 창이나 버퍼가 없으면 1 — App이 물리 합성 목록에 넣을지 정한다(1이면 그림자 늘리기가
-    /// 같은 그림을 만든다, design 결정 30).
+    /// 창 `id`의 buffer_scale(WY-M3) — 보이는 트리(부모와 자식)에서 가장 큰 값(WY-M7). 창이나 버퍼가 없으면 1 — App이 물리 합성 목록에
+    /// 넣을지 정한다(1이면 그림자 늘리기가 같은 그림을 만든다, design 결정 30). 자식 하나라도 bs > 1이면 창 전체를 물리로 다시 합성한다.
     pub fn bufferScale(self: *Server, id: u32) u32 {
         const t = self.find(id) orelse return 1;
         const xs = t.xdg orelse return 1;
         const s = xs.surface orelse return 1;
         if (s.current == null) return 1;
-        return s.scale;
+        return treeScale(s);
     }
 
     /// 물리 합성(WY-M3 확정 7, design 결정 30). 창 `id`의 버퍼를 물리 dumb 버퍼 `out`에 — 논리 사각형 `area` 안의 자리를
     /// 지금 버퍼로 다시 셈한 `fit`을 × `s` 해서, 논리 `clip`과 겹친 자리만 옮긴다. `drm.Framebuffer.stage` 뒤 · `flush` 앞에
     /// 부른다(반대면 같은 프레임의 늘리기가 덮는다). 자리를 `last_fit`이 아니라 지금 버퍼로 다시 세는 것은, commit이 하한 안에서
-    /// 그리기를 미룬 사이 화살표만 옮기는 바퀴가 올 수 있어서다 — 옛 자리로 새(작아진) 버퍼를 읽으면 버퍼 밖이다. buffer_scale이
-    /// 1이 됐으면 아무것도 안 한다(그림자 늘리기가 맞다).
+    /// 그리기를 미룬 사이 화살표만 옮기는 바퀴가 올 수 있어서다 — 옛 자리로 새(작아진) 버퍼를 읽으면 버퍼 밖이다. 트리의 buffer_scale이
+    /// 모두 1이 됐으면 아무것도 안 한다(그림자 늘리기가 맞다). 자식(WY-M7)은 그림자와 같은 순서로 물리에 섞는다 — 다만 창 사각형 안만이다:
+    /// 그 밖은 `stage`가 그림자(자식이 이미 섞인 것)에서 늘린 자리라 다시 섞으면 반투명 픽셀이 두 번 섞인다.
     pub fn paintPhys(self: *Server, id: u32, out: [*]u8, out_pitch: u32, s: u32, area: logic.Area, clip: logic.Area) void {
         const t = self.find(id) orelse return;
         const xs = t.xdg orelse return;
         const sf = xs.surface orelse return;
-        if (sf.scale == 1) return;
+        if (treeScale(sf) == 1) return;
         const buf = sf.current orelse return;
         const shm = wl.shm.Buffer.get(@ptrCast(buf)) orelse return;
         if (!logic.formatOk(shm.getFormat())) return;
         const sz = logic.surfaceSize(@intCast(shm.getWidth()), @intCast(shm.getHeight()), sf.scale);
-        const f = logic.fitIn(area, sz.w, sz.h) orelse return;
-        shm.beginAccess();
-        defer shm.endAccess();
-        const data: [*]const u8 = @ptrCast(shm.getData() orelse return);
-        logic.blitClip(out, out_pitch, logic.scaleFit(f, s), data, @intCast(shm.getStride()), sf.scale, logic.scaleArea(clip, s));
+        const f = logic.fitGeom(area, sz.w, sz.h, xs.geom) orelse return;
+        const fp = logic.scaleFit(f, s);
+        const o = logic.rootOrigin(fp);
+        const inner = logic.intersect(clip, .{ .x = f.x, .y = f.y, .w = f.w, .h = f.h });
+        if (inner) |c| _ = drawChildren(sf, o[0], o[1], fp.k, out, out_pitch, logic.scaleArea(c, s), .below);
+        {
+            shm.beginAccess();
+            defer shm.endAccess();
+            const data: [*]const u8 = @ptrCast(shm.getData() orelse return);
+            logic.blitClip(out, out_pitch, fp, data, @intCast(shm.getStride()), sf.scale, logic.scaleArea(clip, s));
+        }
+        if (inner) |c| _ = drawChildren(sf, o[0], o[1], fp.k, out, out_pitch, logic.scaleArea(c, s), .above);
     }
 
-    /// toplevel `id`가 든 프레임을 화면에 냈다(확정 9) — 그 commit들의 frame 콜백에 `done`을 보낸다.
+    /// toplevel `id`가 든 프레임을 화면에 냈다(확정 9) — 그 commit들의 frame 콜백에 `done`을 보낸다. 자식들의 것도(WY-M7 — Chromium은
+    /// bubble에 frame을 건다).
     pub fn presented(self: *Server, id: u32, ms: u32) void {
         const t = self.find(id) orelse return;
         const xs = t.xdg orelse return;
         const s = xs.surface orelse return;
-        var it = s.frames.safeIterator(.forward);
-        while (it.next()) |cb| cb.destroySendDone(ms);
+        framesDone(s, ms);
     }
 
     // ── 클립보드: 앱 → 셸(WY-M4 단계 A, design 결정 33 · 36) ──
@@ -1081,7 +1181,20 @@ fn compositorRequest(comp: *wl.Compositor, req: wl.Compositor.Request, srv: *Ser
             };
             s.* = .{ .srv = srv, .resource = res };
             s.pending_frames.init();
+            s.cached_frames.init();
             s.frames.init();
+            // 쌓임 순서의 첫 칸은 이 surface 자신이다(null — WY-M7 확정 1).
+            s.order_pending.append(srv.allocator, null) catch {
+                srv.allocator.destroy(s);
+                res.destroy();
+                return comp.postNoMemory();
+            };
+            s.order.append(srv.allocator, null) catch {
+                s.order_pending.deinit(srv.allocator);
+                srv.allocator.destroy(s);
+                res.destroy();
+                return comp.postNoMemory();
+            };
             res.setHandler(*Surface, surfaceRequest, surfaceDestroyed, s);
             // 배율을 알린다(WY-M3 확정 3, design 결정 27). 판 6 이상의 surface에만 — 판 4로 bind한 클라이언트(둠)에는 이
             // 이벤트가 없다. 배율 1에서도 1을 보낸다(받기 전의 기본값과 뜻은 같지만 클라이언트가 줄로 찍는다).
@@ -1089,17 +1202,35 @@ fn compositorRequest(comp: *wl.Compositor, req: wl.Compositor.Request, srv: *Ser
         },
         .create_region => |r| {
             const res = wl.Region.create(client, comp.getVersion(), r.id) catch return comp.postNoMemory();
-            res.setHandler(?*anyopaque, regionRequest, null, null);
+            const rg = srv.allocator.create(Region) catch {
+                res.destroy();
+                return comp.postNoMemory();
+            };
+            rg.* = .{ .srv = srv };
+            res.setHandler(*Region, regionRequest, regionDestroyed, rg);
         },
     }
 }
 
-/// 영역은 받기만 한다 — opaque · input 영역을 아직 안 쓴다(합성이 통째 blit이고 포인터는 M2).
-fn regionRequest(region: *wl.Region, req: wl.Region.Request, _: ?*anyopaque) void {
+/// 영역 하나(WY-M7, design 결정 50) — 상자의 합 하나다. 입력 영역(`set_input_region`)만 쓴다(opaque는 여전히 버린다). `subtract`는 받되
+/// 상자를 줄이지 않는다(넓게 잡는다 — 조사에서 Chromium은 한 번도 안 보냈다).
+const Region = struct {
+    srv: *Server,
+    box: ?logic.Box = null,
+};
+
+fn regionRequest(region: *wl.Region, req: wl.Region.Request, rg: *Region) void {
     switch (req) {
         .destroy => region.destroy(),
-        .add, .subtract => {},
+        .add => |a| if (logic.boxOf(a.x, a.y, a.width, a.height, 1)) |b| {
+            rg.box = logic.boxUnion(rg.box, b);
+        },
+        .subtract => {},
     }
+}
+
+fn regionDestroyed(_: *wl.Region, rg: *Region) void {
+    rg.srv.allocator.destroy(rg);
 }
 
 // ── wl_surface ─────────────────────────────────────────────────────────
@@ -1135,8 +1266,43 @@ const Surface = struct {
     damage_whole: bool = true,
     /// 마지막 commit의 버퍼 크기와 buffer_scale(바뀌면 통째).
     dims: ?Dims = null,
+    /// 역할(WY-M7). 한 번 정해지면 바뀌지 않는다 — 같은 역할로 다시 쓰는 것은 된다(Chromium은 bubble의 surface를 subsurface로 거듭 쓴다).
+    kind: Kind = .none,
+    /// 이 surface가 자식이면 그 subsurface 객체(design 결정 48). 객체가 사라지면 null(역할은 남는다).
+    sub: ?*Subsurface = null,
+    /// 이 surface에 붙은 자식(만든 순 — 수명용). 그리는 순서는 `order`다.
+    children: std.ArrayList(*Subsurface) = .empty,
+    /// 쌓임 순서(아래에서부터, null = 이 surface 자신). 새 자식 · `place_above/below`는 `order_pending`을 고치고 이 surface의 상태가 적용될 때
+    /// `order`로 옮긴다(xml — 부모의 double-buffered 상태). 객체가 사라진 자식은 둘에서 곧바로 뺀다.
+    order_pending: std.ArrayList(?*Subsurface) = .empty,
+    order: std.ArrayList(?*Subsurface) = .empty,
+    order_dirty: bool = false,
+    /// 입력 영역(design 결정 50). pending → (cache) → current.
+    pending_input: logic.Input = .{},
+    pending_input_set: bool = false,
+    input: logic.Input = .{},
+    /// commit된 상태(xml의 "cached state"). commit은 늘 pending을 여기로 옮긴 뒤, sync처럼 구는 자식이 아니면 곧바로 적용한다 — sync 자식은
+    /// 부모의 상태가 적용될 때 적용된다(design 결정 48). 그래서 적용하는 길은 하나(`apply`)다.
+    cache: Cache = .{},
+    cached_gone: wl.Listener(*wl.Resource) = .init(cachedGone),
+    cached_frames: wl.list.Head(wl.Callback, null) = undefined,
+    /// 이 자식에 `wl_surface.enter(output)`을 보냈다(처음 보일 때 한 번 — design 결정 49).
+    entered_output: bool = false,
 
     const Dims = struct { w: i32, h: i32, bs: u32 };
+    const Kind = enum { none, xdg, sub };
+};
+
+/// commit된 채 적용을 기다리는 상태(sync 자식). 값은 commit 때의 것이다 — 버퍼(attach가 있었을 때만), buffer_scale, damage 둘, 입력 영역.
+const Cache = struct {
+    has: bool = false,
+    buffer_set: bool = false,
+    buffer: ?*wl.Buffer = null,
+    linked: bool = false,
+    scale: u32 = 1,
+    damage: ?logic.Box = null,
+    damage_surface: ?logic.Box = null,
+    input: ?logic.Input = null,
 };
 
 fn surfaceRequest(res: *wl.Surface, req: wl.Surface.Request, s: *Surface) void {
@@ -1176,7 +1342,15 @@ fn surfaceRequest(res: *wl.Surface, req: wl.Surface.Request, s: *Surface) void {
             s.pending_damage = logic.boxUnion(s.pending_damage, b);
         },
         // `offset`(판 5)은 받아서 버린다 — toplevel 하나뿐이고 놓는 자리는 서버가 정한다(design 결정 28).
-        .set_opaque_region, .set_input_region, .set_buffer_transform, .offset => {},
+        // 입력 영역(WY-M7, design 결정 50) — double-buffered. null region은 무한(xml의 처음 값)이다.
+        .set_input_region => |r| {
+            s.pending_input_set = true;
+            s.pending_input = if (r.region) |rr| blk: {
+                const rg: *Region = @ptrCast(@alignCast(rr.getUserData() orelse return));
+                break :blk .{ .all = false, .box = rg.box };
+            } else .{};
+        },
+        .set_opaque_region, .set_buffer_transform, .offset => {},
     }
 }
 
@@ -1198,18 +1372,73 @@ fn currentGone(listener: *wl.Listener(*wl.Resource), _: *wl.Resource) void {
     s.current = null;
 }
 
+fn cachedGone(listener: *wl.Listener(*wl.Resource), _: *wl.Resource) void {
+    const s: *Surface = @fieldParentPtr("cached_gone", listener);
+    listener.link.remove();
+    s.cache.linked = false;
+    s.cache.buffer = null;
+}
+
+/// `wl_surface.commit`(WY-M7, design 결정 48). pending을 cache로 옮기고(`stash`), sync처럼 구는 자식이 아니면 곧바로 적용한다(`apply`).
+/// sync 자식의 cache는 부모의 상태가 적용될 때 적용된다 — 그래서 적용하는 길은 하나다.
 fn commit(s: *Surface) void {
-    // buffer_scale이 먼저 확정된다 — 아래 크기 검사와 `wl> commit` 줄이 새 값을 본다. 값만 바뀐 commit도 다시 그린다.
-    var changed = s.scale != s.pending_scale;
-    s.scale = s.pending_scale;
+    stash(s);
+    if (s.sub) |ss| if (subSync(ss)) return;
+    apply(s);
+}
+
+/// pending → cache. 버퍼는 attach가 있었을 때만 바꾸고(destroy listener를 옮긴다), damage는 합치고, frame 콜백은 cache의 목록 끝에 잇는다.
+fn stash(s: *Surface) void {
+    const c = &s.cache;
+    c.has = true;
+    c.scale = s.pending_scale;
     if (s.pending_set) {
-        const next = s.pending;
+        if (c.linked) {
+            s.cached_gone.link.remove();
+            c.linked = false;
+        }
         if (s.pending_linked) {
             s.pending_gone.link.remove();
             s.pending_linked = false;
         }
+        c.buffer = s.pending;
+        c.buffer_set = true;
+        if (c.buffer) |b| {
+            @as(*wl.Resource, @ptrCast(b)).addDestroyListener(&s.cached_gone);
+            c.linked = true;
+        }
         s.pending = null;
         s.pending_set = false;
+    }
+    if (s.pending_damage) |b| c.damage = logic.boxUnion(c.damage, b);
+    if (s.pending_damage_surface) |b| c.damage_surface = logic.boxUnion(c.damage_surface, b);
+    s.pending_damage = null;
+    s.pending_damage_surface = null;
+    if (s.pending_input_set) {
+        c.input = s.pending_input;
+        s.pending_input_set = false;
+    }
+    s.cached_frames.appendList(&s.pending_frames);
+}
+
+/// cache → current(지금까지의 commit 본체). 이 surface의 상태가 적용되면 자식의 자리 · 순서가 적용되고(부모의 상태), 그 뒤 sync 자식의 cache가
+/// 적용된다(xml — "immediately after the parent surface's state is applied"). 끝으로 역할(자식 · toplevel)마다 할 일.
+fn apply(s: *Surface) void {
+    const c = &s.cache;
+    if (!c.has) return;
+    c.has = false;
+    // buffer_scale이 먼저 확정된다 — 아래 크기 검사와 `wl> commit` 줄이 새 값을 본다. 값만 바뀐 commit도 다시 그린다.
+    var changed = s.scale != c.scale;
+    s.scale = c.scale;
+    const was_shown = s.current != null;
+    if (c.buffer_set) {
+        const next = c.buffer;
+        if (c.linked) {
+            s.cached_gone.link.remove();
+            c.linked = false;
+        }
+        c.buffer = null;
+        c.buffer_set = false;
         if (next != s.current) {
             if (s.current) |old| {
                 s.current_gone.link.remove();
@@ -1230,10 +1459,23 @@ fn commit(s: *Surface) void {
             return s.resource.postError(.invalid_size, "buffer size is not a multiple of the buffer scale");
     };
     if (takeDamage(s)) changed = true;
-    const waiting = !s.pending_frames.empty();
-    s.frames.appendList(&s.pending_frames);
+    if (c.input) |inp| {
+        s.input = inp;
+        c.input = null;
+    }
+    const waiting = !s.cached_frames.empty();
+    s.frames.appendList(&s.cached_frames);
+    if (applyChildren(s)) changed = true;
+    for (s.children.items) |ch| if (ch.surface) |cs| if (cs.cache.has and subSync(ch)) apply(cs);
 
+    if (s.sub) |ss| return subApplied(ss, s, was_shown, changed, waiting);
     const xs = s.role orelse return;
+    // window geometry(WY-M7, design 결정 50) — xdg_surface의 double-buffered 상태라 이 commit에 적용된다.
+    if (xs.pending_geom_set) {
+        xs.pending_geom_set = false;
+        if (!std.meta.eql(xs.geom, xs.pending_geom)) changed = true;
+        xs.geom = xs.pending_geom;
+    }
     const t = xs.toplevel orelse return;
     const step = logic.onCommit(xs.phase, xs.acked, s.current != null);
     switch (step.action) {
@@ -1250,14 +1492,14 @@ fn commit(s: *Surface) void {
     xs.phase = step.next;
 }
 
-/// commit의 damage 적용(WY-M6 단계 B, design 결정 47). pending 둘을 버퍼 좌표로 맞춰(`damage`는 × buffer_scale) 지금 버퍼로 자르고
+/// commit의 damage 적용(WY-M6 단계 B, design 결정 47). cache의 둘을 버퍼 좌표로 맞춰(`damage`는 × buffer_scale) 지금 버퍼로 자르고
 /// 아직 안 옮긴 합집합에 더한다 — commit 둘이 한 프레임에 모이면 둘을 덮는 사각형이 된다. 버퍼 크기나 buffer_scale이 바뀌었으면
 /// 다음 옮기기는 통째다. 보이는 내용이 바뀌었으면(damage가 버퍼에 닿았다) 참 — 같은 버퍼를 다시 붙인 commit도 다시 그린다.
 fn takeDamage(s: *Surface) bool {
-    const surf = s.pending_damage_surface;
-    const buf = s.pending_damage;
-    s.pending_damage_surface = null;
-    s.pending_damage = null;
+    const surf = s.cache.damage_surface;
+    const buf = s.cache.damage;
+    s.cache.damage_surface = null;
+    s.cache.damage = null;
     const cur = s.current orelse return false;
     const shm = wl.shm.Buffer.get(@ptrCast(cur)) orelse return false;
     const dims: Surface.Dims = .{ .w = shm.getWidth(), .h = shm.getHeight(), .bs = s.scale };
@@ -1280,7 +1522,7 @@ fn logCommit(t: *Toplevel, s: *Surface) void {
     const buf = s.current orelse return;
     const shm = wl.shm.Buffer.get(@ptrCast(buf)) orelse return;
     const sz = logic.surfaceSize(@intCast(shm.getWidth()), @intCast(shm.getHeight()), s.scale);
-    const f = logic.fit(t.area_w, t.area_h, sz.w, sz.h) orelse return;
+    const f = logic.fitGeom(.{ .x = 0, .y = 0, .w = t.area_w, .h = t.area_h }, sz.w, sz.h, geomOf(t)) orelse return;
     const sig: Toplevel.Sig = .{ .w = shm.getWidth(), .h = shm.getHeight(), .fit = f, .bs = s.scale };
     if (t.last) |l| if (std.meta.eql(l, sig)) return;
     t.last = sig;
@@ -1299,8 +1541,425 @@ fn surfaceDestroyed(_: *wl.Surface, s: *Surface) void {
     while (it.next()) |cb| cb.destroy();
     var it2 = s.frames.safeIterator(.forward);
     while (it2.next()) |cb| cb.destroy();
+    var it3 = s.cached_frames.safeIterator(.forward);
+    while (it3.next()) |cb| cb.destroy();
+    if (s.cache.linked) s.cached_gone.link.remove();
     if (s.role) |xs| xs.surface = null;
-    s.srv.allocator.destroy(s);
+    const srv = s.srv;
+    if (srv.ptr_sr == s) srv.ptr_sr = null;
+    // 자식이 사라졌다 — 부모의 그림에서 빠진다(xml: 매핑이 풀린다). subsurface 객체는 남고(클라이언트가 지운다) surface만 끊는다.
+    if (s.sub) |ss| {
+        ss.surface = null;
+        if (ss.parent) |par| touchTree(par);
+    }
+    // 부모가 사라졌다 — 자식들은 매핑이 풀린다. 자식의 subsurface 객체는 남되 부모를 잃는다.
+    for (s.children.items) |ch| ch.parent = null;
+    s.children.deinit(srv.allocator);
+    s.order_pending.deinit(srv.allocator);
+    s.order.deinit(srv.allocator);
+    srv.allocator.destroy(s);
+}
+
+// ── wl_subcompositor · wl_subsurface(WY-M7 단계 A, design 결정 48 ~ 51) ──────
+
+/// 자식 하나(xml `wl_subsurface`). 자리(`x` · `y`)와 쌓임은 부모의 상태라 부모의 적용 때 바뀐다 — `px` · `py`는 그 pending이다.
+/// `surface`는 자식 surface가 먼저 사라지면 null, `parent`는 부모 surface가 먼저 사라지면 null이다(둘 다 매핑이 풀린 것).
+const Subsurface = struct {
+    srv: *Server,
+    resource: *wl.Subsurface,
+    surface: ?*Surface,
+    parent: ?*Surface,
+    /// `wl> subsurface sub=N`의 번호.
+    num: u32,
+    /// 마지막으로 안 뿌리 창(줄의 `id=`). 클라이언트가 끝날 때는 부모 · 자식 surface가 이 객체보다 먼저 사라져 사슬로는 못 찾는다.
+    top: u32 = 0,
+    x: i32 = 0,
+    y: i32 = 0,
+    px: i32 = 0,
+    py: i32 = 0,
+    pos_set: bool = false,
+    /// xml의 처음 모드는 sync다.
+    sync: bool = true,
+};
+
+/// 트리의 깊이 · 크기 상한. 자식의 자식까지 셈하고 그리는 재귀와 포인터 후보 목록이 이것으로 묶인다(클라이언트가 깊은 사슬을 만들어도
+/// 서버 스택이 안 자란다). Chromium의 bubble은 깊이 1 · 하나다.
+const TREE_DEPTH = 8;
+const TREE_MAX = 32;
+
+fn bindSubcompositor(client: *wl.Client, srv: *Server, version: u32, id: u32) void {
+    const r = wl.Subcompositor.create(client, version, id) catch return client.postNoMemory();
+    r.setHandler(*Server, subcompositorRequest, null, srv);
+}
+
+/// `get_subsurface`(xml): 역할이 이미 있거나(xdg) subsurface 객체가 있으면 `bad_surface`, 부모가 자기 자신이거나 자손이면 `bad_parent`. 자식을
+/// 더하는 것은 부모의 double-buffered 상태라 부모의 다음 적용 때 그려진다(`order_pending` → `order`). 새 자식은 맨 위다.
+fn subcompositorRequest(sc: *wl.Subcompositor, req: wl.Subcompositor.Request, srv: *Server) void {
+    switch (req) {
+        .destroy => sc.destroy(),
+        .get_subsurface => |r| {
+            const s: *Surface = @ptrCast(@alignCast(r.surface.getUserData() orelse return));
+            const parent: *Surface = @ptrCast(@alignCast(r.parent.getUserData() orelse return));
+            if (s.role != null or s.kind == .xdg or s.sub != null) return sc.postError(.bad_surface, "wl_surface already has a role or a wl_subsurface");
+            var up: ?*Surface = parent;
+            while (up) |u| {
+                if (u == s) return sc.postError(.bad_parent, "the parent is the surface itself or one of its descendants");
+                up = if (u.sub) |us| us.parent else null;
+            }
+            const res = wl.Subsurface.create(sc.getClient(), sc.getVersion(), r.id) catch return sc.postNoMemory();
+            const ss = srv.allocator.create(Subsurface) catch {
+                res.destroy();
+                return sc.postNoMemory();
+            };
+            ss.* = .{ .srv = srv, .resource = res, .surface = s, .parent = parent, .num = srv.next_sub };
+            // 목록 셋에 자리를 먼저 잡는다 — 적용(`applyChildren`)이 `order`에 옮길 때 메모리를 다시 안 청하게.
+            parent.children.ensureUnusedCapacity(srv.allocator, 1) catch return failSub(sc, res, ss);
+            parent.order_pending.ensureUnusedCapacity(srv.allocator, 1) catch return failSub(sc, res, ss);
+            parent.order.ensureTotalCapacity(srv.allocator, parent.order_pending.items.len + 1) catch return failSub(sc, res, ss);
+            parent.children.appendAssumeCapacity(ss);
+            parent.order_pending.appendAssumeCapacity(ss);
+            parent.order_dirty = true;
+            srv.next_sub += 1;
+            s.sub = ss;
+            s.kind = .sub;
+            res.setHandler(*Subsurface, subsurfaceRequest, subsurfaceDestroyed, ss);
+            logSub(ss, if (parent.sub == null) "new parent=main" else "new parent=sub");
+        },
+    }
+}
+
+fn failSub(sc: *wl.Subcompositor, res: *wl.Subsurface, ss: *Subsurface) void {
+    ss.srv.allocator.destroy(ss);
+    res.destroy();
+    sc.postNoMemory();
+}
+
+fn subsurfaceRequest(res: *wl.Subsurface, req: wl.Subsurface.Request, ss: *Subsurface) void {
+    switch (req) {
+        .destroy => res.destroy(),
+        .set_position => |p| {
+            ss.px = p.x;
+            ss.py = p.y;
+            ss.pos_set = true;
+        },
+        .place_above => |r| restackSub(res, ss, r.sibling, true),
+        .place_below => |r| restackSub(res, ss, r.sibling, false),
+        .set_sync => ss.sync = true,
+        // 즉시 효과다(xml). 이제 desync처럼 굴면 쌓인 cache를 곧바로 적용한다.
+        .set_desync => {
+            ss.sync = false;
+            if (ss.surface) |s| if (s.cache.has and !subSync(ss)) apply(s);
+        },
+    }
+}
+
+/// `place_above/below` — 기준은 부모이거나 같은 부모의 다른 자식이어야 한다(아니면 `bad_surface`). 부모의 `order_pending`을 고친다.
+fn restackSub(res: *wl.Subsurface, ss: *Subsurface, sibling: *wl.Surface, above: bool) void {
+    const parent = ss.parent orelse return;
+    const sib: *Surface = @ptrCast(@alignCast(sibling.getUserData() orelse return));
+    const ref: ?*Subsurface = if (sib == parent) null else blk: {
+        const so = sib.sub orelse return res.postError(.bad_surface, "the reference is not a sibling or the parent");
+        if (so.parent != parent or so == ss) return res.postError(.bad_surface, "the reference is not a sibling or the parent");
+        break :blk so;
+    };
+    if (!logic.restack(?*Subsurface, parent.order_pending.items, ss, ref, above))
+        return res.postError(.bad_surface, "the reference is not a sibling or the parent");
+    parent.order_dirty = true;
+}
+
+/// 객체가 사라졌다 — 곧바로 효과다(xml): 부모의 두 순서와 목록에서 빼고 창을 통째로 다시 그린다. surface는 남고(역할도 남는다) 매핑이 풀린다.
+fn subsurfaceDestroyed(_: *wl.Subsurface, ss: *Subsurface) void {
+    logSub(ss, "gone");
+    if (ss.parent) |p| {
+        for (p.children.items, 0..) |c, i| if (c == ss) {
+            _ = p.children.orderedRemove(i);
+            break;
+        };
+        for (p.order_pending.items, 0..) |c, i| if (c == ss) {
+            _ = p.order_pending.orderedRemove(i);
+            break;
+        };
+        for (p.order.items, 0..) |c, i| if (c == ss) {
+            _ = p.order.orderedRemove(i);
+            break;
+        };
+        touchTree(p);
+    }
+    if (ss.surface) |s| s.sub = null;
+    ss.srv.allocator.destroy(ss);
+}
+
+/// subsurface가 실제로 sync처럼 구는가 — 자기부터 위로 sync 깃발을 모아 `logic.effectiveSync`(xml의 재귀 규칙).
+fn subSync(ss: *Subsurface) bool {
+    var chain: [TREE_DEPTH]bool = undefined;
+    var n: usize = 0;
+    var it: ?*Subsurface = ss;
+    while (n < chain.len) {
+        const x = it orelse break;
+        chain[n] = x.sync;
+        n += 1;
+        const p = x.parent orelse break;
+        it = p.sub;
+    }
+    return logic.effectiveSync(chain[0..n]);
+}
+
+/// 부모 `s`의 상태가 적용될 때 자식의 자리와 쌓임을 적용한다. 보이는 것이 움직였으면 참(창을 통째로 — `tree_dirty`). 같은 값의
+/// `set_position`(Chromium은 키마다 보낸다)은 움직임이 아니다.
+fn applyChildren(s: *Surface) bool {
+    var moved = false;
+    for (s.children.items) |ch| if (ch.pos_set) {
+        ch.pos_set = false;
+        if (ch.x != ch.px or ch.y != ch.py) {
+            ch.x = ch.px;
+            ch.y = ch.py;
+            moved = true;
+        }
+    };
+    if (s.order_dirty) {
+        s.order_dirty = false;
+        if (!std.mem.eql(?*Subsurface, s.order.items, s.order_pending.items)) {
+            s.order.clearRetainingCapacity();
+            // 자리는 `get_subsurface`가 미리 잡았다.
+            s.order.appendSliceAssumeCapacity(s.order_pending.items);
+            moved = true;
+        }
+    }
+    if (moved) markTree(s);
+    return moved;
+}
+
+/// 자식의 상태가 적용됐다. 처음 보이면 output `enter`, 보임이 바뀌면 줄과 통째 다시 그리기, 그리고 뿌리 창에 `Event.commit`(보이는 것이
+/// 바뀌었거나 frame을 기다린다 — 부모의 commit 없이 자식만 commit하는 desync 자식이 이 길로 그려진다).
+fn subApplied(ss: *Subsurface, s: *Surface, was_shown: bool, changed: bool, waiting: bool) void {
+    const shown = s.current != null;
+    if (shown and !s.entered_output) {
+        s.entered_output = true;
+        var it = s.srv.outputs.iterator(.forward);
+        while (it.next()) |o| if (o.getClient() == s.resource.getClient()) s.resource.sendEnter(o);
+    }
+    if (shown != was_shown) {
+        markTree(s);
+        if (shown) {
+            var buf: [64]u8 = undefined;
+            const sz = surfaceSizeOf(s);
+            // 자리는 부모의 다음 적용에 정해질 값이다(desync 자식은 부모보다 먼저 commit한다 — Chromium의 bubble · tars-wl-test).
+            const ax = if (ss.pos_set) ss.px else ss.x;
+            const ay = if (ss.pos_set) ss.py else ss.y;
+            const text = std.fmt.bufPrint(&buf, "map w={d} h={d} bs={d} at={d},{d}", .{ sz[0], sz[1], s.scale, ax, ay }) catch "map";
+            logSub(ss, text);
+        } else logSub(ss, "unmap");
+    }
+    const t = rootToplevel(s) orelse return;
+    if (changed or waiting) s.srv.push(.{ .commit = t.id });
+}
+
+/// 버퍼가 있는 surface의 크기(surface 단위). 없으면 0.
+fn surfaceSizeOf(s: *const Surface) [2]u32 {
+    const b = s.current orelse return .{ 0, 0 };
+    const shm = wl.shm.Buffer.get(@ptrCast(b)) orelse return .{ 0, 0 };
+    const sz = logic.surfaceSize(@intCast(shm.getWidth()), @intCast(shm.getHeight()), s.scale);
+    return .{ sz.w, sz.h };
+}
+
+/// `wl> subsurface id=창 sub=N …`(WY-M7 확정 2) — 만들기 · 매핑 · 해제 · 닫기만, 창마다 `SUB_LINES`번.
+fn logSub(ss: *Subsurface, what: []const u8) void {
+    const from = ss.parent orelse ss.surface;
+    if (from) |f| if (rootToplevel(f)) |t| {
+        ss.top = t.id;
+    };
+    if (ss.srv.find(ss.top)) |t| {
+        if (t.sub_lines >= SUB_LINES) return;
+        t.sub_lines += 1;
+    }
+    logline.print("terminal: wl> subsurface id={d} sub={d} {s}\n", .{ ss.top, ss.num, what });
+}
+
+/// 자식을 따라 뿌리로 올라가 그 창(toplevel). 사슬이 끊겼거나(부모가 사라짐) 뿌리가 창이 아니면 null.
+fn rootToplevel(s0: *Surface) ?*Toplevel {
+    var s = s0;
+    var n: usize = 0;
+    while (s.sub) |ss| : (n += 1) {
+        if (n == TREE_DEPTH) return null;
+        s = ss.parent orelse return null;
+    }
+    const xs = s.role orelse return null;
+    return xs.toplevel;
+}
+
+/// 뿌리 창을 다음 옮기기에 통째로(자식의 매핑 · 움직임 · 쌓임).
+fn markTree(s: *Surface) void {
+    if (rootToplevel(s)) |t| t.tree_dirty = true;
+}
+
+/// `markTree` + 다시 그리기를 청한다(부모의 commit 없이 바뀌는 것 — 객체가 사라짐).
+fn touchTree(s: *Surface) void {
+    const t = rootToplevel(s) orelse return;
+    t.tree_dirty = true;
+    t.srv.push(.{ .commit = t.id });
+}
+
+/// 뿌리 surface 좌표에서 `s`의 자리(surface 단위) — 자식의 자리를 위로 더한다.
+fn offsetOf(s0: *const Surface) [2]i64 {
+    var s = s0;
+    var x: i64 = 0;
+    var y: i64 = 0;
+    var n: usize = 0;
+    while (s.sub) |ss| : (n += 1) {
+        if (n == TREE_DEPTH) break;
+        x += ss.x;
+        y += ss.y;
+        s = ss.parent orelse break;
+    }
+    return .{ x, y };
+}
+
+fn geomOf(t: *const Toplevel) ?logic.Rect {
+    const xs = t.xdg orelse return null;
+    return xs.geom;
+}
+
+const Side = enum { below, above };
+
+/// `s`의 자식 중 `s` 아래(`below`) 또는 위(`above`)의 것을 그린다 — 자식마다 그 아래 자식 → 그 자신(섞음) → 그 위 자식. `ox` · `oy`는 `s`의
+/// surface (0, 0)이 놓인 화면 자리, `k`는 surface 단위 하나의 화면 픽셀(뿌리의 늘림 — 물리면 × 배율). 섞은 자식 수를 돌려준다(실측 줄).
+fn drawChildren(s: *Surface, ox: i64, oy: i64, k: u32, dst: [*]u8, pitch: u32, clip: logic.Area, side: Side) usize {
+    return drawChildrenAt(s, ox, oy, k, dst, pitch, clip, side, 0);
+}
+
+fn drawChildrenAt(s: *Surface, ox: i64, oy: i64, k: u32, dst: [*]u8, pitch: u32, clip: logic.Area, side: Side, depth: usize) usize {
+    if (depth == TREE_DEPTH) return 0;
+    var n: usize = 0;
+    const self_at = std.mem.indexOfScalar(?*Subsurface, s.order.items, null) orelse return 0;
+    const items = if (side == .below) s.order.items[0..self_at] else s.order.items[self_at + 1 ..];
+    for (items) |e| {
+        const ch = e orelse continue;
+        const cs = ch.surface orelse continue;
+        if (cs.current == null) continue;
+        const cx = ox + @as(i64, ch.x) * k;
+        const cy = oy + @as(i64, ch.y) * k;
+        n += drawChildrenAt(cs, cx, cy, k, dst, pitch, clip, .below, depth + 1);
+        blendSurface(cs, cx, cy, k, dst, pitch, clip);
+        n += 1;
+        n += drawChildrenAt(cs, cx, cy, k, dst, pitch, clip, .above, depth + 1);
+    }
+    return n;
+}
+
+/// 자식 surface 하나를 섞는다(ARGB는 premultiplied over, XRGB는 덮기 — design 결정 49).
+fn blendSurface(s: *Surface, ox: i64, oy: i64, k: u32, dst: [*]u8, pitch: u32, clip: logic.Area) void {
+    const b = s.current orelse return;
+    const shm = wl.shm.Buffer.get(@ptrCast(b)) orelse return;
+    const fmt = shm.getFormat();
+    if (!logic.formatOk(fmt)) return;
+    const sz = logic.surfaceSize(@intCast(shm.getWidth()), @intCast(shm.getHeight()), s.scale);
+    shm.beginAccess();
+    defer shm.endAccess();
+    const data: [*]const u8 = @ptrCast(shm.getData() orelse return);
+    logic.blendClip(dst, pitch, ox, oy, k, data, @intCast(shm.getStride()), s.scale, sz.w, sz.h, clip, fmt == logic.FORMAT_ARGB8888);
+}
+
+/// 보이는 트리(그리는 자식들)의 buffer_scale 가운데 가장 큰 값.
+fn treeScale(s: *const Surface) u32 {
+    return treeScaleAt(s, 0);
+}
+
+fn treeScaleAt(s: *const Surface, depth: usize) u32 {
+    var best: u32 = if (s.current != null) s.scale else 1;
+    if (depth == TREE_DEPTH) return best;
+    for (s.order.items) |e| {
+        const ch = e orelse continue;
+        const cs = ch.surface orelse continue;
+        if (cs.current == null) continue;
+        best = @max(best, treeScaleAt(cs, depth + 1));
+    }
+    return best;
+}
+
+/// 보이는 자식들의 damage를 화면 사각형 `out`에 더한다(design 결정 49). 통째로 가야 하면 false — 자식의 첫 그림이나 크기 · buffer_scale이
+/// 바뀜, 또는 damage를 받은 자식이 창의 보이는 사각형 `box` 밖으로 나감(그 바깥은 통째 프레임만 다시 그린다 — 부분 blit은 `box` 안만이다).
+fn childDamage(s: *Surface, ox: i64, oy: i64, k: u32, box: logic.Area, out: *?logic.Area) bool {
+    return childDamageAt(s, ox, oy, k, box, out, 0);
+}
+
+fn childDamageAt(s: *Surface, ox: i64, oy: i64, k: u32, box: logic.Area, out: *?logic.Area, depth: usize) bool {
+    if (depth == TREE_DEPTH) return true;
+    for (s.order.items) |e| {
+        const ch = e orelse continue;
+        const cs = ch.surface orelse continue;
+        if (cs.current == null) continue;
+        const cx = ox + @as(i64, ch.x) * k;
+        const cy = oy + @as(i64, ch.y) * k;
+        if (cs.damage_whole) return false;
+        if (cs.damage) |d| {
+            const sz = surfaceSizeOf(cs);
+            if (!logic.within(cx, cy, @as(i64, sz[0]) * k, @as(i64, sz[1]) * k, box)) return false;
+            if (logic.damageAt(cx, cy, k, cs.scale, d, box)) |r| out.* = logic.areaUnion(out.*, r);
+        }
+        if (!childDamageAt(cs, cx, cy, k, box, out, depth + 1)) return false;
+    }
+    return true;
+}
+
+/// 옮긴 뒤 — 트리 전체의 쌓인 damage를 비운다(이제 화면이 버퍼들과 같다).
+fn clearDamage(s: *Surface) void {
+    clearDamageAt(s, 0);
+}
+
+fn clearDamageAt(s: *Surface, depth: usize) void {
+    s.damage = null;
+    s.damage_whole = false;
+    if (depth == TREE_DEPTH) return;
+    for (s.children.items) |ch| if (ch.surface) |cs| clearDamageAt(cs, depth + 1);
+}
+
+/// 트리 전체의 frame 콜백에 `done`.
+fn framesDone(s: *Surface, ms: u32) void {
+    framesDoneAt(s, ms, 0);
+}
+
+fn framesDoneAt(s: *Surface, ms: u32, depth: usize) void {
+    var it = s.frames.safeIterator(.forward);
+    while (it.next()) |cb| cb.destroySendDone(ms);
+    if (depth == TREE_DEPTH) return;
+    for (s.children.items) |ch| if (ch.surface) |cs| framesDoneAt(cs, ms, depth + 1);
+}
+
+/// 포인터 후보 하나 — 뿌리 surface 좌표의 자리와 크기(surface 단위).
+const TreeEntry = struct { s: *Surface, x: i64, y: i64, w: i64, h: i64 };
+const TreeList = struct {
+    items: [TREE_MAX]TreeEntry = undefined,
+    len: usize = 0,
+};
+
+/// 뿌리 위에 그려지는 자식들을 그리는 순서로 모은다(뿌리 아래의 자식은 뿌리가 덮으므로 포인터가 닿지 않는다 — design 결정 51).
+fn collectAbove(root: *Surface, ox: i64, oy: i64, list: *TreeList) void {
+    const self_at = std.mem.indexOfScalar(?*Subsurface, root.order.items, null) orelse return;
+    for (root.order.items[self_at + 1 ..]) |e| {
+        const ch = e orelse continue;
+        const cs = ch.surface orelse continue;
+        collectSub(cs, ox + ch.x, oy + ch.y, list, 1);
+    }
+}
+
+fn collectSub(s: *Surface, x: i64, y: i64, list: *TreeList, depth: usize) void {
+    if (s.current == null or depth > TREE_DEPTH) return;
+    const self_at = std.mem.indexOfScalar(?*Subsurface, s.order.items, null) orelse return;
+    for (s.order.items[0..self_at]) |e| {
+        const ch = e orelse continue;
+        const cs = ch.surface orelse continue;
+        collectSub(cs, x + ch.x, y + ch.y, list, depth + 1);
+    }
+    if (list.len < TREE_MAX) {
+        const sz = surfaceSizeOf(s);
+        list.items[list.len] = .{ .s = s, .x = x, .y = y, .w = sz[0], .h = sz[1] };
+        list.len += 1;
+    }
+    for (s.order.items[self_at + 1 ..]) |e| {
+        const ch = e orelse continue;
+        const cs = ch.surface orelse continue;
+        collectSub(cs, x + ch.x, y + ch.y, list, depth + 1);
+    }
 }
 
 // ── wl_output ──────────────────────────────────────────────────────────
@@ -1373,7 +2032,7 @@ fn seatRequest(seat: *wl.Seat, req: wl.Seat.Request, srv: *Server) void {
             p.setHandler(*Server, pointerRequest, pointerDestroyed, srv);
             srv.pointers.append(p);
             if (srv.ptr.focus) |id| if (srv.find(id)) |t| if (surfaceOf(t)) |sr| if (sr.getClient() == client)
-                srv.enterPointer(p, t, sr);
+                srv.enterPointer(p, t);
         },
         // 터치는 아직 없다(capabilities에 없다). 묻는 클라이언트에게 아무 일도 안 하는 객체를 준다.
         .get_touch => |r| {
@@ -1441,7 +2100,9 @@ fn wmBaseRequest(wm: *xdg.WmBase, req: xdg.WmBase.Request, srv: *Server) void {
         },
         .get_xdg_surface => |r| {
             const s: *Surface = @ptrCast(@alignCast(r.surface.getUserData() orelse return));
-            if (s.role != null) return wm.postError(.role, "wl_surface already has a role");
+            // 역할은 하나다(WY-M7) — 자식(subsurface)이었던 surface는 xdg_surface가 될 수 없다.
+            if (s.role != null or s.kind == .sub) return wm.postError(.role, "wl_surface already has a role");
+            s.kind = .xdg;
             const res = xdg.Surface.create(client, wm.getVersion(), r.id) catch return wm.postNoMemory();
             const xs = srv.allocator.create(XdgSurface) catch {
                 res.destroy();
@@ -1490,6 +2151,11 @@ const XdgSurface = struct {
     toplevel: ?*Toplevel = null,
     phase: logic.Phase = .fresh,
     acked: bool = false,
+    /// window geometry(WY-M7, design 결정 50) — `set_window_geometry`가 pending을 고치고 wl_surface의 commit이 옮긴다. null이면 보낸 적 없다
+    /// (버퍼 전체 — 둠 · SDL · tars-wl-test).
+    pending_geom: ?logic.Rect = null,
+    pending_geom_set: bool = false,
+    geom: ?logic.Rect = null,
 };
 
 const Toplevel = struct {
@@ -1523,6 +2189,12 @@ const Toplevel = struct {
     title_lines: u8 = 0,
     /// 이 창의 메뉴 객체(TK-M5 plan 확정 3). 하나뿐이다 — 둘째 `get_menu`는 `already_constructed`.
     menu: ?*Menu = null,
+    /// 자식이 매핑/해제/움직임/쌓임 바뀜/크기 바뀜(WY-M7, design 결정 49) — 다음 옮기기는 통째다. `paint`가 지운다.
+    tree_dirty: bool = false,
+    /// `wl> subsurface` 줄을 찍은 수.
+    sub_lines: u8 = 0,
+    /// `wl> tree` 줄을 찍은 수(WY-M7 실측 1).
+    tree_lines: u8 = 0,
 
     const Sig = struct { w: i32, h: i32, fit: logic.Fit, bs: u32 };
     const Name = struct {
@@ -1588,7 +2260,11 @@ fn xdgSurfaceRequest(res: *xdg.Surface, req: xdg.Surface.Request, xs: *XdgSurfac
             p.setHandler(?*anyopaque, popupRequest, null, null);
             p.sendPopupDone();
         },
-        .set_window_geometry => {},
+        .set_window_geometry => |g| {
+            if (g.width <= 0 or g.height <= 0) return res.postError(.invalid_size, "window geometry must be greater than zero");
+            xs.pending_geom = .{ .x = g.x, .y = g.y, .w = g.width, .h = g.height };
+            xs.pending_geom_set = true;
+        },
         .ack_configure => {
             xs.acked = true;
         },
@@ -1770,10 +2446,11 @@ fn toplevelDestroyed(_: *xdg.Toplevel, t: *Toplevel) void {
         for (srv.text_inputs.items) |ti| if (ti.resource.getClient() == t.resource.getClient()) {
             const was = ti.state.enabled;
             ti.state.leave();
-            srv.logEnabled(ti, was);
+            srv.logEnabled(ti, was, t.id);
         };
     }
     // 포인터도 같다 — leave 없이 포커스와 grab을 버린다.
+    if (srv.ptr.focus == t.id) srv.ptr_sr = null;
     srv.ptr.drop(t.id);
     if (srv.ptr_under == t.id) srv.ptr_under = null;
     for (srv.toplevels.items, 0..) |x, i| if (x == t) {
@@ -1976,6 +2653,9 @@ const TextInput = struct {
     srv: *Server,
     resource: *zwp.TextInputV3,
     state: logic.TextInput = .{},
+    /// 마지막으로 들어간 surface의 창(WY-M7, design 결정 55) — `ti enable · disable to=`. enter 때 정해 둔다: 클라이언트가 끝나면 surface가 text_input보다
+    /// 먼저 사라질 수 있어 그때 찾으면 못 찾는다.
+    to: u32 = 0,
 };
 
 fn bindTextInputManager(client: *wl.Client, srv: *Server, version: u32, id: u32) void {
@@ -2022,15 +2702,15 @@ fn textInputRequest(res: *zwp.TextInputV3, req: zwp.TextInputV3.Request, ti: *Te
         .commit => {
             const was = ti.state.enabled;
             ti.state.commit();
-            ti.srv.logEnabled(ti, was);
+            ti.srv.logEnabled(ti, was, ti.to);
         },
     }
 }
 
 /// 객체가 사라졌다(`destroy` 또는 클라이언트의 끝). xml: 그 객체로 켠 것은 모두 꺼진다 — 목록에서 빼면 그렇다.
-fn textInputDestroyed(res: *zwp.TextInputV3, ti: *TextInput) void {
+fn textInputDestroyed(_: *zwp.TextInputV3, ti: *TextInput) void {
     const srv = ti.srv;
-    if (ti.state.enabled) logline.print("terminal: wl> ti disable to={d}\n", .{srv.toplevelOf(res.getClient())});
+    if (ti.state.enabled) logline.print("terminal: wl> ti disable to={d}\n", .{ti.to});
     for (srv.text_inputs.items, 0..) |x, i| if (x == ti) {
         _ = srv.text_inputs.swapRemove(i);
         break;

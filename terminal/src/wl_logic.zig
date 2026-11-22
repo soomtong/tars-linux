@@ -586,3 +586,144 @@ pub const TextInput = struct {
         return surface != 0 and self.enabled and self.entered == surface;
     }
 };
+
+// ── surface 트리(WY-M7 단계 A, design 결정 48 ~ 51) ──────────────────────────
+
+/// window geometry(`xdg_surface.set_window_geometry`) — surface 좌표의 사각형. 클라이언트가 준 값 그대로라 음수가 들 수 있다.
+pub const Rect = struct { x: i32, y: i32, w: i32, h: i32 };
+
+/// `fitIn`을 window geometry로 한다(design 결정 50). geometry가 없거나 surface와 겹치지 않으면 `fitIn` 그대로 — geometry를 안
+/// 보내는 클라이언트(둠 · SDL · tars-wl-test)의 자리는 한 픽셀도 안 바뀐다. 있으면 surface 안으로 자른 geometry 크기로 `fitIn`을
+/// 하고 `ox` · `oy`에 geometry의 왼쪽 위를 더한다 — 그림자 여백이 화면 밖(잘린 쪽)으로 간다. `ox` · `oy`는 늘린 surface 그림의
+/// 자리라(`blitClip` · `surfacePoint` · `damageScreen`이 그렇게 읽는다) 포인터 좌표는 여전히 surface 좌표다.
+pub fn fitGeom(a: Area, sw: u32, sh: u32, geom: ?Rect) ?Fit {
+    const g = geom orelse return fitIn(a, sw, sh);
+    const x0: i64 = @max(@as(i64, g.x), 0);
+    const y0: i64 = @max(@as(i64, g.y), 0);
+    const x1: i64 = @min(@as(i64, g.x) + g.w, @as(i64, sw));
+    const y1: i64 = @min(@as(i64, g.y) + g.h, @as(i64, sh));
+    if (x1 <= x0 or y1 <= y0) return fitIn(a, sw, sh);
+    var f = fitIn(a, @intCast(x1 - x0), @intCast(y1 - y0)) orelse return null;
+    f.ox += @as(u32, @intCast(x0)) * f.k;
+    f.oy += @as(u32, @intCast(y0)) * f.k;
+    return f;
+}
+
+/// 창의 surface 좌표 (0, 0)이 놓인 화면 자리(늘린 단위 `f.k`). 자식의 화면 원점은 여기에 (뿌리 좌표의 자리 × `k`)를 더한다.
+pub fn rootOrigin(f: Fit) [2]i64 {
+    return .{ @as(i64, f.x) - f.ox, @as(i64, f.y) - f.oy };
+}
+
+/// premultiplied ARGB `src`를 `dst` 위에 얹는다(over). 결과의 알파는 FF — 프레임버퍼는 XRGB다.
+pub fn over(src: u32, dst: u32) u32 {
+    const a = src >> 24;
+    if (a == 0xFF) return src;
+    if (a == 0) return dst;
+    const inv = 255 - a;
+    var out: u32 = 0xFF000000;
+    var sh: u5 = 0;
+    while (true) : (sh += 8) {
+        const s = (src >> sh) & 0xFF;
+        const d = (dst >> sh) & 0xFF;
+        const c: u32 = @min(@as(u32, 255), s + (d * inv + 127) / 255);
+        out |= c << sh;
+        if (sh == 16) break;
+    }
+    return out;
+}
+
+/// surface 하나(`src`, `sw` × `sh` surface 단위, buffer_scale `bs`)를 화면 원점 (`ox`, `oy`)에 `k`배로 놓아 `clip` 안만 그린다(design 결정 49).
+/// `argb`면 premultiplied over로 섞고, 아니면(XRGB) 덮는다. 원점은 음수일 수 있다(자식이 부모 밖으로 나간 자리). 화면 픽셀 `X`는 버퍼 픽셀
+/// `(X − ox) · bs / k`다 — `blitClip`과 같은 셈이다.
+pub fn blendClip(dst: [*]u8, dst_pitch: u32, ox: i64, oy: i64, k: u32, src: [*]const u8, src_stride: u32, bs: u32, sw: u32, sh: u32, clip: Area, argb: bool) void {
+    const kk: i64 = k;
+    const x0 = @max(ox, @as(i64, clip.x));
+    const y0 = @max(oy, @as(i64, clip.y));
+    const x1 = @min(ox + @as(i64, sw) * kk, @as(i64, clip.x) + clip.w);
+    const y1 = @min(oy + @as(i64, sh) * kk, @as(i64, clip.y) + clip.h);
+    if (x1 <= x0 or y1 <= y0) return;
+    const b: i64 = bs;
+    var y = y0;
+    while (y < y1) : (y += 1) {
+        const sy: usize = @intCast(@divFloor((y - oy) * b, kk));
+        const srow: [*]align(1) const u32 = @ptrCast(src + sy * src_stride);
+        const drow: [*]align(1) u32 = @ptrCast(dst + @as(usize, @intCast(y)) * dst_pitch);
+        var x = x0;
+        while (x < x1) : (x += 1) {
+            const sp = srow[@intCast(@divFloor((x - ox) * b, kk))];
+            const di: usize = @intCast(x);
+            drow[di] = if (argb) over(sp, drow[di]) else sp;
+        }
+    }
+}
+
+/// 버퍼 좌표의 damage `r`(그 surface의 buffer_scale `bs`)가 화면에서 차지하는 자리 — surface 원점 (`ox`, `oy`), 늘림 `k`. `clip`으로 자르고
+/// 겹치지 않으면 null. 바깥으로 반올림한다(`damageScreen`과 같다). 자식의 damage를 부분 blit에 더할 때 쓴다(design 결정 49).
+pub fn damageAt(ox: i64, oy: i64, k: u32, bs: u32, r: Area, clip: Area) ?Area {
+    const kk: i64 = k;
+    const b: i64 = bs;
+    const x0 = @max(ox + @divFloor(@as(i64, r.x) * kk, b), @as(i64, clip.x));
+    const y0 = @max(oy + @divFloor(@as(i64, r.y) * kk, b), @as(i64, clip.y));
+    const x1 = @min(ox + @divFloor((@as(i64, r.x) + r.w) * kk + b - 1, b), @as(i64, clip.x) + clip.w);
+    const y1 = @min(oy + @divFloor((@as(i64, r.y) + r.h) * kk + b - 1, b), @as(i64, clip.y) + clip.h);
+    if (x1 <= x0 or y1 <= y0) return null;
+    return .{ .x = @intCast(x0), .y = @intCast(y0), .w = @intCast(x1 - x0), .h = @intCast(y1 - y0) };
+}
+
+/// 화면 사각형 (`x`, `y`, `w` × `h` — 원점은 음수일 수 있다)이 `a` 안에 다 드는가. 자식이 창의 보이는 사각형 밖으로 나가면 부분 blit을 안 쓰고
+/// 통째로 간다(그 바깥은 통째 프레임만 다시 그리므로).
+pub fn within(x: i64, y: i64, w: i64, h: i64, a: Area) bool {
+    return x >= a.x and y >= a.y and x + w <= @as(i64, a.x) + a.w and y + h <= @as(i64, a.y) + a.h;
+}
+
+/// 입력 영역(`wl_surface.set_input_region`, design 결정 50). `all`이면 무한(xml의 처음 값 · null region), 아니면 `box`(상자의 합 — 없으면 빈 영역).
+pub const Input = struct {
+    all: bool = true,
+    box: ?Box = null,
+
+    /// surface 좌표의 점(`wl_fixed`)이 영역 안인가.
+    pub fn contains(self: Input, fx: i64, fy: i64) bool {
+        if (self.all) return true;
+        const b = self.box orelse return false;
+        return fx >= b.x0 * 256 and fx < b.x1 * 256 and fy >= b.y0 * 256 and fy < b.y1 * 256;
+    }
+};
+
+/// 포인터가 고를 수 있는 surface 하나(design 결정 51) — 뿌리 surface 좌표의 자리(`x` · `y`, surface 단위)와 크기, 입력 영역.
+pub const Cand = struct { x: i64, y: i64, w: i64, h: i64, input: Input };
+
+/// 뿌리 surface 좌표의 점(`wl_fixed` — `surfacePoint`가 준 값)이 어느 후보 위인가. `cands`는 위에서부터다 — 처음 맞는 것. 없으면 null(부르는 쪽이
+/// 뿌리를 고른다). 후보의 사각형 안이고 그 입력 영역 안이어야 한다(Chromium의 bubble은 위 44줄을 입력 영역에서 뺀다 — 그 자리는 부모의 주소창이다).
+pub fn pick(cands: []const Cand, fx: i64, fy: i64) ?usize {
+    for (cands, 0..) |c, i| {
+        if (fx < c.x * 256 or fy < c.y * 256 or fx >= (c.x + c.w) * 256 or fy >= (c.y + c.h) * 256) continue;
+        if (c.input.contains(fx - c.x * 256, fy - c.y * 256)) return i;
+    }
+    return null;
+}
+
+/// 쌓임 순서의 한 칸을 다른 칸 바로 위(`above`) 또는 아래로 옮긴다(`wl_subsurface.place_above/below`). `items`는 아래에서부터이고 둘 다 들어 있어야
+/// 한다 — 없으면 false. 길이는 그대로다(빼고 넣기).
+pub fn restack(comptime T: type, items: []T, who: T, ref: T, above: bool) bool {
+    const from = std.mem.indexOfScalar(T, items, who) orelse return false;
+    _ = std.mem.indexOfScalar(T, items, ref) orelse return false;
+    if (who == ref) return false;
+    // 빼기 — 뒤를 당긴다.
+    var i = from;
+    while (i + 1 < items.len) : (i += 1) items[i] = items[i + 1];
+    const n = items.len - 1;
+    const r = std.mem.indexOfScalar(T, items[0..n], ref).?;
+    const at = if (above) r + 1 else r;
+    // 넣기 — 뒤를 민다.
+    var j = n;
+    while (j > at) : (j -= 1) items[j] = items[j - 1];
+    items[at] = who;
+    return true;
+}
+
+/// subsurface가 실제로 sync처럼 구는가(xml) — 자기가 sync이거나, 부모가 sync처럼 굴면(재귀) 그렇다. `chain`은 자기부터 위로 각 subsurface의 sync
+/// 깃발이다(뿌리 surface는 subsurface가 아니라 들지 않는다 — 늘 desync처럼 군다).
+pub fn effectiveSync(chain: []const bool) bool {
+    for (chain) |s| if (s) return true;
+    return false;
+}
