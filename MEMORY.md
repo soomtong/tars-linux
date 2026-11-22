@@ -38,6 +38,8 @@
 - [net · ntp 기본값은 off](docs/decisions/feedback_network_default_stays_off.md) — seed의 `net` · `ntp`는 `off`, 켜는 법은 문서로
 - [superpowers 제거](docs/decisions/feedback_superpowers_off.md) — superpowers plugin을 user scope에서 지운 이유(2026-10-03)
 
+- [Push sparingly](docs/decisions/feedback_push_sparingly.md) — `app-layer-0-3`의 push는 필요한 만큼만(CI 비용), tars-doom release는 로컬 빌드 업로드(2026-11-22)
+
 ## 사용자 (user)
 
 - [Learning goal](docs/decisions/user_learning_goal.md) — 목적은 속도가 아니라 이해다

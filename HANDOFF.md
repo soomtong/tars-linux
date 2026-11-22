@@ -1,4 +1,4 @@
-# HANDOFF: App Layer(0.3) — TK 끝, CR-M1 끝(`25e81b4` — 묶음 `browser` · `tars-browser` · 체인 `browser`, 거두기는 snapshot 고정). 다음 WY-M7(`wl_subcompositor` · `xdg_popup`) → CR-M2. tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) — TK 끝, CR-M1 끝(`25e81b4` — 묶음 `browser` · `tars-browser` · 체인 `browser`, 거두기는 snapshot 고정). 다음 WY-M7(`wl_subcompositor` · `xdg_popup`) → CR-M2. 브랜치 `app-layer-0-3`
 
 ## 목표
 
@@ -163,11 +163,11 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 
 ## 남은 작업
 
-- [ ] tars-doom: 브랜치 `wayland`의 로컬 commit `5179493`(포트)을 push하고 `v0.1.0` release를 낼지 사용자에게 묻는 중(밖으로 나가는 일).
-      지금 manifest의 tars-doom sha256 `0da0b4a7…`은 `5179493`을 로컬 컨테이너(`scripts/build-local.sh 0.1.0`)로 구운 것이고 그 tarball을
-      `devlayer/cache/<sha256>`에 손으로 두었다 — 캐시 없는 기계에서는 release 전까지 `make dev-layers`가 받기에서 멈춘다.
-      release 방법 두 갈래: (가) 태그 push → Actions가 빌드 · 업로드(sha256이 바뀌어 manifest를 고치고 wayland 체인 한 번), (나) 로컬 tarball을
-      `gh release create`로 올림(sha256 그대로). Actions workflow가 태그에서 함께 돌면 자산이 겹치니 (나)면 workflow를 고르게 손본다
+- [x] tars-doom v0.1.0 release(2026-11-22, 사용자 "로컬에서 빌드 후 업로드 정도면 충분함"): 브랜치 `wayland`를 push하고(`5179493` 포트 + `5ca8edd` workflow를 수동 실행
+      전용으로 — 태그가 다시 빌드해 자산을 덮지 않게) 로컬 tarball을 `gh release create v0.1.0`으로 올렸다. 내려받은 파일의 sha256이 manifest의 `0da0b4a7…`과 같다.
+      남은 것: `devlayer/manifest.toml`의 tars-doom 주석("임시: release 전")을 사실대로 고친다 — 체인이 도는 동안은 manifest를 건드리지 않는다
+- [ ] push(사용자 2026-11-22): `app-layer-0-3`은 필요한 만큼만 push한다(CI 비용 — 기억 `feedback_push_sparingly`). 지금 origin보다 110여 commit 앞서 있다.
+      이 브랜치의 맨 push는 CI를 안 부른다(`checks.yml`은 `main` push · PR · 수동) — WY-M7이 끝나 게이트가 초록일 때 한 번 올리는 것이 다음 자리다
 - [ ] web 판 ISO(사용자 2026-11-22): browser를 실은 ISO는 `web` 식별자로 따로 짓는다, lang-native는 뺀다 — 절차는 `project_release` 절차 3. 아직 굽지 않았다
       (셈 약 1.87 GiB) — 다음 버전을 낼 때 실제 크기 · 설치 smoke
 - [ ] WY-M7(CR design 결정 7): `wl_subcompositor` · `wl_subsurface` → `xdg_popup` · `xdg_positioner` → text-input의 귀속을 포커스 surface로. browser 체인에서
