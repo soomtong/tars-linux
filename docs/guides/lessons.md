@@ -415,6 +415,10 @@ random: crng init done`으로 빨갰고(`wait_for_at`의 `ink=118$`), 같은 판
 - vendor-repo(`repos.tsv`)는 시각 밖이라 live다. 같은 판 문자열의 짝이 바뀐다 — pgdg가 18.7을 다시 지어(`+2` → `+5`) `postgresql-client-18`의 후보를
   올리자 `postgresql-18=+2`가 `held broken packages`로 멈췄다(옛 캐시가 가려 왔다). 짝(`postgresql-client-18` · `libpq5` · `postgresql-common` ·
   `postgresql-client-common`)을 manifest에 같은 판으로 적어 풀었다.
+- 체인이 `disown`으로 띄워 셸보다 오래 살게 한 클라이언트는 표준 입력 · 에러까지 PTY에서 뗀다(`> log 2>&1 < /dev/null & disown`) — PTY를 물고 있으면 그 셸을
+  `exit`해도 terminal이 pane의 EOF를 못 봐 workspace가 안 닫힌다(CR-M2 wayland 판정 46의 첫 판).
+- Wayland 붙여넣기는 `receive` 줄 뒤에도 비동기다(글은 파이프로 들어간다) — 곧바로 친 Enter가 먼저 닿아 빈 입력에서 끝난다. 클라이언트가 글을 받았다는 신호를
+  기다린 뒤 친다(Chromium 주소창은 자동 완성 bubble의 `wl> subsurface … map`). 사람용 PNG도 같다 — 클라이언트가 다시 그릴 때를 서버 줄은 모른다(preedit 그림에 3초).
 
 ## 범용 명령
 

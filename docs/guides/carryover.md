@@ -479,3 +479,16 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   Chromium은 위에서부터 지운다(체인 · 시험 VM에서 `wl> gone pid=` 0).
 - `wl> popup` 줄은 창마다 64줄까지다 — Chromium은 단추 위에 머물 때마다 툴팁 popup을 만든다. 오래 쓰면 줄이 끊긴다(상한이 그 뜻).
 - 서버 쪽 장식(포커스 테두리 · 빈 칸 이름)은 하지 않았다(결정 55) — Chromium의 탭 줄이 그 자리다.
+
+## CR-M2가 남긴 것 (앱 풀스크린 · browser 체인의 장면, 그대로 이월)
+
+- 클라이언트가 청한 나오기(`unset_fullscreen`)가 갈 곳이 없어 실패하면(셸 workspace 없음 · strip에 slot 여덟 · 너무 좁음) configure로 답하지 않는다 — 창은 fullscreen
+  그대로다. xdg-shell은 답을 바란다(지금 상태의 configure를 한 번 더 보내면 된다).
+- 옮긴 첫 프레임은 옛 버퍼를 새 자리 가운데에 그린다 — Chromium이 새 크기를 그릴 때까지 0.15 ~ 0.4초(체인 부하에서 1.1초). 검정 한 프레임으로 숨길지는 정하지 않았다.
+- 크기가 바뀌어 닫힌 popup(`done why=resize`)을 Chromium은 다시 열지 않는다 — 사람이 다시 누른다(WY 결정 53 그대로).
+- 실측 줄 `wl> fullscreen frame us=` · `commit ms=`는 남겨 두었다(판정은 안 쓴다).
+- 처음부터 자기 workspace로 뜬 창(둠)은 `Cmd+Ctrl+F`로 column이 되지 않는다(home이 없다 — WY 결정 57).
+- HTTPS는 게이트 밖이다(사람 녹화 D) — 체인의 망은 `restrict=on` SLIRP의 http stub 하나다. Chromium의 미리 연결(요청 줄 없는 연결)이 stub에 한 번 온다(로그에 빈 줄).
+- browser 체인은 부팅 하나에 판정 열셋이다 — 앞 장면이 깨지면 뒤가 안 돈다. 게이트의 가장 긴 lane(ISO + 큰 메모리)에 있어 더한 초가 게이트 끝을 그대로 민다.
+- 배율 2: column의 Chromium(논리 296폭)은 여전히 `set_min_size(500)`보다 좁다 — `Cmd+Ctrl+F`의 자기 workspace(640 × 400)에서는 된다. 메뉴는 여전히 작다(resize_y).
+- 녹화 D는 아직 안 찍었다(사람) — 따라 칠 키 열 줄은 CR-M2 plan의 결과 절.

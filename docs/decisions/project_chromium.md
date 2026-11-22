@@ -1,6 +1,6 @@
 ---
 name: project_chromium
-description: Chromium(CR-M0 · CR-M1, 2026-11-22, 브랜치 app-layer-0-3) — Debian trixie의 chromium이 수정 없이 sandbox를 켠 채 사용자로 TARS compositor에 뜬다. 묶음 browser · tars-browser · 체인 browser. 벽은 wl_subcompositor 하나(WY-M7). 거두기는 snapshot.debian.org의 한 시각 + InRelease sha256으로 고정
+description: Chromium(CR-M0~M2, 2026-11-22, 브랜치 app-layer-0-3)이 끝났다 — Debian trixie의 chromium이 수정 없이 sandbox를 켠 채 사용자로 TARS compositor에 뜨고 주소창 한글 · 클립보드 양방향 · 메뉴 · 풀스크린(자기 workspace)이 된다. 묶음 browser · tars-browser · 체인 browser. 거두기는 snapshot.debian.org의 한 시각 + InRelease sha256으로 고정. 함정 아홉
 metadata:
   type: project
 ---
@@ -27,9 +27,17 @@ App Layer(0.3)의 4단. design `docs/specs/2026-11-22-tars-chromium-design.md`(�
   (gschemas 등)가 묶음에 없으면 첫 키에서 죽는다(harvest의 설치 전후 비교가 싣는다).
 - 화면의 글자 판정은 잉크 수로 못 한다 — 두부(빈 사각형)도 잉크가 같다. 잉크의 색 가짓수(안티에일리어싱)로 가른다.
 
+- (CR-M2) 요구사항에 적어 둔 결정이 코드에 없을 수 있다 — "앱의 풀스크린은 자기 workspace"(요구사항 결정 1 · 6)는 WY-M0~M7을 지나며 "첫 commit 전의 것만"으로 남아
+  있었고, 조사가 `Cmd+Ctrl+F` · F11을 실제로 눌러 보고서야 드러났다. milestone의 조사는 녹화 장면을 그대로 쳐 본다.
+- (CR-M2) 클라이언트에 주는 상태가 앱의 화면을 바꾼다 — Chromium은 `fullscreen` 상태에 탭 줄 · 주소창을 감춘다. `Cmd+Ctrl+F`(TARS의 chrome을 끄는 것)는 `maximized`,
+  F11(앱이 청한 것)은 `fullscreen`으로 갈랐다(WY design 결정 58). 정하기 전에 시제품으로 두 상태의 화면을 본다.
+
+CR-M2(plan `docs/plans/2026-11-22-tars-chromium-cr-m2.md`)로 선 것: 앱 풀스크린 ↔ 자기 workspace(`enterOwn` · `leaveOwn`, 돌아갈 곳은 workspace의 `uid`), browser 체인의
+판정 7~11(셸 → Chromium 붙여넣기 · 주소창 한글 · `restrict=on` SLIRP의 http stub 페이지 · Chromium → 셸 · `Cmd+Ctrl+F`와 F11 왕복), wayland 판정 45~47.
+
 배포(사용자 2026-11-22): "browser가 포함된 묶음은 web 식별자를 달아서 별도 빌드. lang native 없어도 됨" — browser는 기본 판에 넣지 않고 `tars-<ver>-web-x86_64.iso`로
 따로 낸다(lang-native 뺌, 절차는 [[project_release]]).
 
-남긴 것: `docs/guides/carryover.md`의 "CR-M0 · CR-M1이 남긴 것". 실측은 `measurements.md` 115.
+남긴 것: 녹화 D(사람), web 판 ISO, `docs/guides/carryover.md`의 "CR-M0 · CR-M1이 남긴 것" · "CR-M2가 남긴 것". 실측은 `measurements.md` 115 · 118.
 
-관련: [[project_dev_layer]] · [[project_ui_toolkit]] · [[project_release]]
+관련: [[project_dev_layer]] · [[project_ui_toolkit]] · [[project_wayland_server]] · [[project_release]]

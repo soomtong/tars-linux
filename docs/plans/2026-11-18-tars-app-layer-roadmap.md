@@ -25,7 +25,7 @@ SW-M0 ─ SW-M1 ─ SW-M2 ─ SW-M3
    └─ WY-M0 ─ WY-M1 ─ WY-M2 ─ WY-M3 ─ WY-M4 ─ WY-M5 ─ WY-M6
                (녹화 A)                  (녹화 B는 WY-M5 뒤)
                                                               └─ TK-M0 ─ TK-M1 ─ TK-M2 ─ TK-M3 ─ TK-M4 ─ TK-M5 ─ TK-M6 (녹화 C) — 끝(2026-11-22)
-                                                              └─ CR-M0 ─ WY-M7 ─ CR-M1 ─ CR-M2 (녹화 D)
+                                                              └─ CR-M0 ─ CR-M1 ─ WY-M7 ─ CR-M2 (녹화 D) — 끝(2026-11-22)
 ~~~
 
 한 번에 한 줄씩 한다. 권장 순서는 SW-M0~M3(끝, 2026-11-19) → WY-M0 → WY-M1(녹화 A)
@@ -134,6 +134,8 @@ design doc: `docs/specs/2026-11-22-tars-chromium-design.md`(접두사 CR). 새 �
 
 5판(2026-11-22, CR design 결정 8): CR-M0이 재 보니 첫 화면은 지금 서버로 이미 뜬다. 그래서 CR-M1(묶음 · 문 · 체인)을 WY-M7보다 먼저 하고, WY-M7의 결과를
 진짜 Chromium으로 바로 검증한다. 순서는 CR-M0(끝) → CR-M1(끝) → WY-M7(`wl_subcompositor` → `xdg_popup` → text-input의 surface 귀속 — 끝, 2026-11-22: WY 서브프로젝트 끝) → CR-M2.
+6판(2026-11-22): CR-M2가 끝났다 — 요구사항 결정 1 · 6의 앱 풀스크린(자기 workspace)이 여기서 섰다(WY design 결정 56~58). SW · WY · TK · CR 네 단의 코드가 다 섰고
+남은 것은 사람 녹화 넷(A 둠 · B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)이다.
 
 | milestone | 서는 것 | 끝나는 조건 |
 |---|---|---|

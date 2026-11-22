@@ -3,8 +3,9 @@
 접두사: CR
 
 Date: 2026-11-22
-Status: CR-M1 끝(2026-11-22, `25e81b4` — 묶음 `browser` · `tars-browser` · 체인 `browser`, 루트 게이트 36/37 + 블루투스 체인의 알려진 간헐 크래시 재실행 초록).
-사용자 위임(2026-11-18 "주요 결정은 너의 의견에 따를 테니까")으로 Claude가 정했다. 다음은 WY-M7 plan(`wl_subcompositor` → `xdg_popup` → text-input의 surface 귀속).
+Status: 끝(2026-11-22). CR-M0(재기) · CR-M1(`25e81b4` — 묶음 `browser` · `tars-browser` · 체인 `browser`) · WY-M7(`9b945c7` · `f0f3524`) · CR-M2(`1965553` · `7fc4142` — 앱 풀스크린 ·
+주소창 한글 · 클립보드 양방향 · `net` 페이지, plan `docs/plans/2026-11-22-tars-chromium-cr-m2.md`). 사용자 위임(2026-11-18 "주요 결정은 너의 의견에 따를 테니까")으로 Claude가 정했다.
+남은 것은 녹화 D(사람)와 web 판 ISO(버전을 낼 때).
 브랜치 `app-layer-0-3`.
 
 요구사항 `docs/specs/2026-11-18-tars-app-layer-requirements.md`(R-CR-1~6, 결정 3 · 8, 위험 6, 녹화 D), 순서 `docs/plans/2026-11-18-tars-app-layer-roadmap.md`의 4단.

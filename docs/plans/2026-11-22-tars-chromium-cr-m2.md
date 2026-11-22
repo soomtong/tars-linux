@@ -3,7 +3,7 @@
 Date: 2026-11-22
 Design: CR design `docs/specs/2026-11-22-tars-chromium-design.md`(milestone 표 CR-M2, 결정 9 고침 · 10), WY design `docs/specs/2026-11-19-tars-wayland-server-design.md`
 (결정 56~58), 요구사항 결정 1 · 6 · R-WIN-2~4 · R-CR-5 · 녹화 D
-Status: 진행 중. 브랜치 `app-layer-0-3`.
+Status: 끝(2026-11-22 — 단계 A `1965553` · B `7fc4142`, 루트 게이트 둘 다 37/37 첫 판). 브랜치 `app-layer-0-3`.
 
 녹화 D: Chromium이 column으로 열린다 → `Cmd+Ctrl+F`로 자기 workspace → 페이지를 열고 URL을 복사해 셸에 붙인다(반대도) → 주소창에 한글.
 끝나는 조건은 그 장면들이 `browser/check.sh`의 판정으로 도는 것이다(녹화 자체는 사람).
@@ -150,3 +150,27 @@ HTTPS-Upgrades의 되돌림이 끼는가(시간). 6. 배율 2에서 자기 works
    (다) 옮길 때의 조합 확정은 그 창이 키보드 포커스일 때만. (라) app workspace 프레임은 메뉴 바를 안 그려 `menu> bar hidden` 줄이 없다(판정에서 뺌).
    lead의 대조: 확정 1~10 · 결정 56~58과 맞다, 지운 51줄은 다시 쓴 선언 · 주석과 함수로 뽑은 블록. 화면 판정 — maximized의 Chromium이 탭 줄 · 주소창이 산 채 화면 전체.
    루트 게이트 37/37 첫 판(`out/gate-logs/20261122-052448`, lanes 1,657초 — wayland 353초 · browser 76초), verify mismatch 0.
+2. 단계 B `7fc4142`: `browser/http_stub.pl`(guestfwd의 cmd — 요청 줄을 로그에, `/net.html`에 제목 `tars-net` · 바탕 `d35400`, 그 밖은 404) · QEMU의 망 줄
+   (`restrict=on` SLIRP + `guestfwd=tcp:10.0.2.100:80`) · 설정 디스크 `net=dhcp` · 페이지의 `?q=` 스크립트 · `type_chars`(Enter 없이)와 `?` · 판정 7~11 · 도움말 ·
+   `measurements.md` 118. 체인 browser 두 번 연속(391 · 389초) · wayland · display PASS, verify mismatch 0.
+   판정의 실제 값: 7 copy mode로 `clip> len=30 text=file:///home/cr/page.html?q=cr` → `wl> offer to=1 len=30` → `Cmd+L` · `Cmd+V` → `wl> receive … len=30 first=30` →
+   자동 완성 bubble의 `map` → Enter → `title=q-cr - Chromium` · 바탕 (1000, 400) `8e44ad`. 8 `…?q=` · Shift+Space · `m f s` → `wl> ime to=1 commit=(none) preedit=한` →
+   Shift+Space → `commit=한 preedit=(none)` → Enter → `title=q-한 - Chromium` · `4169e1`. 9 `link> state eth0 up=1 v4=1` · `10.0.2.100/net.html` → stub 로그
+   `GET /net.html HTTP/1.1` · `title=tars-net - Chromium` · `d35400`. 10 `Cmd+L` · `Cmd+C` → `wl> selection from=1 …` · `clip> len=26 text=http://10.0.2.100/net.html` →
+   셸 `Cmd+V` → `clip> paste len=26 bracketed=1` · 화면에 그 주소. 11 `meta_l-ctrl-f` → `wl> fullscreen id=1 on ws=2 from=1 by=key` · `configure … w=1280 h=800` ·
+   `commit … buf=1280x800 … at=0,0` · 옛 셸 column 자리 (100, 600, 200 × 150)까지 페이지 색 · 탭 줄 상자 (1000, 20, 200 × 20)는 페이지 색이 아님 · `Cmd+L`에 `ti enable` ·
+   오른쪽 누름 `wl> popup … new parent=main at=700,401` → Esc → `gone` → `off ws=1 slot=1 by=key` · column configure. F11 → `by=client` · 탭 줄 상자까지 페이지 색 → F11 →
+   `off … by=client`. `wl> gone pid=` 0.
+   plan과 달라진 것: (가) 판정 7은 `receive` 뒤 자동 완성 bubble의 `map`을 기다린 뒤 Enter — 붙인 글이 비동기로 들어가 첫 판에서 Enter가 빈 주소창에 닿았다(판정 쪽 빨강).
+   (나) 판정 10은 `Cmd+C` 뒤 Esc. (다) 11의 좌표는 그 시점의 net 페이지(`d35400`)에 맞췄고, 탭 줄이 사는지 · 사라지는지를 같은 상자 하나로 본다. (라) 체인 머리의
+   `perl -c`(`make quick`은 perl을 안 본다). (마) 사람용 PNG(preedit 밑줄 · 확정 뒤 · maximized · 메뉴 · F11)는 다시 그릴 때까지 3초를 둔다.
+   lead의 대조: 확정 11~13과 맞다, 지운 줄은 머리 주석과 둘로 나눈 `type_line`. 화면 판정 — 주소창의 `한`에 밑줄이 서고 자동 완성 줄에도 한글이 보인다.
+   실측(`measurements.md` 118): 장면 7 · 8 · 9 · 10 · 11이 5 ~ 6 · 6 ~ 10 · 4 ~ 5 · 1 ~ 2 · 4 ~ 5초, 체인 단독 389 ~ 441초. 실측 4 · 5 닫힘(`restrict=on`에서 DHCP · guestfwd가 돌고
+   HTTPS를 먼저 시도하지 않는다).
+   루트 게이트 37/37 첫 판(`out/gate-logs/20261122-070015`, lanes 1,749초 — browser 76 → 101초 · wayland 353초), verify mismatch 0.
+3. 마감: CR design Status "끝" · `completed.md` · 기억 `project_chromium` · carryover "CR-M2가 남긴 것" · lessons 둘(`disown`한 클라이언트의 PTY · 붙여넣기의 비동기) · 로드맵 6판.
+   서브에이전트 pane 둘(`cr-m2` · `cr-m2a`)은 닫았다.
+4. 녹화 D — 사람이 따라 칠 키(배율 1, 설정 `net=dhcp`, 바깥 망, apple 키보드):
+   `tars-browser https://duckduckgo.com &`(오른쪽 열, 콜드 약 25초) → `Cmd+Ctrl+F`(자기 워크스페이스 — 탭 줄 · 주소창이 산다) → `Cmd+L` · 주소 · Enter → `Cmd+L` · `Cmd+C` · `Esc` ·
+   `Cmd+1` · `echo ` · `Cmd+V` · Enter(셸에 주소) → 셸에서 `echo https://duckduckgo.com/?q=tars` · `Cmd+Shift+C` · `k` · `Shift+V` · `y` · `Cmd+2` · `Cmd+L` · `Cmd+V` · Enter →
+   `Cmd+L` · `https://duckduckgo.com/?q=` · `Shift+Space` · 신세벌로 한글 · `Shift+Space` · Enter → 오른쪽 누름(메뉴) · `Esc` → `F11` 왕복 → `Cmd+Ctrl+F`(원래 열) → `Cmd+Q`.
