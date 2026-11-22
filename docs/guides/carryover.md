@@ -449,7 +449,8 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 - Chromium은 주소창에 글자를 치면 죽는다 — 자동 완성 bubble이 서버에 없는 `wl_subcompositor`로 `get_subsurface`를 부른다(CR design 확인 3). 문맥 메뉴 · 앱 메뉴
   (`xdg_popup`)는 안 보인다. WY-M7이 푼다. 그때까지 주소는 `tars-browser https://…`처럼 인자로 준다.
 - 묶음 browser 294 MiB: gpu · media와 겹친 파일 지우기(→ 228)와 noto Serif CJK 빼기(−40)는 안 했다 — 새 "묶음 사이 의존"을 init · `make_iso.sh` · build에 들여야 한다.
-  기본 판 ISO에는 못 들어간다(2 GiB) — `make iso-full`(로컬)만 싣는다. 어느 판에 실을지는 버전을 낼 때. 묶음 수 15 / init의 `MAX = 16`.
+  기본 판 ISO에는 못 들어간다(2 GiB). 배포는 web 판(사용자 2026-11-22 — browser를 실은 ISO는 `web` 식별자로 따로 짓고 lang-native를 뺀다, `project_release` 절차 3).
+  셈으로 약 1.87 GiB — 첫 web 판을 낼 때 실제 크기와 설치 smoke를 본다. 묶음 수 15 / init의 `MAX = 16`.
 - 판올림은 넷을 함께: `devlayer/snapshot`의 시각과 InRelease sha256 셋 · chromium 판 · `libc6-dev`와 개발 컨테이너 이미지(initrd의 glibc) · pgdg 의존 넷. Debian chromium은
   주 1회쯤 보안 판이 온다. vendor-repo(pgdg)는 snapshot 밖이라 재빌드로 같은 판 문자열의 짝이 또 바뀔 수 있다.
 - setuid: base 묶음이 이미 4755 일곱(`mount` · `umount` · `passwd` · `chfn` · `chsh` · `gpasswd` · `ssh-keysign`)과 setgid 셋을 싣고, 묶음 squashfs는 `nosuid`로 붙지만 `/usr`

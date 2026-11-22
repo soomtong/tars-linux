@@ -168,6 +168,8 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
       `devlayer/cache/<sha256>`에 손으로 두었다 — 캐시 없는 기계에서는 release 전까지 `make dev-layers`가 받기에서 멈춘다.
       release 방법 두 갈래: (가) 태그 push → Actions가 빌드 · 업로드(sha256이 바뀌어 manifest를 고치고 wayland 체인 한 번), (나) 로컬 tarball을
       `gh release create`로 올림(sha256 그대로). Actions workflow가 태그에서 함께 돌면 자산이 겹치니 (나)면 workflow를 고르게 손본다
+- [ ] web 판 ISO(사용자 2026-11-22): browser를 실은 ISO는 `web` 식별자로 따로 짓는다, lang-native는 뺀다 — 절차는 `project_release` 절차 3. 아직 굽지 않았다
+      (셈 약 1.87 GiB) — 다음 버전을 낼 때 실제 크기 · 설치 smoke
 - [ ] WY-M7(CR design 결정 7): `wl_subcompositor` · `wl_subsurface` → `xdg_popup` · `xdg_positioner` → text-input의 귀속을 포커스 surface로. browser 체인에서
       "주소창에 글자를 쳐도 안 죽는다"까지. 그 뒤 CR-M2(주소창 한글 · 클립보드 양방향 · `net` · 풀스크린 — 녹화 D)
 - [ ] 녹화 C(사람 녹화 — `tars-files`: column에 뜸 · 방향키 · `Cmd+L` 한글 경로 · `Cmd+K` · `Cmd+C` → 셸 `Cmd+V` · 메뉴 바 · 강조 애니메이션. 장면은 toolkit 체인

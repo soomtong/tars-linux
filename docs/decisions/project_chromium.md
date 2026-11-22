@@ -27,6 +27,9 @@ App Layer(0.3)의 4단. design `docs/specs/2026-11-22-tars-chromium-design.md`(�
   (gschemas 등)가 묶음에 없으면 첫 키에서 죽는다(harvest의 설치 전후 비교가 싣는다).
 - 화면의 글자 판정은 잉크 수로 못 한다 — 두부(빈 사각형)도 잉크가 같다. 잉크의 색 가짓수(안티에일리어싱)로 가른다.
 
+배포(사용자 2026-11-22): "browser가 포함된 묶음은 web 식별자를 달아서 별도 빌드. lang native 없어도 됨" — browser는 기본 판에 넣지 않고 `tars-<ver>-web-x86_64.iso`로
+따로 낸다(lang-native 뺌, 절차는 [[project_release]]).
+
 남긴 것: `docs/guides/carryover.md`의 "CR-M0 · CR-M1이 남긴 것". 실측은 `measurements.md` 115.
 
 관련: [[project_dev_layer]] · [[project_ui_toolkit]] · [[project_release]]
