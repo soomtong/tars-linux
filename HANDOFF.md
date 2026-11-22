@@ -206,8 +206,11 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 - [ ] 0.2.3은 프리릴리스라 소개 페이지 `releases`에 안 넣었다 — 사용자가 원하면 넣는다
 - [x] `main`의 것을 0.3 줄로: rebase(사용자 2026-11-22). `main`의 `4782c9d`(PT-M0 — initrd에 fdisk · cfdisk, 클라우드 세션 · PR)
       위로 이 브랜치 123개를 옮겼다. 충돌은 문서 넷(HANDOFF · completed · initrd-criteria · lessons)뿐, PT의 행 · 절은 끝에 다시 넣었다
-- [ ] PT-M0: 사용자의 맥에서 루트 게이트 한 번(클라우드 세션은 devtools · pm · mise를 못 돌린다). 소개 페이지(`gh-pages`의
-      `data.js`)의 기능 목록에 "파티션 도구 fdisk · cfdisk" — 별도 브랜치라 PR에 안 들었다. 기억 `project_partition_tools`
+- [x] rebase 뒤 루트 게이트(2026-11-22, `out/gate-logs/20261122-093758`, 57분 15초 · lanes 2,253초): 36/37 — tools 검사 29
+      (sfdisk → `fdisk -l` → cfdisk) 초록. 빨간 하나는 `bluetooth`의 `btvirt` general protection fault(`carryover.md`의 간헐,
+      KH-M1 · CR-M1과 같은 모양), 같은 산출물로 체인만 다시 돌려 PASS(3분 47초)
+- [ ] PT-M0: 소개 페이지(`gh-pages`의 `data.js`)의 기능 목록에 "파티션 도구 fdisk · cfdisk" — 별도 브랜치라 PR에 안 들었다.
+      기억 `project_partition_tools`
 - [ ] 실기(사용자, 맥북 에어 2011): 링크 칸 · GPU 데모 판(`project_link_status` · `carryover.md` DY 절), 그리고 SW의 strip(`Cmd+R` 등)
 - [ ] 이월: janet 1.43.0(AVX2), mitos 0.2.1, 위임 결정(CE 4~7, LT 2), memcpy · memset glibc 측정, 클라우드 브랜치 정리, DC-M2 boot 7 여유
 
