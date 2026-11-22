@@ -1330,8 +1330,8 @@ exe = ["fakesteak"]
 # ── doom(WY-M1) — 둠이 Wayland 창으로. 터미널이 compositor다(WY design 결정 13) ─────────────
 # tars-doom: 사용자의 fork(soomtong/tars-doom, doomgeneric, GPL-2.0)가 GitHub Actions(debian:trixie x86_64)로 내는 Wayland 포트.
 # glibc · libwayland-client 동적 — 둘 다 initrd에 있어 base 없이 혼자 실린다(standalone-bundles). 320x200을 그리고 서버가 정수 배로 늘린다.
-# 임시: v0.1.0 release 전이라 sha256은 로컬 컨테이너 빌드(tars-doom `5179493`, scripts/build-local.sh)의 것이고 그 tarball을 devlayer/cache/<sha256>에
-# 손으로 둔다. release 뒤 url의 자산을 받아 GitHub digest로 바꾼다.
+# v0.1.0(2026-11-22)의 자산은 로컬 컨테이너 빌드(tars-doom `5179493`, scripts/build-local.sh)의 tarball을 `gh release create`로 올린 것이다 — release
+# workflow는 수동 실행 전용이라 태그가 다시 빌드해 자산을 덮지 않는다. 내려받은 자산의 sha256이 아래 값과 같다(올린 뒤 대조).
 [[tool]]
 name = "tars-doom"
 bundle = "doom"
