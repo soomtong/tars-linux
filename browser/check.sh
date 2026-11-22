@@ -16,10 +16,19 @@ cd "$(dirname "$0")" || exit 1
 #     읽는다(4 — CR design 결정 5 · 요구사항 결정 8: sandbox를 끄지 않는다)
 #   → (WY-M7) 주소창에 글자를 치면 자동 완성 bubble이 subsurface로 뜨고 Chromium이 살아 있다(3a — 3 뒤 · 4 앞)
 #   → (WY-M7) 오른쪽 누름의 문맥 메뉴가 xdg_popup으로 보이고 Esc에 사라진다(3b — 3a 뒤 · 4 앞)
+#   → (CR-M2) 셸에서 copy mode로 복사한 주소를 주소창에 Cmd+V로 붙여 연다 — 페이지 스크립트가 `?q=cr`을 제목 `q-cr`과 바탕 8e44ad로(7)
+#   → (CR-M2) 주소창에서 Shift+Space · `m f s`가 preedit `한`, 한/영 끄기가 확정하고, Enter의 주소가 제목 `q-한`과 바탕 4169e1이 된다(8)
+#   → (CR-M2) `net=dhcp`의 망(바깥 없는 SLIRP + stub)에서 `10.0.2.100/net.html`을 열면 stub이 그 요청을 받고 제목 tars-net · 바탕 d35400(9)
+#   → (CR-M2) 주소창의 Cmd+C가 셸 클립보드에 들어가(`clip> … text=http://10.0.2.100/net.html`) 셸의 Cmd+V로 붙는다(10)
+#   → (CR-M2) Cmd+Ctrl+F가 Chromium을 자기 workspace로 옮기고(maximized — 화면 전체가 페이지, 주소창이 살고, 오른쪽 누름 메뉴가 뜬다) 다시 누르면
+#     원래 column, F11은 같은 길을 fullscreen으로(탭 줄 · 주소창 없음) 오간다(11)
 #   → Cmd+Q가 close를 보내 Chromium이 스스로 끝나고(kill 없음) chromium 프로세스가 하나도 남지 않는다(5)
+# 도는 순서는 1 · 6 · 2 · 3 · 3a · 3b · 7 · 8 · 9 · 10 · 11 · 4 · 5다(부팅 하나 — 앞 장면이 깨지면 뒤가 안 돈다. 실패 줄이 판정 번호를 말한다).
 #
-# 부팅 하나, NIC 없음(R-CR-5의 망은 CR-M2). 설정 디스크 `shell=fish keyboard=apple user=cruser` + 라벨 tars-home의 홈 디스크(display 체인
-# 부팅 3의 모양). 키보드 apple이라 Cmd는 meta_l이다. 게스트 메모리는 CR_MEM(기본 2048 — CR design 결정 9). 루트 check.sh는 기본값이
+# 부팅 하나. 설정 디스크 `shell=fish keyboard=apple user=cruser net=dhcp` + 라벨 tars-home의 홈 디스크(display 체인 부팅 3의 모양).
+# 망(CR-M2 plan 확정 11, CR design 결정 10): SLIRP `restrict=on`에 guestfwd 하나 — 게스트는 바깥(인터넷 · 컨테이너)에 못 나가고 10.0.2.100:80의
+# `http_stub.pl`(연결마다 perl, 요청 줄을 STUBLOG에 적는다)만 본다. Chromium의 배경 요청이 회선에 안 기대고 컨테이너 포트를 안 쓴다. HTTPS는 게이트 밖이다.
+# 키보드 apple이라 Cmd는 meta_l이다. 게스트 메모리는 CR_MEM(기본 2048 — CR design 결정 9). 루트 check.sh는 기본값이
 # 2048 이상인 체인들을 한 lane에 묶는다(그 lane끼리 큰 게스트 둘이 겹치지 않게). monitor 포트는 45510 — 예약 범위(RP-M0)에서 45509(toolkit)
 # 다음이다.
 #
@@ -65,6 +74,10 @@ USER_NAME=cruser
 FIRST_SECONDS=60
 
 # 체인이 쓰는 페이지의 색(테마 · 다른 체인의 색과 겹치지 않는다). 소문자 hex는 ppm_ink의 출력 모양이다.
+# `?q=`(CR-M2 판정 7 · 8): 값이 `한`이면 PAGE_Q_KO, 그 밖이면 PAGE_Q_OTHER가 바탕이 된다. net 페이지(stub)의 바탕은 NET_BG(http_stub.pl과 같은 값).
+PAGE_Q_KO=4169e1
+PAGE_Q_OTHER=8e44ad
+NET_BG=d35400
 PAGE_BG=2e8b57
 PAGE_BOX=c0392b
 PAGE_TEXT_BG=f5f5dc
@@ -132,8 +145,8 @@ wait_for_count() {
   return 1
 }
 
-# 글자 한 줄을 키로 친다(끝에 Enter). 이 체인이 쓰는 글자만 안다 — 모르는 글자는 그 자리에서 실패한다.
-type_line() {
+# 글자열을 키로 친다(Enter 없이 — 주소창에 치다 한글로 넘어가는 판정 8). 이 체인이 쓰는 글자만 안다 — 모르는 글자는 그 자리에서 실패한다.
+type_chars() {
   local s="$1" i ch keys=()
   for (( i = 0; i < ${#s}; i++ )); do
     ch="${s:i:1}"
@@ -157,11 +170,17 @@ type_line() {
       \\) keys+=(backslash) ;;
       "'") keys+=(apostrophe) ;;
       '>') keys+=(shift-dot) ;;
+      '?') keys+=(shift-slash) ;;
       *) report_failure "type_line does not know the character '${ch}'" ;;
     esac
   done
-  keys+=(ret)
   type_keys "${keys[@]}"
+}
+
+# 글자 한 줄을 치고 Enter.
+type_line() {
+  type_chars "$1"
+  type_keys ret
 }
 
 # 상자 안 잉크(바탕과 다른 픽셀)의 수와 그 색의 가짓수 — `ink=N colours=M`.
@@ -191,7 +210,7 @@ IMAGE_VER="$(gzip -dc ../kernel/initrd.cpio 2>/dev/null | cpio -i --quiet --to-s
 CONFIG_IMG="${REPO_ROOT}/out/cr-config.img"
 HOME_IMG="${REPO_ROOT}/out/cr-home.img"
 SEED="$(mktemp -d)"
-printf '%s\n' 'shell=fish' 'keyboard=apple' "user=${USER_NAME}" > "$SEED/tars.conf"
+printf '%s\n' 'shell=fish' 'keyboard=apple' "user=${USER_NAME}" 'net=dhcp' > "$SEED/tars.conf"
 rm -f "$CONFIG_IMG"
 truncate -s 16M "$CONFIG_IMG"
 mkfs.ext2 -F -q -m 0 -L tars-cr -d "$SEED" "$CONFIG_IMG"
@@ -206,6 +225,10 @@ cat > "$LAYER_SEED/cr/page.html" <<EOF
 #box{position:absolute;left:40px;top:40px;width:300px;height:200px;background:#${PAGE_BOX}}
 #ko{position:absolute;left:40px;top:300px;font:64px sans-serif;color:#000;background:#${PAGE_TEXT_BG};padding:8px}</style>
 <div id="box"></div><div id="ko">한글 漢字</div>
+<script>
+const q = new URLSearchParams(location.search).get('q');
+if (q !== null) { document.title = 'q-' + q; document.body.style.background = q === '한' ? '#${PAGE_Q_KO}' : '#${PAGE_Q_OTHER}'; }
+</script>
 EOF
 chmod 0755 "$LAYER_SEED/cr"
 chmod 0644 "$LAYER_SEED/cr/page.html"
@@ -213,10 +236,15 @@ rm -f "$HOME_IMG"
 truncate -s $(( $(du -sm "$LAYER_SEED" | cut -f1) + 128 ))M "$HOME_IMG"
 mkfs.ext4 -F -q -L tars-home -d "$LAYER_SEED" "$HOME_IMG"
 rm -rf "$LAYER_SEED"
-echo "=== boot: ${USER_NAME} with the base, gpu, media and browser bundles (version ${IMAGE_VER}, -m ${CR_MEM}) ==="
+# 망의 stub(CR-M2 plan 확정 11). guestfwd의 cmd는 연결마다 새로 실행된다 — 경로에 쉼표가 없어야 한다(QEMU 옵션은 쉼표로 갈린다).
+STUBLOG="$(mktemp)"
+case "$PWD/http_stub.pl $STUBLOG" in *,*) report_failure "the stub's path has a comma (${PWD} · ${STUBLOG})" ;; esac
+perl -c http_stub.pl 2> /dev/null || report_failure "http_stub.pl does not compile (perl -c)"
+echo "=== boot: ${USER_NAME} with the base, gpu, media and browser bundles (version ${IMAGE_VER}, -m ${CR_MEM}), net=dhcp with a stub at 10.0.2.100:80 ==="
 
 qemu-system-x86_64 \
-  -nic none \
+  -netdev "user,id=n0,restrict=on,guestfwd=tcp:10.0.2.100:80-cmd:perl $PWD/http_stub.pl $STUBLOG" \
+  -device virtio-net-pci,netdev=n0 \
   -m "$CR_MEM" \
   -kernel ../kernel/build/arch/x86/boot/bzImage \
   -initrd ../kernel/initrd.cpio \
@@ -437,6 +465,225 @@ done
 [ "$(count_log 'terminal: wl> gone pid=')" -eq 0 ] || report_failure "(3b) a Wayland client went away"
 echo "(3b) ${NEW3B#terminal: }; probe ${BEFORE3B} -> ${AFTER3B} -> ${GONE3B}; the screen is ${JUDGE_DIR}/cr-menu.png"
 
+# ── CR-M2 판정 7~11의 도움 ─────────────────────────────────────────────────
+# 셸에 칠 것이 있으면 한글을 끈다(WY-M7의 교훈 — 한글이 켜진 채 친 명령). 마지막 `hangul> on=` 줄이 true일 때만 Shift+Space.
+hangul_off() {
+  local label="$1" offs
+  if tlog | tr -d '\r' | grep -aoE 'terminal: hangul> on=(true|false)' | tail -n 1 | grep -a 'on=true' > /dev/null; then
+    offs="$(count_log 'terminal: hangul> on=false')"
+    type_keys shift-spc
+    wait_for_count 'terminal: hangul> on=false' $((offs + 1)) || report_failure "(${label}) Shift+Space did not turn hangul off"
+  fi
+}
+# 키보드를 셸로(Cmd+[ — Chromium column이 act=0) · Chromium으로(Cmd+] — act=1). column의 configure 줄로 기다린다.
+to_shell() {
+  local n
+  n="$(count_log "terminal: wl> configure id=${CR_ID} w=616 h=752 act=0")"
+  type_keys meta_l-bracket_left
+  wait_for_count "terminal: wl> configure id=${CR_ID} w=616 h=752 act=0" $((n + 1)) || report_failure "($1) Cmd+[ did not take the keyboard from chromium"
+}
+to_chromium() {
+  local n
+  n="$(count_log "terminal: wl> configure id=${CR_ID} w=616 h=752 act=1")"
+  type_keys meta_l-bracket_right
+  wait_for_count "terminal: wl> configure id=${CR_ID} w=616 h=752 act=1" $((n + 1)) || report_failure "($1) Cmd+] did not give chromium the keyboard"
+}
+# Cmd+L — 주소창이 text input을 켤 때(`ti enable`)까지 기다린다(포커스 이동은 Chromium 안에서 비동기 — 판정 3a).
+address_bar() {
+  local n
+  n="$(count_log "terminal: wl> ti enable to=${CR_ID}([^0-9]|$)")"
+  type_keys meta_l-l
+  wait_for_count "terminal: wl> ti enable to=${CR_ID}([^0-9]|$)" $((n + 1)) || report_failure "($1) Cmd+L did not focus the address bar"
+}
+# 상자 하나가 한 색이 될 때까지 덤프한다(10초). 마지막 덤프는 SHOT에 남는다.
+wait_colour() {
+  local label="$1" box="$2" want="$3" got="" x y w h
+  read -r x y w h <<<"$box"
+  for _ in $(seq 1 20); do
+    screendump "$SHOT" || report_failure "(${label}) screendump did not write ${SHOT}"
+    got="$(ppm_ink "$SHOT" "$x" "$y" "$w" "$h")"
+    [ "$got" = "bg=${want} ink=0" ] && return 0
+    sleep 0.5
+  done
+  echo "(${label}) at ${box}: ${got}, want bg=${want} ink=0"
+  return 1
+}
+# 판정 7~11의 초(장면마다 — measurements 118).
+scene_t0() { SCENE_T0="$(date +%s)"; }
+scene_s() { echo $(( $(date +%s) - SCENE_T0 )); }
+
+# ── 판정 7: 셸 → Chromium — copy mode로 복사한 주소를 주소창에 붙여 연다(CR-M2 plan 확정 12) ─────────────────────
+#
+# 3b 끝에 키보드는 Chromium이다. 셸에 `echo file:///home/cr/page.html?q=cr`(fish는 `?`를 글롭으로 안 읽는다) → copy mode(`Cmd+Shift+C` · `k` · `Shift+V` · `y`)로
+# 그 출력 줄 → `clip> len=30 text=…`. Cmd+]이면 서버 사본이 키보드 enter 앞에 offer로 간다(`wl> offer to=ID len=30`). Cmd+L · Cmd+V(호환 모드라 Ctrl+V) →
+# `wl> receive … len=30 first=30` → Enter → 페이지 스크립트가 제목 `q-cr`(`wl> title` — TITLE_LINES 16) · 바탕 8e44ad.
+echo "=== (7) a URL copied in the shell is pasted into chromium's address bar and opened ==="
+scene_t0
+Q_CR="file:///home/cr/page.html?q=cr"
+to_shell 7
+hangul_off 7
+type_line "echo ${Q_CR}"
+wait_for_screen '\| file:///home/cr/page\.html\?q=cr' || report_failure "(7) the shell did not print the URL"
+CLIPS="$(count_log 'terminal: clip> len=')"
+type_keys meta_l-shift-c
+type_keys k shift-v y
+wait_for_count 'terminal: clip> len=' $((CLIPS + 1)) || report_failure "(7) copy mode did not copy the line"
+wait_for_log "terminal: clip> len=${#Q_CR} text=file:///home/cr/page\\.html\\?q=cr" || report_failure "(7) the shell clipboard is not '${Q_CR}' ($(tlog | grep -aoE 'terminal: clip> len=[0-9]+ text=[^|]*' | tail -n 1 | tr -d '\r'))"
+OFFERS="$(count_log "terminal: wl> offer to=${CR_ID} len=${#Q_CR}([^0-9]|$)")"
+to_chromium 7
+wait_for_count "terminal: wl> offer to=${CR_ID} len=${#Q_CR}([^0-9]|$)" $((OFFERS + 1)) || report_failure "(7) no 'wl> offer to=${CR_ID} len=${#Q_CR}' when chromium got the keyboard"
+address_bar 7
+# 붙인 글은 `receive` 뒤 파이프로 비동기로 들어간다 — Enter가 먼저 닿으면 빈 주소창에서 끝난다(1회차). 글이 주소창에 들어가면 자동 완성 bubble이
+# 매핑된다 — 그것을 기다린 뒤 친다.
+MAPS7="$(count_log "terminal: wl> subsurface id=${CR_ID} sub=[0-9]+ map ")"
+type_keys meta_l-v
+wait_for_log "terminal: wl> receive to=${CR_ID} mime=text/plain;charset=utf-8 len=${#Q_CR} first=${#Q_CR}" || report_failure "(7) chromium did not take the pasted URL (no 'wl> receive … len=${#Q_CR}')"
+wait_for_count "terminal: wl> subsurface id=${CR_ID} sub=[0-9]+ map " $((MAPS7 + 1)) || report_failure "(7) the pasted URL did not show in the address bar (no suggestion bubble)"
+sleep 0.5
+type_keys ret
+wait_for_log "terminal: wl> title id=${CR_ID} app_id=chromium-browser title=q-cr - Chromium" 15 || report_failure "(7) the pasted URL did not open (no title 'q-cr - Chromium')"
+# shellcheck disable=SC2086 # 상자는 낱말로 갈라 넘긴다.
+wait_colour 7 "$BG_PROBE" "$PAGE_Q_OTHER" || report_failure "(7) the page did not turn ${PAGE_Q_OTHER}"
+S7="$(scene_s)"
+echo "(7) clip> ${#Q_CR} bytes -> offer -> receive -> 'q-cr - Chromium', bg ${PAGE_Q_OTHER} (${S7}s)"
+
+# ── 판정 8: 주소창의 한글 — 조합 · 확정이 주소가 된다(CR-M2 plan 확정 12) ──────────────────────────────
+#
+# Cmd+L · `file:///home/cr/page.html?q=`(영문) → Shift+Space(한글) · 신세벌 `m f s` → `wl> ime to=ID commit=(none) preedit=한` → Shift+Space(한/영 끄기가 확정)
+# → `ime … commit=한 preedit=(none)` → Enter → 제목 `q-한 - Chromium` · 바탕 4169e1. 주소창 글자의 픽셀 판정은 넣지 않는다(조사 2부 — 색 37가지, 확정이
+# 주소로 돌아 제목 · 색에 나오는 것이 더 강하다). 사람용 PNG 둘(preedit 밑줄 · 확정 뒤, 주소창 띠 2배).
+echo "=== (8) Hangul typed in the address bar composes, commits and becomes the URL ==="
+scene_t0
+address_bar 8
+type_chars 'file:///home/cr/page.html?q='
+ONS="$(count_log 'terminal: hangul> on=true')"
+type_keys shift-spc
+wait_for_count 'terminal: hangul> on=true' $((ONS + 1)) || report_failure "(8) Shift+Space did not turn hangul on"
+type_keys m f s
+wait_for_log "terminal: wl> ime to=${CR_ID} commit=\\(none\\) preedit=한" || report_failure "(8) m f s did not compose 한 for chromium"
+# 사람용 그림 — Chromium이 preedit을 다시 그릴 때까지(TCG에서 1초는 모자랐다 — 옛 주소가 찍혔다).
+sleep 3
+screendump "$SHOT" || report_failure "(8) screendump did not write ${SHOT}"
+convert "$SHOT" -crop 616x120+644+40 +repage -scale 200% "${JUDGE_DIR}/cr-ko-preedit-2x.png" || report_failure "(8) could not write ${JUDGE_DIR}/cr-ko-preedit-2x.png"
+type_keys shift-spc
+wait_for_log "terminal: wl> ime to=${CR_ID} commit=한 preedit=\\(none\\)" || report_failure "(8) turning hangul off did not commit 한"
+sleep 3
+screendump "$SHOT" || report_failure "(8) screendump did not write ${SHOT}"
+convert "$SHOT" -crop 616x120+644+40 +repage -scale 200% "${JUDGE_DIR}/cr-ko-commit-2x.png" || report_failure "(8) could not write ${JUDGE_DIR}/cr-ko-commit-2x.png"
+type_keys ret
+wait_for_log "terminal: wl> title id=${CR_ID} app_id=chromium-browser title=q-한 - Chromium" 15 || report_failure "(8) the Hangul URL did not open (no title 'q-한 - Chromium')"
+wait_colour 8 "$BG_PROBE" "$PAGE_Q_KO" || report_failure "(8) the page did not turn ${PAGE_Q_KO}"
+S8="$(scene_s)"
+echo "(8) preedit 한 -> commit 한 -> 'q-한 - Chromium', bg ${PAGE_Q_KO} (${S8}s); the screens are ${JUDGE_DIR}/cr-ko-preedit-2x.png and cr-ko-commit-2x.png"
+
+# ── 판정 9: net 페이지 — 바깥 없는 SLIRP의 stub(CR-M2 plan 확정 11 · 12) ──────────────────────────────
+#
+# `net=dhcp`의 DHCP가 끝났다는 줄(`link> state eth0 up=1 v4=1` — 셸 프롬프트 전에 이미 선다, 조사 2부)을 보고, 주소창에 `10.0.2.100/net.html` Enter →
+# stub 로그의 `GET /net.html HTTP/1.1`(HTTPS를 먼저 시도한 흔적은 없었다 — 조사 2부) · 제목 `tars-net - Chromium` · 바탕 d35400.
+echo "=== (9) the net page comes from the stub at 10.0.2.100 over the restricted SLIRP ==="
+scene_t0
+wait_for_log 'terminal: link> state eth0 up=1 v4=1' 60 || report_failure "(9) eth0 never got an address (no 'link> state eth0 up=1 v4=1')"
+address_bar 9
+type_line '10.0.2.100/net.html'
+got9=0
+for _ in $(seq 1 150); do
+  if grep -a 'GET /net.html HTTP/1.1' "$STUBLOG" > /dev/null; then got9=1; break; fi
+  sleep 0.1
+done
+[ "$got9" = 1 ] || report_failure "(9) the stub got no 'GET /net.html' ($(tr '\n' ' ' < "$STUBLOG"))"
+wait_for_log "terminal: wl> title id=${CR_ID} app_id=chromium-browser title=tars-net - Chromium" 15 || report_failure "(9) the net page's title did not come"
+wait_colour 9 "$BG_PROBE" "$NET_BG" || report_failure "(9) the net page is not ${NET_BG}"
+S9="$(scene_s)"
+echo "(9) stub: $(sed -E 's/^[0-9]+\.[0-9]+ //' "$STUBLOG" | tr '\n' ';'); 'tars-net - Chromium', bg ${NET_BG} (${S9}s)"
+
+# ── 판정 10: Chromium → 셸 — 주소창의 Cmd+C가 셸에 붙는다(CR-M2 plan 확정 12) ──────────────────────────────
+#
+# Cmd+L · Cmd+C(호환 Ctrl+C) → `wl> selection from=ID mime=text/plain;charset=utf-8` · `clip> len=26 text=http://10.0.2.100/net.html`(scheme이 붙는다 — 조사 2부)
+# → Cmd+[ → `echo ` + Cmd+V → `clip> paste len=26 bracketed=1` → Enter → 화면에 그 주소(출력 줄).
+echo "=== (10) the address copied in chromium is pasted into the shell ==="
+scene_t0
+NET_URL="http://10.0.2.100/net.html"
+address_bar 10
+CLIPS="$(count_log 'terminal: clip> len=')"
+type_keys meta_l-c
+wait_for_log "terminal: wl> selection from=${CR_ID} mime=text/plain;charset=utf-8" || report_failure "(10) chromium's Cmd+C set no selection"
+wait_for_count 'terminal: clip> len=' $((CLIPS + 1)) || report_failure "(10) the selection did not reach the shell clipboard"
+wait_for_log "terminal: clip> len=${#NET_URL} text=http://10\\.0\\.2\\.100/net\\.html" || report_failure "(10) the shell clipboard is not '${NET_URL}' ($(tlog | grep -aoE 'terminal: clip> len=[0-9]+ text=[^|]*' | tail -n 1 | tr -d '\r'))"
+type_keys esc
+to_shell 10
+hangul_off 10
+type_chars 'echo '
+type_keys meta_l-v
+wait_for_log "terminal: clip> paste len=${#NET_URL} bracketed=1" || report_failure "(10) the shell's Cmd+V pasted no ${#NET_URL} bytes"
+type_keys ret
+wait_for_screen '\| http://10\.0\.2\.100/net\.html' || report_failure "(10) the shell did not print the pasted URL"
+S10="$(scene_s)"
+echo "(10) selection -> clip> ${#NET_URL} bytes -> paste -> the shell printed ${NET_URL} (${S10}s)"
+
+# ── 판정 11: 풀스크린 — 자기 workspace(CR-M2 plan 확정 1~5 · 12, report-a 8절) ──────────────────────────────
+#
+# 페이지는 net(바탕 d35400). Cmd+Ctrl+F → `wl> fullscreen id=ID on ws=2 from=1 by=key` · configure 1280 × 800 · 버퍼 1280 × 800(그림자 없음) — maximized라 탭 줄 ·
+# 주소창이 위 88픽셀에 살고 페이지가 화면 전체다: 옛 셸 column 자리 (100, 600, 200 × 150)와 BG_PROBE가 d35400. 주소창이 산다(Cmd+L에 `ti enable`, Esc).
+# 오른쪽 누름(700, 400) → `wl> popup … new` · 메뉴 안 (900, 500, 40 × 10)이 페이지 색에서 바뀐다 → Esc → 사라짐. Cmd+Ctrl+F → `off ws=1 slot=1 by=key` · column
+# configure 616 × 752 · BG_PROBE d35400 · 셸 쪽 (100, 600)은 페이지 색이 아니다. F11 → `on … by=client`(fullscreen — 탭 줄 · 주소창이 없어 (1000, 20, 200 × 20)까지 d35400,
+# F11 안내 bubble (441, 45) 397 × 51은 피한다) → F11 → `off … by=client` · column. 화살표는 (700, 400)에 남는다(상자들은 그 자리를 피한다).
+echo "=== (11) Cmd+Ctrl+F moves chromium to its own workspace and back, and so does F11 ==="
+scene_t0
+SHELL_PROBE="100 600 200 150"
+TOP_PROBE="1000 20 200 20"
+MENU11_PROBE="900 500 40 10"
+to_chromium 11
+CONF_COL="$(count_log "terminal: wl> configure id=${CR_ID} w=616 h=752 act=1")"
+type_keys meta_l-ctrl-f
+wait_for_log "terminal: wl> fullscreen id=${CR_ID} on ws=2 from=1 by=key" || report_failure "(11) Cmd+Ctrl+F did not move chromium (no 'wl> fullscreen id=${CR_ID} on ws=2 from=1 by=key')"
+wait_for_log "terminal: wl> configure id=${CR_ID} w=1280 h=800 act=1" || report_failure "(11) no 1280x800 configure for chromium"
+wait_for_log "terminal: wl> commit id=${CR_ID} buf=1280x800 scale=1 at=0,0" || report_failure "(11) chromium drew no 1280x800 buffer"
+wait_colour 11 "$SHELL_PROBE" "$NET_BG" || report_failure "(11) the page does not fill the old shell column (maximized)"
+wait_colour 11 "$BG_PROBE" "$NET_BG" || report_failure "(11) the page is not at ${BG_PROBE} (maximized)"
+# shellcheck disable=SC2086
+[ "$(ppm_ink "$SHOT" $TOP_PROBE)" != "bg=${NET_BG} ink=0" ] || report_failure "(11) the tab strip is gone in the maximized state"
+cp "$SHOT" "${SCREENS_DIR}/maximized.ppm"
+convert "$SHOT" "${JUDGE_DIR}/cr-maximized.png" || report_failure "(11) could not write ${JUDGE_DIR}/cr-maximized.png"
+address_bar 11
+type_keys esc
+move_to 700 400 || report_failure "(11) the pointer did not reach 700,400"
+POPS="$(count_log "terminal: wl> popup id=${CR_ID} pop=[0-9]+ new parent=main ")"
+hmp "mouse_button 2"
+hmp "mouse_button 0"
+wait_for_count "terminal: wl> popup id=${CR_ID} pop=[0-9]+ new parent=main " $((POPS + 1)) || report_failure "(11) the right click opened no popup on the own workspace"
+AFTER11=""
+for _ in $(seq 1 20); do
+  sleep 0.5
+  screendump "$SHOT" || report_failure "(11) screendump did not write ${SHOT}"
+  # shellcheck disable=SC2086
+  AFTER11="$(ppm_ink "$SHOT" $MENU11_PROBE)"
+  [ "$AFTER11" != "bg=${NET_BG} ink=0" ] && break
+done
+[ "$AFTER11" != "bg=${NET_BG} ink=0" ] || report_failure "(11) the context menu is not on the screen"
+convert "$SHOT" "${JUDGE_DIR}/cr-maximized-menu.png" || report_failure "(11) could not write ${JUDGE_DIR}/cr-maximized-menu.png"
+GONES="$(count_log "terminal: wl> popup id=${CR_ID} pop=[0-9]+ gone")"
+type_keys esc
+wait_for_count "terminal: wl> popup id=${CR_ID} pop=[0-9]+ gone" $((GONES + 1)) || report_failure "(11) Esc did not take the context menu away"
+wait_colour 11 "$MENU11_PROBE" "$NET_BG" || report_failure "(11) the page did not come back under the closed menu"
+type_keys meta_l-ctrl-f
+wait_for_log "terminal: wl> fullscreen id=${CR_ID} off ws=1 slot=1 by=key" || report_failure "(11) the second Cmd+Ctrl+F did not bring chromium back"
+wait_for_count "terminal: wl> configure id=${CR_ID} w=616 h=752 act=1" $((CONF_COL + 1)) || report_failure "(11) chromium did not get its column configure back"
+wait_colour 11 "$BG_PROBE" "$NET_BG" || report_failure "(11) the column is not the page again"
+# shellcheck disable=SC2086
+[ "$(ppm_ink "$SHOT" $SHELL_PROBE)" != "bg=${NET_BG} ink=0" ] || report_failure "(11) the shell side is still the page"
+type_keys f11
+wait_for_log "terminal: wl> fullscreen id=${CR_ID} on ws=2 from=1 by=client" || report_failure "(11) F11 did not move chromium (no '… on ws=2 from=1 by=client')"
+wait_colour 11 "$TOP_PROBE" "$NET_BG" || report_failure "(11) F11 left the tab strip on the screen"
+wait_colour 11 "$SHELL_PROBE" "$NET_BG" || report_failure "(11) the page does not fill the screen (F11)"
+convert "$SHOT" "${JUDGE_DIR}/cr-f11.png" || report_failure "(11) could not write ${JUDGE_DIR}/cr-f11.png"
+type_keys f11
+wait_for_log "terminal: wl> fullscreen id=${CR_ID} off ws=1 slot=1 by=client" || report_failure "(11) the second F11 did not bring chromium back"
+wait_for_count "terminal: wl> configure id=${CR_ID} w=616 h=752 act=1" $((CONF_COL + 2)) || report_failure "(11) chromium did not get its column configure back after F11"
+wait_colour 11 "$BG_PROBE" "$NET_BG" || report_failure "(11) the column is not the page again after F11"
+[ "$(count_log 'terminal: wl> gone pid=')" -eq 0 ] || report_failure "(11) a Wayland client went away"
+S11="$(scene_s)"
+echo "(11) Cmd+Ctrl+F: ws 2 maximized (page over the whole screen, address bar, context menu) and back; F11: fullscreen and back (${S11}s); the screens are ${JUDGE_DIR}/cr-maximized.png, cr-maximized-menu.png and cr-f11.png"
+
 # ── 판정 4: 렌더러의 sandbox ──────────────────────────────────────────────
 #
 # 화면 셸은 Chromium과 같은 uid라 /proc/<pid>/status · uid_map · ns/user가 읽힌다(단계 B 실측 2). 렌더러는 `--type=renderer`, 브라우저는
@@ -494,4 +741,4 @@ if tlog | grep -a 'terminal: verify> mismatch' > /dev/null; then
 fi
 echo "render verify lines $(count_log 'terminal: verify> '), no mismatch"
 
-echo "PASS: CR-M1 — four bundles over /usr; tars-browser without a Wayland display says why and exits 1; in the screen shell it starts Debian's Chromium on TARS's Wayland server as a chromium-browser window with a 636x772 buffer in ${FIRST_S}s; the page title, the HTML's colours and a Hangul and Hanzi box drawn by noto-cjk are on the screen; the renderer runs under seccomp in a user namespace of its own; Cmd+Q closes it with no kill and no process left"
+echo "PASS: CR-M1 · CR-M2 — four bundles over /usr; tars-browser without a Wayland display says why and exits 1; in the screen shell it starts Debian's Chromium on TARS's Wayland server as a chromium-browser window with a 636x772 buffer in ${FIRST_S}s; the page title, the HTML's colours and a Hangul and Hanzi box drawn by noto-cjk are on the screen; a URL copied in the shell opens from the address bar (${S7}s), Hangul typed there commits into the URL (${S8}s), the net page comes from the stub over the restricted SLIRP (${S9}s), the address copied in chromium pastes into the shell (${S10}s), Cmd+Ctrl+F and F11 move it to its own workspace and back (${S11}s); the renderer runs under seccomp in a user namespace of its own; Cmd+Q closes it with no kill and no process left"

@@ -682,6 +682,19 @@ buff/cache 1,174 MiB, QEMU 프로세스 RSS 2.27 GiB(VmHWM 2.36 — 게스트 �
 통째로 간다(그 프레임만). tars-wl-test의 불투명 64 × 64 자식은 통째 616 × 752에 695 ~ 1,760 µs(wayland 체인). 섞기는 정수 루프 그대로다 — 메뉴 한 장(412 × 735, 단계 B)이면
 약 12만 픽셀이라 같은 셈으로 50 ms 안팎이 될 것으로 보았으나 단계 B의 1:1 길(나눗셈 없음 · 알파 FF는 복사)로 117의 숫자가 됐다.
 117. popup 합성(WY-M7 단계 B, TCG 한 CPU · ReleaseSafe, 1280 × 800 배율 1, `wl> popup id= pop= paint … us=` — popup 한 장의 섞기, 처음 두 번). Chromium 156의 앱 메뉴
+118. Chromium의 망 · 클립보드 · 주소창 한글 · 풀스크린(CR-M2, TCG 한 CPU · `-m 2048`, 1280 × 800 배율 1, Chromium 156). 망: SLIRP `restrict=on`에서도 DHCP가 돌고
+(`eth0: offered 10.0.2.15 from 10.0.2.2`, 기다릴 줄 `terminal: link> state eth0 up=1 v4=1`은 셸 프롬프트 전에 선다) 게스트의 `curl http://1.1.1.1/`은 곧바로 종료 코드 7,
+guestfwd의 stub만 받는다. net은 첫 화면을 안 바꾼다(명령 → `commit buf=636x772` 체인에서 25 ~ 30초). `10.0.2.100/net.html` Enter → 0.4초 뒤 stub에 `GET /net.html HTTP/1.1`,
+1 ~ 2초 뒤 `GET /favicon.ico`, 그 뒤 요청 줄 없는 연결 하나(Chromium의 미리 연결), HTTPS를 먼저 시도한 흔적 없음. 주소창 한글: `Cmd+L` → `ti enable` 1.1초 안, `m f s` →
+preedit `ㅎ` · `하` · `한`, 한/영 끄기 → `commit=한` · 곧 `ti disable`, Enter → 1.1초 안 제목. 주소창 글자 상자(20 × 14)는 잉크 71 · 색 37가지(판정 3의 하한 60을 못 쓴다),
+preedit 밑줄 13픽셀 → 확정 뒤 0. Chromium이 preedit을 다시 그리기까지 TCG에서 1초가 모자랐다. 클립보드: 복사된 주소는 퍼센트 인코딩(`?q=%ED%95%9C`)이고 http 주소는
+scheme이 붙는다(`http://10.0.2.100/net.html`, 26바이트). 셸 → Chromium의 `receive` 뒤 붙인 글은 비동기로 들어간다 — 곧바로 친 Enter는 빈 주소창에서 끝났다(자동 완성
+bubble이 매핑된 뒤 친다). 풀스크린: `Cmd+Ctrl+F` → maximized 1280 × 800 버퍼(그림자 없음, 탭 줄 · 주소창이 살아 페이지 원점 (0, 88)), F11 → fullscreen(원점 (0, 0)),
+되돌리면 column 원점 (644, 107) 그대로(전에 F11의 10픽셀 잘림은 사라졌다). 옮긴 첫 프레임 12 ~ 19 ms(옛 버퍼를 새 자리 가운데에), 새 크기의 첫 commit까지 145 ~ 318 ms,
+되돌리기 38 ~ 71 ms(셸 프레임 통째, 체인 안 한 번은 170 ms) · 292 ~ 1,100 ms. tars-wl-test는 7 ~ 10 ms · 27 ~ 34 ms, 되돌리기 55 ~ 57 ms · 93 ms. 크기가 바뀌어 닫힌
+popup(`done why=resize`)을 Chromium은 다시 열지 않는다. 배율 2: 자기 workspace는 논리 640 × 400(`set_min_size(500)`을 넘는다) · 버퍼 1280 × 800 bs 2, 46.7 ms · 310 ms.
+체인 browser 단독 389 ~ 441초(`make check`, dev-layers 캐시 확인 포함 — CR-M1 · WY-M7의 414초와 같은 범위: 새 장면이 약 25초, 첫 화면이 net 부팅에서 몇 초 늘었다),
+장면 7 · 8 · 9 · 10 · 11이 5 ~ 6 · 6 · 4 ~ 5 · 1 ~ 2 · 4 ~ 5초. 같은 때 루트 게이트(단계 A 뒤)의 browser 76초 · lanes 1,657초.
 412 × 684(그림자 포함, 경계에 잘린 것) 1,073 ~ 1,119 µs, 문맥 메뉴 343 × 367 606 ~ 7,231 µs(둘째는 Chromium이 다시 그린 버퍼), 하위 메뉴 396 × 248(셸 column 위) 506 ~ 1,479 µs,
 `<select>` 99 × 130 65 ~ 99 µs, 툴팁 234 × 26 98 ~ 185 µs. `blendClip`의 k == bs 길(나눗셈 없이 같은 자리, 알파 FF는 그대로)이 단계 A의 0.4 µs/px을 약 0.004 µs/px로
 줄였다 — 반투명은 그림자 띠뿐이다. popup이 보이는 동안 프레임은 통째다(셸 pane 위에 걸치고 밑을 따로 들지 않는다) — browser 체인의 문맥 메뉴가 열린 동안 `wl> frame full`
