@@ -1,4 +1,25 @@
-# HANDOFF: App Layer(0.3) — TK 끝, CR-M1 끝(`25e81b4` — 묶음 `browser` · `tars-browser` · 체인 `browser`, 거두기는 snapshot 고정). 다음 WY-M7(`wl_subcompositor` · `xdg_popup`) → CR-M2. 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) — WY-M7 단계 A 끝(`9b945c7`, 루트 게이트 37/37), 단계 B(popup)는 구현이 작업 트리에 commit 안 된 채 있다. 다음: 단계 B 대조 · commit · 게이트 → CR-M2. 브랜치 `app-layer-0-3`(origin과 같음 `6552d54` + 이 commit)
+
+## 지금 멈춘 자리 (2026-11-22, Claude Code 앱 업데이트로 세션을 다시 시작 — 먼저 읽는다)
+
+- commit된 것은 전부 push했다(`origin/app-layer-0-3`). push는 필요한 만큼만(기억 `feedback_push_sparingly` — 이 브랜치의 맨 push는 CI를 안 부른다).
+- 작업 트리에 commit 안 된 변경이 있다 — WY-M7 단계 B(popup)다. 서브에이전트 `wy-m7`(Herdr pane `w3J:pR`)이 넣은 것이고 lead는 아직 대조하지 않았다:
+  `terminal/src/main.zig` · `terminal/src/wl/server.zig` · `terminal/src/wl_logic.zig` · `wl_logic_test.zig` · `wl_test_client.zig` · `wayland/check.sh` · `hidpi/check.sh` ·
+  `browser/check.sh` · `docs/help/desk.md`(약 +1,080줄). 버리지 않는다. 멈출 때의 상태: 호스트 검사 · `make quick` 통과, 체인 wayland 1회차를 도는 중이었다
+  (남은 것: wayland 2회차 · terminal · toolkit · hidpi · pointer · display · browser, 그리고 `measurements.md`와 보고서).
+- 이어 가는 순서:
+  1. `herdr pane list`로 `w3J:pR`의 에이전트 `wy-m7`이 살아 있는지 본다. 살아 있으면 보고 파일을 기다린다 —
+     `/private/tmp/claude-501/-Users-dp-Repository-tars-linux/dfcf0c26-e50b-4fcb-8c7e-3eabec33689d/scratchpad/wy7/report-b.md`(지시서는 같은 폴더의 `task-b.md`,
+     조사 `research.md`, 단계 A 보고 `report-a.md`. `/private/tmp`라 재부팅하면 없다 — 결정은 plan과 WY design 48~55에 다 있다).
+  2. 에이전트가 사라졌고 보고서도 없으면: 작업 트리의 변경이 단계 B의 구현이다. plan `docs/plans/2026-11-22-tars-wayland-server-wy-m7.md` 확정 7~10과 design 결정 52 · 53에
+     맞는지 읽고(positioner 셈의 호스트 표 · column 밖 합성 · verify 그림자의 fb 복사 · 포인터가 popup 먼저 · grab은 포커스 안 옮김 · 서버 쪽 닫기 셋), 새 에이전트에게
+     "남은 체인을 돌리고 판정 40~42 · hidpi 10 · browser 3b의 좌표와 실제 값을 보고"하게 한다. 체인은 하나씩(겹치면 `terminal/.zig-cache`가 경합한다).
+  3. 대조 → commit(좁은 경로) → `make gate`(37 체인, 약 45분 — BT-M2의 `btvirt` 간헐 크래시는 알려진 것, 그 체인만 다시) → plan 결과 · WY design Status ·
+     CR design 확인 9 고침(text-input은 이미 surface 귀속이었다) · carryover "WY-M7이 남긴 것" · HANDOFF → 끝난 pane 닫기(`herdr pane close w3J:pR`).
+  4. 그 뒤 `devlayer/manifest.toml`의 tars-doom 주석("임시: release 전")을 사실대로 고친다(v0.1.0은 2026-11-22에 냈다 — 체인이 도는 동안은 manifest를 안 건드렸다).
+  5. 다음 milestone은 CR-M2(주소창 한글 · 셸과 클립보드 양방향 · `net` · 풀스크린 workspace — 녹화 D의 장면을 체인 판정으로). web 판 ISO(browser 포함 · lang-native 뺌)는
+     버전을 낼 때.
+- docker에 측정용 이미지 둘(`cr0-chromium-img` · `cr0-dbg`)이 남아 있다 — CR이 끝나면 `docker rmi`.
 
 ## 목표
 
