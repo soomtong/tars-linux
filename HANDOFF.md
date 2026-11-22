@@ -2,6 +2,10 @@
 
 ## 지금 멈춘 자리 (2026-11-22 — 먼저 읽는다)
 
+- 그 뒤: 브랜치 리뷰(`/code-review high`)의 지적 여덟을 RF-M0으로 고쳤다(plan `docs/plans/2026-11-22-tars-review-fixes-rf-m0.md`, 서브에이전트
+  `rf-tk` · `rf-wl` — 끝나고 pane 닫음). 커밋 제목 길이 지적은 사용자가 고치지 않기로 했다. 루트 게이트 36/37(browser 판정 3의 첫 페이지 타이밍) →
+  browser 체인 단독 초록. carryover의 `unset_fullscreen` 답 없음 줄은 닫았다. 아래 "다음에 할 수 있는 것" 3의 첫 항목도 그것이다.
+
 - 이 세션이 한 것: WY-M7 단계 B 대조 · commit(`f0f3524`) · 게이트 → WY 닫기(`fb1604c`) → CR-M2 조사 · plan(`0c9e93a`, WY design 결정 56~58 · CR design 결정 10 · 11) →
   단계 A 앱 풀스크린 = 자기 workspace(`1965553`) → 단계 B browser 체인의 판정 7~11(`7fc4142`) → CR 닫기. 루트 게이트 셋이 모두 37/37 첫 판
   (`out/gate-logs/20261122-025252` · `20261122-052448` · `20261122-070015`).

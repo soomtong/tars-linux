@@ -188,6 +188,8 @@ pub const Server = struct {
     /// popup(WY-M7 단계 B, design 결정 52 · 53). 경계는 앞 workspace의 화면에서 위 띠와 상태 줄을 뺀 사각형이다 — App이 프레임마다 준다
     /// (`beginPopups`). `popup_changed`는 popup이 보이거나 사라지거나 움직였다 — 다음 프레임은 통째다(밑의 셸 pane을 다시 그린다).
     popup_bounds: ?logic.Area = null,
+    /// 프레임 번호 — `beginPopups`가 프레임마다 하나 올린다. 창의 `painted_frame`과 같으면 그 창은 이번 프레임에 옮겨졌다(`grabPress`).
+    frame_no: u64 = 0,
     popup_changed: bool = false,
     /// `wl> popup pop=N`의 번호.
     next_pop: u32 = 1,
@@ -735,14 +737,28 @@ pub const Server = struct {
     }
 
     /// 자기 workspace 창의 상태만 바꾼다(CR-M2 확정 5) — 자리 · 크기는 그대로. `Cmd+Ctrl+F`로 옮긴 창이 F11을 켜고 끌 때다.
-    /// 같은 상태면 아무것도 안 한다. 줄 `wl> state id=N fullscreen=0|1`.
+    /// 같은 상태면 지금 상태 그대로 답한다(`answerStay`, RF-M0 — `logic.wsAnswer`). 줄 `wl> state id=N fullscreen=0|1`.
     pub fn setWorkspaceState(self: *Server, id: u32, state: logic.WsState) void {
         const t = self.find(id) orelse return;
-        const was = t.place orelse return;
-        if (was == .column or was == state.place()) return;
+        switch (logic.wsAnswer(t.place, state)) {
+            .none => return,
+            .restate => return self.answerStay(id),
+            .change => {},
+        }
         t.place = state.place();
         sendConfigure(t, self.fb_w, self.fb_h, true);
         logline.print("terminal: wl> state id={d} fullscreen={d}\n", .{ id, @intFromBool(state == .fullscreen) });
+    }
+
+    /// 자기 workspace 창의 `set_fullscreen` · `unset_fullscreen`을 받았지만 자리도 상태도 그대로다(RF-M0) — 돌아갈 곳이 없다(`leaveOwn`) ·
+    /// 이미 그 상태다. xdg-shell은 그 요청에 configure로 답하라고 하므로 지금 상태 그대로 하나를 보낸다(column의 `answerFullscreen`과
+    /// 같은 생각). 줄 `wl> fullscreen id=N stays`.
+    pub fn answerStay(self: *Server, id: u32) void {
+        const t = self.find(id) orelse return;
+        const p = t.place orelse return;
+        if (p == .column) return self.answerFullscreen(id);
+        sendConfigure(t, self.fb_w, self.fb_h, true);
+        logline.print("terminal: wl> fullscreen id={d} stays\n", .{id});
     }
 
     /// column 창의 `set_fullscreen` · `unset_fullscreen`에 답한다(CR-M2 확정 2) — 옮기지 않았을 때(아홉이 찼다 · 이미 column)도
@@ -842,6 +858,7 @@ pub const Server = struct {
         }
         // 포인터 좌표를 거꾸로 셀 자리(단계 C).
         t.last_fit = f;
+        t.painted_frame = self.frame_no;
         clearDamage(s);
         t.tree_dirty = false;
         // 실측 줄(WY-M6 확정 7) — 창마다 통째 · 부분을 따로 처음 몇 번만(같은 창의 통째와 부분을 맞대려고 창마다다).
@@ -911,6 +928,7 @@ pub const Server = struct {
     /// 프레임의 처음(App) — 경계를 주고 지난 프레임에 그린 자리를 비운다. 이번 프레임에 그리는 것(`paintPopups`)만 보이고 포인터가 닿는다.
     pub fn beginPopups(self: *Server, bounds: logic.Area) void {
         self.popup_bounds = bounds;
+        self.frame_no += 1;
         for (self.toplevels.items) |t| for (t.popups.items) |pp| {
             pp.shown = null;
             pp.hit = null;
@@ -997,7 +1015,8 @@ pub const Server = struct {
         for (self.toplevels.items) |t| {
             if (t.resource.getClient() != c) continue;
             if (popupHit(t, x, y) != null) return false;
-            if (t.last_fit) |f| if (logic.inside(f, x, y)) return false;
+            // 이번 프레임에 옮긴 창만 안쪽이다(RF-M0) — 다른 workspace로 간 창의 `last_fit`은 지워지지 않고 남는다.
+            if (logic.shownFit(t.last_fit, t.painted_frame, self.frame_no)) |f| if (logic.inside(f, x, y)) return false;
         }
         for (self.toplevels.items) |t| if (t.resource.getClient() == c) dismissPopups(t, "outside");
         return true;
@@ -1605,6 +1624,12 @@ fn stash(s: *Surface) void {
 /// cache → current(지금까지의 commit 본체). 이 surface의 상태가 적용되면 자식의 자리 · 순서가 적용되고(부모의 상태), 그 뒤 sync 자식의 cache가
 /// 적용된다(xml — "immediately after the parent surface's state is applied"). 끝으로 역할(자식 · toplevel)마다 할 일.
 fn apply(s: *Surface) void {
+    applyAt(s, 0);
+}
+
+/// `depth`는 이 적용이 처음 부른 surface에서 몇 겹 아래인가. sync 자식의 재귀는 `TREE_DEPTH`에서 멈춘다(RF-M0 — `get_subsurface`가
+/// 깊이를 막는 것의 두 번째 겹. 그보다 깊은 자식의 cache는 적용되지 않고 남는다).
+fn applyAt(s: *Surface, depth: usize) void {
     const c = &s.cache;
     if (!c.has) return;
     c.has = false;
@@ -1647,7 +1672,7 @@ fn apply(s: *Surface) void {
     const waiting = !s.cached_frames.empty();
     s.frames.appendList(&s.cached_frames);
     if (applyChildren(s)) changed = true;
-    for (s.children.items) |ch| if (ch.surface) |cs| if (cs.cache.has and subSync(ch)) apply(cs);
+    if (depth < TREE_DEPTH) for (s.children.items) |ch| if (ch.surface) |cs| if (cs.cache.has and subSync(ch)) applyAt(cs, depth + 1);
 
     if (s.sub) |ss| return subApplied(ss, s, was_shown, changed, waiting);
     const xs = s.role orelse return;
@@ -1765,8 +1790,8 @@ const Subsurface = struct {
 };
 
 /// 트리의 깊이 · 크기 상한. 자식의 자식까지 셈하고 그리는 재귀와 포인터 후보 목록이 이것으로 묶인다(클라이언트가 깊은 사슬을 만들어도
-/// 서버 스택이 안 자란다). Chromium의 bubble은 깊이 1 · 하나다.
-const TREE_DEPTH = 8;
+/// 서버 스택이 안 자란다). Chromium의 bubble은 깊이 1 · 하나다. 깊이는 `get_subsurface`가 막는다(`logic.subFits`, RF-M0).
+const TREE_DEPTH = logic.TREE_DEPTH;
 const TREE_MAX = 32;
 
 fn bindSubcompositor(client: *wl.Client, srv: *Server, version: u32, id: u32) void {
@@ -1774,7 +1799,8 @@ fn bindSubcompositor(client: *wl.Client, srv: *Server, version: u32, id: u32) vo
     r.setHandler(*Server, subcompositorRequest, null, srv);
 }
 
-/// `get_subsurface`(xml): 역할이 이미 있거나(xdg) subsurface 객체가 있으면 `bad_surface`, 부모가 자기 자신이거나 자손이면 `bad_parent`. 자식을
+/// `get_subsurface`(xml): 역할이 이미 있거나(xdg) subsurface 객체가 있으면 `bad_surface`, 부모가 자기 자신이거나 자손이면 `bad_parent`. 붙이면
+/// 트리가 `TREE_DEPTH`보다 깊어져도 `bad_parent`다(RF-M0 — 서버가 그리지 않는 깊이이고, 막지 않으면 `apply`의 재귀가 스택을 넘긴다). 자식을
 /// 더하는 것은 부모의 double-buffered 상태라 부모의 다음 적용 때 그려진다(`order_pending` → `order`). 새 자식은 맨 위다.
 fn subcompositorRequest(sc: *wl.Subcompositor, req: wl.Subcompositor.Request, srv: *Server) void {
     switch (req) {
@@ -1788,6 +1814,8 @@ fn subcompositorRequest(sc: *wl.Subcompositor, req: wl.Subcompositor.Request, sr
                 if (u == s) return sc.postError(.bad_parent, "the parent is the surface itself or one of its descendants");
                 up = if (u.sub) |us| us.parent else null;
             }
+            if (!logic.subFits(levelOf(parent), heightOf(s, TREE_DEPTH + 1)))
+                return sc.postError(.bad_parent, "the subsurface tree would be deeper than the server draws");
             const res = wl.Subsurface.create(sc.getClient(), sc.getVersion(), r.id) catch return sc.postNoMemory();
             const ss = srv.allocator.create(Subsurface) catch {
                 res.destroy();
@@ -1808,6 +1836,28 @@ fn subcompositorRequest(sc: *wl.Subcompositor, req: wl.Subcompositor.Request, sr
             logSub(ss, if (parent.sub == null) "new parent=main" else "new parent=sub");
         },
     }
+}
+
+/// `s`가 뿌리에서 몇 겹 아래인가(부모 쪽 사슬, 끊긴 사슬은 거기까지). `TREE_DEPTH`를 넘으면 더 세지 않는다 — 어차피 거절이다.
+fn levelOf(s0: *Surface) usize {
+    var s = s0;
+    var n: usize = 0;
+    while (s.sub) |ss| {
+        if (n > TREE_DEPTH) break;
+        n += 1;
+        s = ss.parent orelse break;
+    }
+    return n;
+}
+
+/// `s` 아래 가장 깊은 자손까지의 겹(자식 쪽, 자식이 없으면 0). `cap` 겹에서 멈춘다 — 재귀가 그보다 깊이 안 간다.
+fn heightOf(s: *Surface, cap: usize) usize {
+    if (cap == 0) return 0;
+    var best: usize = 0;
+    for (s.children.items) |ch| if (ch.surface) |cs| {
+        best = @max(best, 1 + heightOf(cs, cap - 1));
+    };
+    return best;
 }
 
 fn failSub(sc: *wl.Subcompositor, res: *wl.Subsurface, ss: *Subsurface) void {
@@ -2282,10 +2332,15 @@ fn popupRequest(res: *xdg.Popup, req: xdg.Popup.Request, pp: *Popup) void {
             pp.grabbed = true;
             logPop(pp, "grab");
         },
-        // 새 positioner로 다시 셈한다 — repositioned → configure → xdg_surface.configure(xml 순서).
+        // 새 positioner로 다시 셈한다 — repositioned → configure → xdg_surface.configure(xml 순서). 서버가 이미 닫은 popup이면 아무것도
+        // 안 한다(RF-M0, `logic.onReposition` — `popupApplied`와 같다).
         .reposition => |r| {
             const po: *PosObj = @ptrCast(@alignCast(r.positioner.getUserData() orelse return));
-            if (!po.p.complete()) return postWm(pp.srv, res.getClient(), .invalid_positioner, "the positioner has no size or no anchor rectangle");
+            switch (logic.onReposition(po.p, pp.dismissed)) {
+                .invalid => return postWm(pp.srv, res.getClient(), .invalid_positioner, "the positioner has no size or no anchor rectangle"),
+                .ignore => return,
+                .configure => {},
+            }
             pp.pos = po.p;
             pp.at = logic.placePopup(po.p, if (pp.parent) |px| pp.srv.boundsFor(px) else null);
             res.sendRepositioned(r.token);
@@ -2578,6 +2633,7 @@ fn positionerRequest(p: *xdg.Positioner, req: xdg.Positioner.Request, po: *PosOb
             po.p.ay = r.y;
             po.p.aw = r.width;
             po.p.ah = r.height;
+            po.p.anchor_set = true;
         },
         .set_anchor => |r| {
             const v = @backingInt(r.anchor);
@@ -2647,6 +2703,8 @@ const Toplevel = struct {
     sent: ?Sent = null,
     /// 마지막으로 옮긴 자리(`paint`) — 포인터의 surface 좌표를 거꾸로 셀 때(단계 C).
     last_fit: ?logic.Fit = null,
+    /// `last_fit`을 적은 프레임(`Server.frame_no`). 창이 안 보이게 되어도 `last_fit`은 남는다 — 누름은 이것으로 이번 프레임의 것만 센다.
+    painted_frame: u64 = 0,
     /// 이 창의 클라이언트가 `set_cursor(NULL)`을 보냈다(확정 10).
     cursor_hidden: bool = false,
     /// `wl> blit` 줄을 찍은 수(WY-M6 확정 7).

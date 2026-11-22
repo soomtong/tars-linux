@@ -2220,6 +2220,32 @@ fn mtext(m: *const TF.Model) []const u8 {
 }
 
 fn fieldModelTests() void {
+    // RF-M0 1: 꼬리를 왼쪽으로 당길 때 아직 안 읽은 바이트를 덮으면 안 된다(가운데에서 고쳐야 드러난다).
+    {
+        var w: TF.Model = .{};
+        w.setText("abcd");
+        w.moveTo(2, false);
+        w.backspace(false);
+        check(std.mem.eql(u8, w.text(), "acd") and w.caret == 1, "RF1: Backspace in the middle keeps the tail (abcd -> acd)", .{});
+        w.setText("abcd");
+        w.moveTo(1, false);
+        w.deleteForward();
+        check(std.mem.eql(u8, w.text(), "acd") and w.caret == 1, "RF1: Delete in the middle keeps the tail (abcd -> acd)", .{});
+        w.setText("abcdef");
+        w.moveTo(1, false);
+        w.moveTo(4, true);
+        w.insert("X");
+        check(std.mem.eql(u8, w.text(), "aXef") and w.caret == 2, "RF1: a selection in the middle replaced by shorter text", .{});
+        w.setText("abcdef");
+        w.moveTo(1, false);
+        w.moveTo(3, true);
+        w.insert("XYZW");
+        check(std.mem.eql(u8, w.text(), "aXYZWdef") and w.caret == 5, "RF1: a selection in the middle replaced by longer text", .{});
+        w.setText("ab cdef gh");
+        w.moveTo(7, false);
+        w.backspace(true);
+        check(std.mem.eql(u8, w.text(), "ab  gh") and w.caret == 3, "RF1: Opt+Backspace in the middle deletes the word and keeps the tail", .{});
+    }
     var m: TF.Model = .{};
     m.setText("/tmp/tkf");
     check(std.mem.eql(u8, m.text(), "/tmp/tkf") and m.caret == 8 and m.anchor == 8 and !m.has_undo, "setText: caret at the end, no selection, no undo", .{});
@@ -2335,6 +2361,8 @@ fn clipTests() void {
     check(clipm.pick(clipm.bit("TEXT") | clipm.bit("text/plain")).?.ptr == clipm.MIMES[1].ptr, "pick prefers text/plain over TEXT", .{});
     check(std.mem.eql(u8, clipm.pick(0xF).?, "text/plain;charset=utf-8") and clipm.pick(0) == null and clipm.bit("image/png") == 0, "pick: utf-8 first, nothing for none, unknown mimes ignored", .{});
     check(std.mem.eql(u8, clipm.pick(clipm.bit("UTF8_STRING")).?, "UTF8_STRING"), "pick UTF8_STRING alone", .{});
+    check(std.mem.eql(u8, clipm.pick(clipm.bit("text/plain") | clipm.bit("UTF8_STRING")).?, "UTF8_STRING"), "RF8: text/plain and UTF8_STRING offered -> UTF8_STRING (server PICK_ORDER)", .{});
+    check(std.mem.eql(u8, clipm.pick(clipm.bit("TEXT") | clipm.bit("UTF8_STRING") | clipm.bit("text/plain")).?, "UTF8_STRING"), "RF8: UTF8_STRING beats text/plain and TEXT", .{});
 }
 
 fn pathTests() void {

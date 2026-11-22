@@ -121,7 +121,10 @@ pub const Model = struct {
         const room = MAX_TEXT - (self.len - (b - a));
         const ins = fitPrefix(bytes, room);
         const tail = self.len - b;
-        std.mem.copyBackwards(u8, self.buf[a + ins.len .. a + ins.len + tail], self.buf[b..self.len]);
+        // 꼬리가 왼쪽으로 가면 앞에서부터, 오른쪽으로 가면 뒤에서부터 옮겨야 아직 안 읽은 바이트를 덮지 않는다.
+        const dst = self.buf[a + ins.len .. a + ins.len + tail];
+        const src = self.buf[b..self.len];
+        if (ins.len < b - a) std.mem.copyForwards(u8, dst, src) else if (ins.len > b - a) std.mem.copyBackwards(u8, dst, src);
         @memcpy(self.buf[a .. a + ins.len], ins);
         self.len = a + ins.len + tail;
         self.gen +%= 1;

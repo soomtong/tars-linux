@@ -482,8 +482,6 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 
 ## CR-M2가 남긴 것 (앱 풀스크린 · browser 체인의 장면, 그대로 이월)
 
-- 클라이언트가 청한 나오기(`unset_fullscreen`)가 갈 곳이 없어 실패하면(셸 workspace 없음 · strip에 slot 여덟 · 너무 좁음) configure로 답하지 않는다 — 창은 fullscreen
-  그대로다. xdg-shell은 답을 바란다(지금 상태의 configure를 한 번 더 보내면 된다).
 - 옮긴 첫 프레임은 옛 버퍼를 새 자리 가운데에 그린다 — Chromium이 새 크기를 그릴 때까지 0.15 ~ 0.4초(체인 부하에서 1.1초). 검정 한 프레임으로 숨길지는 정하지 않았다.
 - 크기가 바뀌어 닫힌 popup(`done why=resize`)을 Chromium은 다시 열지 않는다 — 사람이 다시 누른다(WY 결정 53 그대로).
 - 실측 줄 `wl> fullscreen frame us=` · `commit ms=`는 남겨 두었다(판정은 안 쓴다).

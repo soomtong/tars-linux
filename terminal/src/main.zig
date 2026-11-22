@@ -2631,8 +2631,8 @@ fn startDictation(d: *Dictation, pane: *const Pane, ws: usize, leaf: u4) void {
         if (devnull >= 0) _ = std.c.dup2(devnull, 0);
         _ = std.os.linux.close_range(3, std.math.maxInt(std.os.linux.fd_t), .{ .UNSHARE = false, .CLOEXEC = false });
         const argv = [_:null]?[*:0]const u8{"tars-dictate"};
-        _ = std.c.execve(DICTATE_PATH, &argv, std.c.environ);
-        std.c._exit(127);
+        // SIGPIPE 무시(terminal의 것)를 물려주지 않는다 — 셸 자식과 같은 길(`pty.execChild`, RF-M0).
+        pty.execChild(DICTATE_PATH, &argv, std.c.environ);
     }
     _ = std.c.setpgid(pid, pid);
     _ = std.c.close(out_pipe[1]);
@@ -5775,7 +5775,7 @@ const App = struct {
             if (cmd == .fullscreen_toggle) if (self.wl) |srv| {
                 switch (self.workspaces[self.current].?) {
                     .app => {
-                        try self.leaveOwn(self.current, .key);
+                        _ = try self.leaveOwn(self.current, .key);
                         continue;
                     },
                     .shell => |*sh| switch (sh.panes[sh.focus].?) {
@@ -7163,8 +7163,9 @@ const App = struct {
     /// `wl_logic.pickReturn` — home이 살아 있으면 그 포커스 column 오른쪽(`openApp`의 column 길), 없어졌으면 가장 가까운 왼쪽(없으면
     /// 첫) 셸 workspace의 오른쪽 끝. home이 없거나(둠) 받을 셸 workspace가 없거나 strip이 거절하면(slot 여덟 · 너무 좁음) 아무
     /// 일도 없다(그대로 풀스크린). 되돌린 뒤 그 workspace가 앞이고 포커스는 그 slot이다. column의 configure(tiled, pane 크기)는
-    /// 바퀴 끝 `syncColumns`가 보낸다. 줄 `wl> fullscreen id=N off ws=W slot=S by=key|client`.
-    fn leaveOwn(self: *App, wi: usize, by: FullscreenBy) !void {
+    /// 바퀴 끝 `syncColumns`가 보낸다. 줄 `wl> fullscreen id=N off ws=W slot=S by=key|client`. 되돌렸으면 참 — 거짓이면 클라이언트의
+    /// 요청에는 부르는 쪽이 지금 상태로 답한다(`answerStay`, RF-M0).
+    fn leaveOwn(self: *App, wi: usize, by: FullscreenBy) !bool {
         const a = self.workspaces[wi].?.app;
         const n = workspaceCount(&self.workspaces);
         var uids: [MAX_WORKSPACES]?u32 = @splat(null);
@@ -7172,11 +7173,11 @@ const App = struct {
             .shell => |sh| sh.uid,
             .app => null,
         };
-        const ti = wl_logic.pickReturn(a.home, uids[0..n], wi) orelse return;
+        const ti = wl_logic.pickReturn(a.home, uids[0..n], wi) orelse return false;
         const w = self.workspaces[ti].?.asShell().?;
         const whole = self.wholeFor(w.fullscreen);
-        const at = if (uids[ti] == a.home) w.focus else w.strip.lastColumnTop() orelse return;
-        const leaf = w.strip.split(at, .right, whole) orelse return;
+        const at = if (uids[ti] == a.home) w.focus else w.strip.lastColumnTop() orelse return false;
+        const leaf = w.strip.split(at, .right, whole) orelse return false;
         _ = try applyLayout(self.allocator, w, whole);
         w.panes[leaf] = .{ .app = .{ .toplevel = a.toplevel } };
         w.focus = leaf;
@@ -7187,6 +7188,7 @@ const App = struct {
         self.enterWorkspace(dest);
         logline.print("terminal: wl> fullscreen id={d} off ws={d} slot={d} by={s}\n", .{ a.toplevel, dest + 1, leaf, @tagName(by) });
         self.fs_watch = .{ .id = a.toplevel, .at_ms = self.nowMs() };
+        return true;
     }
 
     /// 옮긴 뒤 첫 프레임(CR-M2 실측 2) — `wl> fullscreen frame us=N`. 그 프레임은 창의 옛 버퍼를 새 자리에 옮긴 것이다(새 크기의
@@ -7210,7 +7212,8 @@ const App = struct {
     /// 매핑된 창의 `set_fullscreen` · `unset_fullscreen`(CR-M2 확정 1 · 5, `Event.fullscreen` — Chromium의 F11).
     /// column 창: 켜면 자기 workspace로(`enterOwn`, 거절이면 그 안에서 답한다), 끄면 이미 column이라 configure로 답만 한다.
     /// 자기 workspace 창: 켜면 자리 그대로 fullscreen 상태로, 끄면 `Cmd+Ctrl+F`로 온 창은 maximized로 남고 스스로 온 창은 column으로
-    /// 돌아간다(`leaveOwn` — 둠처럼 돌아갈 곳이 없으면 그대로).
+    /// 돌아간다(`leaveOwn` — 둠처럼 돌아갈 곳이 없으면 그대로). 어느 길이든 답이 간다(xdg-shell) — 그대로면 지금 상태의 configure다
+    /// (`answerStay` · `setWorkspaceState`, RF-M0).
     fn fullscreenRequest(self: *App, srv: *wls.Server, r: wls.FullscreenReq) !void {
         switch (self.findApp(r.id) orelse return) {
             .slot => |sl| if (r.on) try self.enterOwn(srv, sl.ws, sl.leaf, .client) else srv.answerFullscreen(r.id),
@@ -7218,7 +7221,7 @@ const App = struct {
                 if (r.on) return srv.setWorkspaceState(r.id, .fullscreen);
                 switch (self.workspaces[wi].?.app.by) {
                     .key => srv.setWorkspaceState(r.id, .maximized),
-                    .client => try self.leaveOwn(wi, .client),
+                    .client => if (!try self.leaveOwn(wi, .client)) srv.answerStay(r.id),
                 }
             },
         }

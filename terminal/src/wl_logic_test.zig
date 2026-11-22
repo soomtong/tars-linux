@@ -671,8 +671,79 @@ pub fn main() !void {
                 return error.WrongPlace;
             }
         };
-        if (!(logic.Positioner{ .w = 1, .h = 1, .aw = 1, .ah = 1 }).complete() or (logic.Positioner{ .w = 1, .h = 1 }).complete()) return error.WrongPlace;
+        if (!(logic.Positioner{ .w = 1, .h = 1, .aw = 1, .ah = 1, .anchor_set = true }).complete() or (logic.Positioner{ .w = 1, .h = 1 }).complete()) return error.WrongPlace;
     }
     std.debug.print("wl_logic_test: place 16 cases, anchor x gravity 81, complete 2\n", .{});
+    // ── 브랜치 리뷰 고침(RF-M0) ──
+    {
+        // 4. anchor 사각형 0 × 0(점 하나에 붙는 메뉴 — `set_anchor_rect`가 받는 값)도 완전하다. 크기가 없거나 anchor를 안 줬으면 아니다.
+        const dot: logic.Positioner = .{ .w = 120, .h = 80, .ax = 30, .ay = 40, .aw = 0, .ah = 0, .anchor_set = true };
+        if (!dot.complete()) {
+            std.debug.print("FAIL: a positioner with a 0x0 anchor rect is not complete\n", .{});
+            return error.WrongComplete;
+        }
+        if ((logic.Positioner{ .anchor_set = true }).complete()) return error.WrongComplete;
+        if ((logic.Positioner{ .w = 120, .h = 80 }).complete()) return error.WrongComplete;
+        // 0 × 0 anchor의 자리는 그 점이다.
+        if (!std.meta.eql(logic.placePopup(.{ .w = 120, .h = 80, .ax = 30, .ay = 40, .anchor = 8, .gravity = 8, .anchor_set = true }, null), logic.Rect{ .x = 30, .y = 40, .w = 120, .h = 80 })) return error.WrongComplete;
+    }
+    std.debug.print("wl_logic_test: complete with 0x0 anchor 4 cases\n", .{});
+    {
+        // 6. 서버가 닫은 popup의 reposition — 다시 셈하지도 configure하지도 않는다. 불완전한 positioner는 닫혔어도 에러다.
+        const ok: logic.Positioner = .{ .w = 10, .h = 10, .aw = 1, .ah = 1, .anchor_set = true };
+        if (logic.onReposition(ok, true) != .ignore) {
+            std.debug.print("FAIL: onReposition(dismissed) = {s}, want ignore\n", .{@tagName(logic.onReposition(ok, true))});
+            return error.WrongReposition;
+        }
+        if (logic.onReposition(ok, false) != .configure) return error.WrongReposition;
+        if (logic.onReposition(.{}, true) != .invalid or logic.onReposition(.{}, false) != .invalid) return error.WrongReposition;
+    }
+    std.debug.print("wl_logic_test: reposition 4 cases\n", .{});
+    {
+        // 2. subsurface 트리 깊이. 뿌리(0)부터 여덟 겹 아래까지 그린다 — 일곱 겹 아래 부모에 자식은 되고 여덟 겹 아래 부모에는 안 된다.
+        // 자식이 이미 자손을 가졌으면 그 겹도 센다(아래 쪽 사슬을 먼저 짓고 위에 붙이는 클라이언트).
+        const cases = [_]struct { up: usize, down: usize, want: bool }{
+            .{ .up = 0, .down = 0, .want = true }, // Chromium의 bubble
+            .{ .up = 7, .down = 0, .want = true },
+            .{ .up = 8, .down = 0, .want = false },
+            .{ .up = 0, .down = 7, .want = true },
+            .{ .up = 0, .down = 8, .want = false },
+            .{ .up = 3, .down = 4, .want = true },
+            .{ .up = 3, .down = 5, .want = false },
+            .{ .up = 100000, .down = 0, .want = false }, // 리뷰의 10만 겹
+        };
+        for (cases) |c| if (logic.subFits(c.up, c.down) != c.want) {
+            std.debug.print("FAIL: subFits({d}, {d}) = {}, want {}\n", .{ c.up, c.down, !c.want, c.want });
+            return error.WrongDepth;
+        };
+    }
+    std.debug.print("wl_logic_test: subsurface depth 8 cases\n", .{});
+    {
+        // 3. 자기 workspace 창의 fullscreen 요청 — 같은 상태도 답한다(restate). column · 안 놓인 창은 이 길이 아니다.
+        const cases = [_]struct { was: ?logic.Place, want: logic.WsState, got: logic.WsAnswer }{
+            .{ .was = .fullscreen, .want = .fullscreen, .got = .restate }, // 풀스크린인 창의 set_fullscreen
+            .{ .was = .maximized, .want = .maximized, .got = .restate }, // Cmd+Ctrl+F로 온 창의 unset_fullscreen
+            .{ .was = .maximized, .want = .fullscreen, .got = .change },
+            .{ .was = .fullscreen, .want = .maximized, .got = .change },
+            .{ .was = .column, .want = .fullscreen, .got = .none },
+            .{ .was = null, .want = .fullscreen, .got = .none },
+        };
+        for (cases) |c| if (logic.wsAnswer(c.was, c.want) != c.got) {
+            std.debug.print("FAIL: wsAnswer({any}, {s}) = {s}, want {s}\n", .{ c.was, @tagName(c.want), @tagName(logic.wsAnswer(c.was, c.want)), @tagName(c.got) });
+            return error.WrongAnswer;
+        };
+    }
+    std.debug.print("wl_logic_test: fullscreen answer 6 cases\n", .{});
+    {
+        // 5. 누름이 볼 창의 자리 — 이번 프레임에 옮긴 창만. 다른 workspace로 간 창의 낡은 자리는 안쪽이 아니다.
+        const f: logic.Fit = .{ .k = 1, .x = 0, .y = 0, .w = 640, .h = 800, .ox = 0, .oy = 0 };
+        if (logic.shownFit(f, 7, 7) == null) return error.WrongShown;
+        if (logic.shownFit(f, 6, 7) != null) {
+            std.debug.print("FAIL: a window painted in an older frame still counts as shown\n", .{});
+            return error.WrongShown;
+        }
+        if (logic.shownFit(null, 7, 7) != null) return error.WrongShown;
+    }
+    std.debug.print("wl_logic_test: shown fit 3 cases\n", .{});
     std.debug.print("wl_logic_test: all checks passed\n", .{});
 }

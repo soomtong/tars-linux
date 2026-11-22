@@ -101,7 +101,7 @@ pub fn spawn(
     if (pid == 0) {
         // terminal은 SIGPIPE를 무시한다(WY-M4, design 결정 35 — 클립보드 파이프의 읽는 쪽이 닫아도 terminal이 안 죽게).
         // 무시는 execve를 넘어 남으므로 셸에는 기본으로 되돌린다 — 안 되돌리면 `seq … | head`의 seq가 SIGPIPE로 끝나지
-        // 않고 EPIPE를 만나 "write error"를 낸다. `install.zig`의 도구 자식과 같은 모양이다.
+        // 않고 EPIPE를 만나 "write error"를 낸다. `install.zig`의 도구 자식과 같은 모양이다. 받아쓰기 자식은 `execChild`로 같은 일을 한다.
         restoreSigpipe();
         if (account) |acct| {
             if (!dropTo(acct)) {
@@ -232,22 +232,31 @@ pub fn write(fd: c_int, bytes: []const u8) void {
     }
 }
 
-/// SIGPIPE를 무시한다 — terminal이 시작할 때 한 번(WY-M4, design 결정 35). 셸 자식은 `spawn`에서 `restoreSigpipe`로
-/// 되돌린다. 자식을 띄우는 자리가 `spawn` 하나뿐이라 짝이 여기 함께 있다.
+/// SIGPIPE를 무시한다 — terminal이 시작할 때 한 번(WY-M4, design 결정 35). 무시는 fork와 execve를 넘어 남으므로 terminal이 띄우는
+/// 자식은 모두 execve 전에 `restoreSigpipe`로 되돌린다. 띄우는 자리는 둘이다 — 셸(`spawn`)과 받아쓰기(`main.zig`의 `startDictation`,
+/// `execChild`로). 새 자리를 더하면 `execChild`를 쓴다(RF-M0 — 받아쓰기가 빠졌던 적이 있다). `std.posix`인 것은 호스트 검사
+/// (`pty_size_test`)가 macOS에서도 같은 함수를 부르게 하려는 것이다.
 pub fn ignoreSigpipe() void {
-    const act: std.os.linux.Sigaction = .{
-        .handler = .{ .handler = std.os.linux.SIG.IGN },
-        .mask = std.os.linux.sigemptyset(),
-        .flags = 0,
-    };
-    _ = std.os.linux.sigaction(.PIPE, &act, null);
+    setSigpipe(std.posix.SIG.IGN);
 }
 
 fn restoreSigpipe() void {
-    const act: std.os.linux.Sigaction = .{
-        .handler = .{ .handler = std.os.linux.SIG.DFL },
-        .mask = std.os.linux.sigemptyset(),
+    setSigpipe(std.posix.SIG.DFL);
+}
+
+fn setSigpipe(handler: @FieldType(@FieldType(std.posix.Sigaction, "handler"), "handler")) void {
+    const act: std.posix.Sigaction = .{
+        .handler = .{ .handler = handler },
+        .mask = std.posix.sigemptyset(),
         .flags = 0,
     };
-    _ = std.os.linux.sigaction(.PIPE, &act, null);
+    std.posix.sigaction(.PIPE, &act, null);
+}
+
+/// fork한 자식에서 `path`를 띄운다 — SIGPIPE를 기본으로 되돌리고(`ignoreSigpipe`의 짝) execve, 실패하면 127로 끝난다. 돌아오지 않는다.
+/// 시스템 콜만 부른다(fork 뒤 자식이 안전하게 할 수 있는 것).
+pub fn execChild(path: [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null]const ?[*:0]const u8) noreturn {
+    restoreSigpipe();
+    _ = execve(path, argv, envp);
+    std.c._exit(127);
 }

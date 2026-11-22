@@ -328,6 +328,17 @@ pub fn pickReturn(home: ?u32, uids: []const ?u32, from: usize) ?usize {
     return null;
 }
 
+/// 자기 workspace 창의 `set_fullscreen` · `unset_fullscreen`에 상태로 답하는 길(`Server.setWorkspaceState`, RF-M0). 놓이지 않았거나
+/// column이면 이 길이 아니다(`none` — column은 `answerFullscreen`). 상태가 바뀌면 `change`, 같으면 `restate` — 바꿀 것이 없어도
+/// xdg-shell은 그 요청에 configure로 답하라고 한다(지금 상태 그대로 한 번).
+pub const WsAnswer = enum { none, change, restate };
+
+pub fn wsAnswer(was: ?Place, want: WsState) WsAnswer {
+    const p = was orelse return .none;
+    if (p == .column) return .none;
+    return if (p == want.place()) .restate else .change;
+}
+
 // ── 포인터(WY-M2 단계 C, plan 확정 8, design 결정 24) ─────────────────────
 
 /// evdev의 버튼 코드(linux/input-event-codes.h). `wl_pointer.button`은 이 값 그대로다.
@@ -780,6 +791,16 @@ pub fn effectiveSync(chain: []const bool) bool {
     return false;
 }
 
+/// subsurface 트리의 깊이 상한(WY design 결정 48). 그리고 셈하는 재귀(`apply` · 그리기 · damage)가 뿌리에서 이 겹까지만 내려간다.
+pub const TREE_DEPTH = 8;
+
+/// `get_subsurface`가 이 자식을 받아도 되나(RF-M0). `up`은 부모가 뿌리에서 몇 겹 아래인가(뿌리면 0), `down`은 자식 surface 아래 가장 깊은
+/// 자손까지의 겹(자식이 없으면 0 — 자식이 이미 자손을 가졌을 수 있다). 붙이면 가장 깊은 자손이 뿌리에서 `up + 1 + down` 겹 아래다 —
+/// `TREE_DEPTH`를 넘으면 거절한다(`bad_parent`). 안 막으면 클라이언트가 만든 깊은 사슬에서 `apply`의 재귀가 서버 스택을 넘긴다.
+pub fn subFits(up: usize, down: usize) bool {
+    return up + 1 + down <= TREE_DEPTH;
+}
+
 // ── popup의 자리(WY-M7 단계 B, design 결정 52) ────────────────────────────────
 
 /// `xdg_positioner`의 상태(xml). 크기는 popup의 window geometry, anchor 사각형은 부모 window geometry 좌표다. `anchor` · `gravity`는 enum 값(0 ~ 8),
@@ -796,12 +817,33 @@ pub const Positioner = struct {
     ca: u32 = 0,
     ox: i32 = 0,
     oy: i32 = 0,
+    /// `set_anchor_rect`를 받았다. 크기 0 × 0도 받는다(xml은 음수만 `invalid_input` — 점 하나에 붙는 메뉴).
+    anchor_set: bool = false,
 
-    /// xml: 크기와 anchor 사각형이 있어야 완전하다(`invalid_positioner`).
+    /// xml: 크기(`set_size` — 0 이하는 그 요청이 거절한다)와 anchor 사각형이 설정되어야 완전하다(`invalid_positioner`). 완전성 절의
+    /// "non-zero anchor rectangle"은 설정되었는가로 읽는다 — `set_anchor_rect`가 0을 받아 놓고 여기서 죽이면 앞뒤가 어긋난다(RF-M0).
     pub fn complete(self: Positioner) bool {
-        return self.w > 0 and self.h > 0 and self.aw > 0 and self.ah > 0;
+        return self.w > 0 and self.h > 0 and self.anchor_set;
     }
 };
+
+/// `xdg_popup.reposition`에 어떻게 답하나(RF-M0). 불완전한 positioner는 닫힌 popup이어도 에러다(요청의 값이 틀렸다). 서버가 이미
+/// 닫은(`popup_done`) popup에는 다시 셈하지도 답하지도 않는다 — `repositioned`는 configure 두 개와 한 묶음이라(xml) 혼자 보낼 수 없고,
+/// 클라이언트는 `popup_done`을 읽고 지운다(`popupApplied`가 닫힌 popup에 configure를 안 보내는 것과 같다).
+pub const Reposition = enum { invalid, ignore, configure };
+
+pub fn onReposition(p: Positioner, dismissed: bool) Reposition {
+    if (!p.complete()) return .invalid;
+    return if (dismissed) .ignore else .configure;
+}
+
+/// 포인터 누름이 볼 창의 자리(`Server.grabPress`, RF-M0) — 이번 프레임에 옮긴 창만이다. `painted`는 그 창을 마지막으로 옮긴(`paint`)
+/// 프레임 번호, `frame`은 지금 프레임(`beginPopups`가 센다). 다르면 그 창은 이번에 안 그려졌다(다른 workspace · 화면 밖 column) —
+/// `f`(그 창의 `last_fit`)가 남아 있어도 null. grab한 popup이 보이는 동안은 프레임이 늘 통째라(`popupFull`) 보이는 창은 매 프레임 옮겨진다.
+pub fn shownFit(f: ?Fit, painted: u64, frame: u64) ?Fit {
+    if (painted != frame) return null;
+    return f;
+}
 
 pub const CA_SLIDE_X: u32 = 1;
 pub const CA_SLIDE_Y: u32 = 2;
