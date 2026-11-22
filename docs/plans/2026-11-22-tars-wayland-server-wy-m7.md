@@ -108,3 +108,23 @@ verify가 모든 체인에서 돈다).
    lead의 화면 판정: 주소창에 `a`를 친 전체 화면 — 자동 완성 목록 다섯 줄, 그림자가 페이지와 섞였고 캐럿 자리에 구멍이 없다.
    실측(`measurements.md` 116): bubble이 처음 보인 통째 프레임 17.5 ms(부모만은 1.0~1.2 ms — 섞기 약 0.4 µs/px, TCG), 떠 있는 동안 부모 캐럿 1 × 17은 26~34 µs.
    루트 게이트 37/37 첫 판(`out/gate-logs/20261122-002737`), verify mismatch 0. browser 체인의 첫 화면은 게이트 부하 아래 28초.
+2. 단계 B `f0f3524`: `xdg_positioner`(상태 · `invalid_input`) · `xdg_popup` 전부(`get_popup` · `grab` · `reposition` · `destroy`의 에러 넷) · 자리 셈 `wl_logic.placePopup`
+   (축마다 flip → slide → resize, 호스트 표 16경우 + anchor × gravity 81) · column 밖 합성(`beginPopups` → `paintPopups` → `shownPopups`, 경계는 위 띠 아래 · 격자 끝 위) ·
+   verify 그림자가 popup이 덮은 자리를 실제 fb에서 복사 · 물리 합성(`physPopups` — 창 사각형 안만) · 포인터가 popup 먼저(`popupAt` · `pickAt`) · 서버 쪽 닫기 셋
+   (`done why=focus|resize|outside`) · `blendClip`의 1:1 길. `tars-wl-test --popup` · `--popup-grab` · `--popup-ca N` · `--popup-left`.
+   체인 wayland 두 번 연속 · terminal · toolkit · hidpi · pointer · display · browser PASS(서브에이전트), verify mismatch 0(wayland 판정 9: 7,263줄).
+   판정의 실제 값: 40a 창 (900, 300) 누름 → `new parent=main at=256,281 w=120 h=80 ca=0`, 상자 `930 321 80 50`이 `33cc66`. 41b popup이 열린 채 창 안 누름 → `wl> button` 하나 늘고
+   클라이언트가 지움. 40b `--popup-left --popup-ca 8`의 (660, 300) → `at=-104,281` — 셸 pane 위 상자 `550 311 80 60`이 `33cc66`, 닫은 뒤 열기 전의 셸 값. (900, 740) →
+   `at=136,640`(flip_y). 41a grab popup + 셸 (200, 400) 누름 → `done why=outside`, 셸 포커스 줄 · 창의 `wl> button` 수 그대로. 42 `Cmd+[` → `done why=focus`.
+   hidpi 10: 물리 2880 × 1800, bs 2 창의 popup이 물리 (1648, 242) 240 × 160. browser 3b: (1000, 500) 오른쪽 누름 → `new parent=main at=317,161 w=319 h=319 ca=41`
+   (호스트 표의 셈 그대로), 상자 `1150 300 40 10`이 `2e8b57` → `ffffff` → Esc 뒤 `2e8b57`, `wl> gone pid=` 0.
+   체인 밖 시험 VM(Chromium 156): 문맥 메뉴 · `<select>` · 툴팁 · 앱 메뉴(resize_y로 672) · 하위 메뉴(flip_x로 셸 column 위) · 배율 2의 bs 2 메뉴가 보이고 고를 수 있다.
+   plan과 달라진 것: (가) `blendClip`의 1:1 길(opaque region은 Chromium이 `nil`을 보내 쓸 수 없었다) — 메뉴 한 장 50 ms 걱정이 약 1 ms가 됐다. (나) popup이 보이는 동안
+   프레임은 늘 통째(plan은 "닫히거나 움직인 프레임") — 부분 프레임은 다시 칠하지 않은 clip에서 그림자가 두 번 섞인다. (다) browser 체인 QEMU에 USB 마우스.
+   (라) 판정 순서 40a → 41b → 40b → 41a → 42. 첫 체인 판 하나가 FAIL — 40a의 상자에 화살표(12 × 19)가 걸렸다(상자를 옮김, 코드는 그대로).
+   lead의 대조: plan 확정 7 · 결정 52 · 53과 맞다. 고친 것 둘 — `menuPress`의 주석이 새 `popupPress` 위에 얹혀 있던 것, 호스트 검사의 "y는 x의 거울"이 크기만 보던 것
+   (y 자리 81조합을 실제로 단언).
+   실측(`measurements.md` 117): 앱 메뉴 412 × 684 한 장 1,073 ~ 1,119 µs, popup이 보이는 동안 `wl> frame full` 26 ~ 54 ms. 안 잰 것은 실측 2 · 4 · 5 · 6(carryover).
+   루트 게이트 37/37 첫 판(`out/gate-logs/20261122-025252`, lanes 1,785초 — WY 체인 318초 · browser 76초), verify mismatch 0.
+3. 마감: WY design Status · CR design 확인 9 고침 · `completed.md` · 기억 `project_wayland_server` · carryover "WY-M7이 남긴 것" · 로드맵. 서브에이전트 pane은 세션이 다시
+   시작되며 사라졌다(보고서 `wy7/report-b.md`는 남아 있었다).

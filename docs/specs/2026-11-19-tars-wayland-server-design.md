@@ -3,7 +3,8 @@
 접두사: WY
 
 Date: 2026-11-19
-Status: WY-M0~M6 끝(2026-11-20, 결정 1~47). WY-M7(결정 48~55, plan `docs/plans/2026-11-22-tars-wayland-server-wy-m7.md`)이 진행 중이다. 사용자 위임으로 Claude가 정했다.
+Status: 끝(2026-11-22). WY-M0~M6(2026-11-20, 결정 1~47) · WY-M7(결정 48~55, plan `docs/plans/2026-11-22-tars-wayland-server-wy-m7.md` — `9b945c7` · `f0f3524`, 루트 게이트 37/37). 사용자 위임으로 Claude가 정했다.
+남긴 것은 `docs/guides/carryover.md`의 WY 절 둘. 뒤에 서버를 고치는 일(CR-M2의 앱 풀스크린 등)은 결정 번호를 이어 여기에 적는다.
 브랜치 `app-layer-0-3`.
 
 계기: App Layer의 2단(`docs/plans/2026-11-18-tars-app-layer-roadmap.md`). 사용자(2026-11-18):

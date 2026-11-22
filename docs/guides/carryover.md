@@ -446,8 +446,7 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 
 ## CR-M0 · CR-M1이 남긴 것 (Chromium · 거두기의 고정, 그대로 이월)
 
-- Chromium은 주소창에 글자를 치면 죽는다 — 자동 완성 bubble이 서버에 없는 `wl_subcompositor`로 `get_subsurface`를 부른다(CR design 확인 3). 문맥 메뉴 · 앱 메뉴
-  (`xdg_popup`)는 안 보인다. WY-M7이 푼다. 그때까지 주소는 `tars-browser https://…`처럼 인자로 준다.
+- (풀림, WY-M7 `9b945c7` · `f0f3524`) Chromium이 주소창에 글자를 치면 죽던 것(`wl_subcompositor` 없음)과 안 보이던 문맥 메뉴 · 앱 메뉴(`xdg_popup`).
 - 묶음 browser 294 MiB: gpu · media와 겹친 파일 지우기(→ 228)와 noto Serif CJK 빼기(−40)는 안 했다 — 새 "묶음 사이 의존"을 init · `make_iso.sh` · build에 들여야 한다.
   기본 판 ISO에는 못 들어간다(2 GiB). 배포는 web 판(사용자 2026-11-22 — browser를 실은 ISO는 `web` 식별자로 따로 짓고 lang-native를 뺀다, `project_release` 절차 3).
   셈으로 약 1.87 GiB — 첫 web 판을 낼 때 실제 크기와 설치 smoke를 본다. 묶음 수 15 / init의 `MAX = 16`.
@@ -458,7 +457,25 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 - `/etc/pam.d/common-session`이 `pam_systemd.so` 줄을 단 채 browser 묶음으로 `/etc`에 간다(지금 initrd의 `pam.d/sudo`는 그 파일을 include하지 않아 해가 없다).
 - `/dev/shm`이 없다(POSIX shm의 관행 — Chromium은 memfd라 무관, CR에서 뺐다). dbus 없음(stderr에 경고 반복). 로캘은 `C.utf8`뿐(한국어 UI `chromium-l10n` 안 실음).
 - Chromium은 `--disable-gpu`로 뜬다 — gpu 묶음의 `libegl1`로 llvmpipe 합성을 할지는 안 쟀다. 휠 · 스크롤 중 blit 비용도 안 쟀다.
-- root 화면 셸(설정 디스크에 `user=` 없음)에서는 Chromium이 안 뜬다(sandbox — 문이 안내한다). 창이 둘이면 text-input이 첫 창으로 간다(WY-M7).
-- 호환 모드에서 Cmd 키 자체가 evdev 125로 가서 페이지가 `key=Meta` keydown을 본다(modifiers는 Ctrl) — WY-M7이 재고 정한다.
+- root 화면 셸(설정 디스크에 `user=` 없음)에서는 Chromium이 안 뜬다(sandbox — 문이 안내한다). 창이 둘일 때 text-input이 첫 창으로 간다던 것은 표기뿐이었다(WY 결정 55 — WY-M7이 고침).
+- (풀림, WY 결정 54) 호환 모드에서 Cmd 키 자체가 evdev 125로 가서 페이지가 `key=Meta` keydown을 보던 것 — 호환 창에는 125 · 126을 안 보낸다.
 - 루트 게이트의 lane: 게스트 메모리가 큰 체인(devtools · browser)을 한 lane에 묶었다 — 그 lane이 가장 길어지면 lane에 무게를 주는 스케줄러로 바꾼다.
 - `tars-docs`는 shellcheck 대상이 아니다(`tars-browser`만 넣었다).
+
+## WY-M7이 남긴 것 (subsurface · popup, 그대로 이월)
+
+- subsurface 합성의 섞기는 1:1 길(k == bs)이 아니면 픽셀마다 나눗셈이다(`measurements.md` 116의 0.4 µs/px) — 늘린 창(k > 1)이나 bs ≠ k인 자식. 지금 쓰는 클라이언트에는 없다.
+- subsurface가 창 사각형 밖으로 나가면 그 자식의 damage는 통째로 간다. 입력 영역의 `subtract`는 받기만 한다(넓게 잡는다).
+- 안 잰 것(plan 실측 2 · 4 · 5 · 6): Chromium 배율 2 bubble의 물리 1:1, 자식에 `wl_surface.enter`를 안 보낼 때의 차이, 부모 크기 바뀜(`Cmd+R`)에 닫힌 popup을 Chromium이
+  다시 여는지, SDL 앱의 Cmd 조합.
+- popup이 보이는 동안 프레임은 늘 통째다(26 ~ 54 ms, TCG — `measurements.md` 117). 메뉴를 연 채 셸이 바쁘게 출력하면 그 프레임마다 통째다. 부분 프레임으로 가려면 popup 밑을
+  다시 칠하지 않은 clip(화살표를 되돌린 자리 등)에서 그림자가 두 번 섞이지 않게 해야 한다.
+- 배율 2에서 셸 pane 위로 나간 popup은 그림자에서 늘린 그림(2 × 2 블록)이다 — 물리로 다시 섞는 것은 창 사각형 안뿐이라 bs 2 popup의 그 부분은 흐리다.
+- 배율 2의 논리 화면(640 × 400)은 Chromium 메뉴에 작다 — 문맥 메뉴가 resize_y로 줄어 스크롤 화살표가 붙는다. 그리고 그 pane(논리 296폭)은 Chromium의
+  `set_min_size(500)`보다 좁아 창이 가운데로 잘린다(서버는 min_size를 받기만 한다).
+- 화면 밖 column으로 밀린 창(포커스는 그대로)의 popup은 서버가 안 닫는다 — 결정 53의 "숨음"은 포커스 이동으로만 잡는다(strip scroll로 포커스 창이 밀리는 길은 지금 없다).
+- popup에 키보드 포커스를 안 옮긴다(결정 53) — grab하고 키를 popup surface로 기대하는 클라이언트(GTK 메뉴 등)는 키가 부모로 간다. Chromium은 부모로 받는다.
+- `xdg_popup.destroy`는 자식 popup이 살아 있으면(서버가 이미 닫은 것이라도) `not_the_topmost_popup`이다(xml 그대로) — 닫힌 자식보다 부모를 먼저 지우는 클라이언트는 죽는다.
+  Chromium은 위에서부터 지운다(체인 · 시험 VM에서 `wl> gone pid=` 0).
+- `wl> popup` 줄은 창마다 64줄까지다 — Chromium은 단추 위에 머물 때마다 툴팁 popup을 만든다. 오래 쓰면 줄이 끊긴다(상한이 그 뜻).
+- 서버 쪽 장식(포커스 테두리 · 빈 칸 이름)은 하지 않았다(결정 55) — Chromium의 탭 줄이 그 자리다.

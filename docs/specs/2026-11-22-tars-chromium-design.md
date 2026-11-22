@@ -38,8 +38,8 @@ App Layer(0.3)의 4단. Wayland 서버(WY-M0~M6)와 툴킷(TK)이 섰고, 남은
    한글: 주소창 · 입력란 포커스에 `zwp_text_input_v3.enable`, 신세벌 `m f s` → preedit `ㅎ` → `하` → `한` → commit. v3로 충분하다(v1 불필요).
    클립보드: Chromium의 `Cmd+C` → `wl> selection … mime=text/plain;charset=utf-8` → 셸 클립보드.
 9. 창: toplevel 하나 = 창 하나(탭은 같은 창), `set_app_id("chromium-browser")`, 제목은 탭마다 바뀜, `set_min_size(500, 87)`. `Cmd+N`의 새 창은 두 번째 toplevel → 새 column.
-   장식: 서버가 `server_side`로 답해도 Chromium은 탭 줄과 창 단추를 직접 그린다. 창이 둘이면 text-input의 귀속이 어긋난다 — 새 창이 포커스인데 `ti enable`이 첫 창으로
-   간다(서버의 `toplevelOf(client)`가 클라이언트 단위).
+   장식: 서버가 `server_side`로 답해도 Chromium은 탭 줄과 창 단추를 직접 그린다. (고침, WY-M7) 창이 둘일 때 "text-input의 귀속이 어긋난다"고 적었던 것은
+   로그를 잘못 읽은 것이다 — 귀속은 이미 surface였고(둘째 창의 한글은 그 창으로 간다) `ti enable` 줄의 `to=`가 첫 창을 찍던 표기만 틀렸다(WY design 결정 55, wayland 판정 43).
 10. 빌드와 의존: `.deb` 91.7 MB, `--no-install-recommends` 폐포 170 패키지(받기 203 MiB · 설치 735 MiB). GTK는 `Depends`지만 NEEDED가 아니다(dlopen — 파일 선택 ·
     인쇄 대화상자). base · gpu · media 묶음 위에 얹으면 새로 드는 것은 80 패키지 · 압축 전 450 MiB · zstd15 164 MiB(글꼴 제외). postinst가 만드는 캐시(`gschemas.compiled` ·
     gdk-pixbuf · gio · mime)가 없으면 첫 키에서 죽는다 — harvest는 설치 전후 비교라 이것을 싣는다. 업스트림 스냅샷은 트렁크(160.0.8177.0)이고 261 MiB zip · 의존 수작업.
