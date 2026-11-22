@@ -420,6 +420,13 @@ random: crng init done`으로 빨갰고(`wait_for_at`의 `ink=118$`), 같은 판
 - Wayland 붙여넣기는 `receive` 줄 뒤에도 비동기다(글은 파이프로 들어간다) — 곧바로 친 Enter가 먼저 닿아 빈 입력에서 끝난다. 클라이언트가 글을 받았다는 신호를
   기다린 뒤 친다(Chromium 주소창은 자동 완성 bubble의 `wl> subsurface … map`). 사람용 PNG도 같다 — 클라이언트가 다시 그릴 때를 서버 줄은 모른다(preedit 그림에 3초).
 
+### 클라우드 세션(amd64)에서 체인을 돌린다 (PT-M0)
+
+claude.ai의 클라우드 세션은 amd64 · KVM 없음이고, ghcr의 이미지는 arm64 전용이라 `exec format error`로 안 돈다. Dockerfile의 호스트 몫
+둘(크로스 gcc 패키지 이름 · zig tarball)만 바꾼 사본을 scratchpad에서 구우면 체인 단독이 선다(tools 2분 50초 남짓, 커널 처음 빌드는 따로).
+세션 프록시를 지나는 법(CA 층 · Docker Hub 429 · ghostty archive · zig 의존 캐시)은 기억 `project_partition_tools`의 "배운 것" 4가 절차다.
+`devtools` · `pm` · `mise`처럼 바깥 망 · 묶음이 필요한 체인과 루트 게이트 전체는 거기서 끝까지 못 간다 — 사용자의 맥에서 돈다.
+
 ## 범용 명령
 
 끝난 milestone의 측정 하네스는 여기 없다 — 각 plan의 Task에 글자 그대로 있다.

@@ -204,7 +204,10 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 - [ ] `app-layer-0-3`의 이 세션 commit들(`cac1858`부터)은 push하지 않았다 — 사용자가 원하면 push
 - [ ] 게이트 밖으로 남긴 것: 끄는 선택 중 키로 viewport가 옮기면 누른 pane이 화면 밖일 수 있다(기억 `project_strip_workspace`)
 - [ ] 0.2.3은 프리릴리스라 소개 페이지 `releases`에 안 넣었다 — 사용자가 원하면 넣는다
-- [ ] `main`의 것을 0.3 줄로 가져오는 방법(merge · rebase)은 미정 — 처음 필요해질 때 사용자에게 묻는다
+- [x] `main`의 것을 0.3 줄로: rebase(사용자 2026-11-22). `main`의 `4782c9d`(PT-M0 — initrd에 fdisk · cfdisk, 클라우드 세션 · PR)
+      위로 이 브랜치 123개를 옮겼다. 충돌은 문서 넷(HANDOFF · completed · initrd-criteria · lessons)뿐, PT의 행 · 절은 끝에 다시 넣었다
+- [ ] PT-M0: 사용자의 맥에서 루트 게이트 한 번(클라우드 세션은 devtools · pm · mise를 못 돌린다). 소개 페이지(`gh-pages`의
+      `data.js`)의 기능 목록에 "파티션 도구 fdisk · cfdisk" — 별도 브랜치라 PR에 안 들었다. 기억 `project_partition_tools`
 - [ ] 실기(사용자, 맥북 에어 2011): 링크 칸 · GPU 데모 판(`project_link_status` · `carryover.md` DY 절), 그리고 SW의 strip(`Cmd+R` 등)
 - [ ] 이월: janet 1.43.0(AVX2), mitos 0.2.1, 위임 결정(CE 4~7, LT 2), memcpy · memset glibc 측정, 클라우드 브랜치 정리, DC-M2 boot 7 여유
 
