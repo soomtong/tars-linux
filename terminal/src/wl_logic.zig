@@ -254,10 +254,26 @@ pub fn onCommit(phase: Phase, acked: bool, has_buffer: bool) Step {
 
 // ── configure의 states(WY-M2 확정 4, design 결정 21 · 22) ────────────────
 
-/// 창이 놓인 자리. 자기 workspace(첫 commit 전에 `set_fullscreen` — 둠)이거나 strip의 column이다.
-pub const Place = enum { workspace, column };
+/// 창이 놓인 자리. 자기 workspace이거나 strip의 column이다. 자기 workspace는 상태가 둘이다(CR-M2, WY design 결정 58) —
+/// 클라이언트가 청한 것(둠의 첫 commit 전 `set_fullscreen` · Chromium의 F11)은 `fullscreen`, `Cmd+Ctrl+F`로 옮긴 것은
+/// `maximized`다. 크기는 둘 다 화면이다.
+pub const Place = enum { fullscreen, maximized, column };
+
+/// 자기 workspace의 상태(`Server.placeWorkspace`의 인자). `Place`의 앞 둘이다.
+pub const WsState = enum {
+    fullscreen,
+    maximized,
+
+    pub fn place(self: WsState) Place {
+        return switch (self) {
+            .fullscreen => .fullscreen,
+            .maximized => .maximized,
+        };
+    }
+};
 
 /// `xdg_toplevel.state`의 값(xdg-shell.xml). `tiled_*`는 toplevel 판 2부터다.
+pub const STATE_MAXIMIZED: u32 = 1;
 pub const STATE_FULLSCREEN: u32 = 2;
 pub const STATE_ACTIVATED: u32 = 4;
 pub const STATE_TILED_LEFT: u32 = 5;
@@ -266,14 +282,14 @@ pub const STATE_TILED_TOP: u32 = 7;
 pub const STATE_TILED_BOTTOM: u32 = 8;
 pub const TILED_SINCE: u32 = 2;
 
-/// configure에 실을 states. 자기 workspace는 fullscreen과 activated(WY-M0 그대로 — 늘 앞이다). column은 activated(키보드
-/// 포커스일 때)와 네 변의 tiled(판 2+)다 — tiled가 있어야 SDL3가 창을 떠 있는 것(floating)으로 보지 않고 크기를 따른다
-/// (조사 1절, `SDL_waylandwindow.c:775-801`). 돌려준 조각은 `out` 안이다.
+/// configure에 실을 states. 자기 workspace는 fullscreen이나 maximized(CR-M2)와 activated(WY-M0 그대로 — 늘 앞이다). column은
+/// activated(키보드 포커스일 때)와 네 변의 tiled(판 2+)다 — tiled가 있어야 SDL3가 창을 떠 있는 것(floating)으로 보지 않고 크기를
+/// 따른다(조사 1절, `SDL_waylandwindow.c:775-801`). 돌려준 조각은 `out` 안이다.
 pub fn toplevelStates(place: Place, activated: bool, version: u32, out: *[6]u32) []u32 {
     var n: usize = 0;
     switch (place) {
-        .workspace => {
-            out[0] = STATE_FULLSCREEN;
+        .fullscreen, .maximized => {
+            out[0] = if (place == .fullscreen) STATE_FULLSCREEN else STATE_MAXIMIZED;
             out[1] = STATE_ACTIVATED;
             n = 2;
         },
@@ -291,6 +307,25 @@ pub fn toplevelStates(place: Place, activated: bool, version: u32, out: *[6]u32)
         },
     }
     return out[0..n];
+}
+
+// ── 풀스크린에서 돌아갈 workspace(CR-M2 확정 3, WY design 결정 57) ─────────
+
+/// 자기 workspace(자리 `from`)에서 나오는 창이 돌아갈 셸 workspace의 자리. `uids`는 workspace 자리마다 셸이면 그 `uid`, app이면
+/// null이다. `home`은 옮기기 전에 있던 셸 workspace의 `uid`이고, 처음부터 자기 workspace로 뜬 창(둠)은 null이다 — 그러면 나오지
+/// 않는다(결정 57). 고르는 순서: `home`이 살아 있으면 그 자리, 없어졌으면 `from`에서 가장 가까운 왼쪽 셸 workspace, 왼쪽에
+/// 없으면 첫 셸 workspace, 셸 workspace가 하나도 없으면 null. 번호가 아니라 `uid`로 찾는 것은 앞의 workspace가 닫히면 자리가
+/// 당겨지기 때문이다(요구사항 결정 6).
+pub fn pickReturn(home: ?u32, uids: []const ?u32, from: usize) ?usize {
+    const h = home orelse return null;
+    for (uids, 0..) |u, i| if (u == h) return i;
+    var i = @min(from, uids.len);
+    while (i > 0) {
+        i -= 1;
+        if (uids[i] != null) return i;
+    }
+    for (uids, 0..) |u, k| if (u != null) return k;
+    return null;
 }
 
 // ── 포인터(WY-M2 단계 C, plan 확정 8, design 결정 24) ─────────────────────

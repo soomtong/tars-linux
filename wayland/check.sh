@@ -40,6 +40,9 @@ cd "$(dirname "$0")" || exit 1
 #   `ti enable to=`가 그 창이다. 판정 44 — 호환 창에는 Cmd 키 자체(125 · 126)가 안 가고 Cmd+V는 Ctrl+V로 간다.
 # WY-M7 단계 B: 판정 40~42(44 뒤 · 9 앞) — `--popup` 창의 popup이 누른 자리에 서고, column 밖(셸 pane 위)으로 나갔다 닫히면 셸이 되살아나며, 아래 경계에서
 #   flip_y한다. grab 없는 popup이 열린 채 창을 누르면 그 누름은 창에 가고, grab한 popup은 클라이언트 밖 누름에 닫히고 그 누름을 먹는다. Cmd+[에 닫힌다.
+# CR-M2: 판정 45~47(42 뒤 · 9 앞) — column 창의 Cmd+Ctrl+F가 그 창을 자기 workspace로 옮기고(maximized, 화면 전체) 다시 누르면 원래 column으로,
+#   클라이언트의 set_fullscreen · unset_fullscreen(`--fullscreen-later`의 F · U)은 fullscreen으로 같은 길, home workspace가 닫혔으면 왼쪽 셸 workspace의
+#   오른쪽 끝으로 나오며, workspace 아홉이면 거절하고 column 폭만 가장 넓게 한다.
 # WY-M2(단계 B): 창 모드로 띄운 창은 셸 오른쪽 column이 된다(판정 16 · 17 · 22) — `wl> column`, pane 픽셀 크기의 configure
 #   (activated · tiled), 포커스 slot이 창이면 키가 그 창으로, Cmd+[로 셸에 오면 activated를 잃고 keyboard leave, Cmd+R의 새
 #   configure, Cmd+Q에 slot이 닫히고 셸이 전체 폭을 되찾는다. 자기 workspace를 보는 판정 2~8은 `--fullscreen`으로 띄운다.
@@ -139,7 +142,7 @@ count_log() {
   tlog | grep -acE -- "$1"
 }
 
-# 글자열을 sendkey 이름으로 친다(소문자 · 숫자 · 공백 · `-` · `/` · `.` · `>` · `$` · `&` · `(` · `)`만).
+# 글자열을 sendkey 이름으로 친다(소문자 · 숫자 · 공백 · `-` · `/` · `.` · `>` · `<` · `$` · `&` · `(` · `)`만).
 type_text() {
   local text="$1" i ch keys=()
   for (( i = 0; i < ${#text}; i++ )); do
@@ -150,6 +153,7 @@ type_text() {
       /) keys+=(slash) ;;
       .) keys+=(dot) ;;
       '>') keys+=(shift-dot) ;;
+      '<') keys+=(shift-comma) ;;
       '$') keys+=(shift-4) ;;
       '&') keys+=(shift-7) ;;
       '(') keys+=(shift-9) ;;
@@ -1302,6 +1306,109 @@ type_text 'echo c41-(grep -c popup.configure.x.256.y.281 /tmp/wl19.log)-(grep -c
 type_keys ret
 wait_for_screen '\| c41-1-1-2' || report_failure "(41) the clients' logs do not have the configures (256, 281) · (136, 640) and two popup_done"
 echo "(42): Cmd+[ closed the popup (done why=focus)"
+
+# ── 판정 45 · 46 · 47: 앱 풀스크린 = 자기 workspace(CR-M2, WY design 결정 56~58) ──────────────────────────────────────────
+# 셸만 남은 자리다(판정 42 끝). `--fullscreen-later` 창(`--follow-size`, column x 644 · y 20, 616 × 752, 3366CC)에서 본다. 이 체인의 Cmd+Ctrl+F는 `ctrl-alt-f`다.
+# 45: Cmd+Ctrl+F → `wl> fullscreen id=N on ws=2 from=1 by=key` · configure 1280 × 800 · 클라이언트의 states `1,4`(maximized · activated) · 화면 전체가 창 색.
+#     Cmd+1의 셸 workspace에는 slot이 없고(`pane> ws=1/2 panes=1`) Cmd+2로 돌아온다. 다시 Cmd+Ctrl+F → `off ws=1 slot=1 by=key` · configure 616 × 752 ·
+#     오른쪽 column이 다시 창 색, 왼쪽은 셸.
+# 46: F 키(클라이언트의 `set_fullscreen` — Chromium의 F11) → `by=client` · states `2,4`, U 키(`unset_fullscreen`) → `off … by=client`. 그다음 home을 닫고 나오기 —
+#     Cmd+T의 둘째 셸 workspace에서 띄운 창(`disown`, 표준 입력 · 에러도 PTY에서 뗀다 — 셸이 끝나도 살고, PTY를 물고 있지 않아 terminal이 그 pane의 EOF를 본다)을 F로 옮기고(`from=2`) 그 셸을 `exit`로 닫은 뒤 U → 가장 가까운 왼쪽 셸
+#     workspace(ws 1)의 오른쪽 끝(`off ws=1 slot=1`).
+# 47: workspace 아홉에서 Cmd+Ctrl+F와 F → `refused` 둘. column 폭은 가장 넓은 preset(full — 155 × 8 = 1240)이고 F에도 configure로 답한다(같은 크기를 한 번 더).
+# 판정마다 셸에 칠 것이 있다 — 판정 40 앞에서 한글을 껐고 그 뒤로 켠 판정이 없다. 화살표는 (200, 600)에 둔다(색 상자는 그 자리를 피한다).
+echo "=== (45) Cmd+Ctrl+F moves a column window to its own workspace (maximized) and back ==="
+move_to 200 600 || report_failure "(45) the pointer did not reach 200,600"
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size --fullscreen-later > /tmp/wl22.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(45) the client did not open as a column"
+FS_A="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+wait_for_log "terminal: wl> configure id=${FS_A} w=616 h=752 act=1" || report_failure "(45) the column did not get its 616x752 configure"
+wait_for_ink40 45 "700 400 100 100" "bg=3366cc ink=0" || report_failure "(45) the column is not drawn"
+type_keys ctrl-alt-f
+wait_for_log "terminal: wl> fullscreen id=${FS_A} on ws=2 from=1 by=key" || report_failure "(45) no 'wl> fullscreen id=${FS_A} on ws=2 from=1 by=key'"
+wait_for_log "terminal: wl> configure id=${FS_A} w=1280 h=800 act=1" || report_failure "(45) no 1280x800 configure for the moved window"
+wait_for_log "terminal: wl> commit id=${FS_A} buf=1280x800 scale=1 at=0,0" || report_failure "(45) the window did not draw a 1280x800 buffer at 0,0"
+for box in "40 40 100 100" "1100 40 100 100" "640 300 100 100" "40 680 100 100" "1100 680 100 100"; do
+  wait_for_ink40 45 "$box" "bg=3366cc ink=0" || report_failure "(45) the whole screen is not the window's colour (${box})"
+done
+cp "$SHOT40" "${SCREENS_DIR}/fullscreen-key.ppm"
+SHELL_FRONT="$(count_log 'terminal: pane> ws=1/2 panes=1 focus=0 ')"
+type_keys alt-1
+wait_for_count 'terminal: pane> ws=1/2 panes=1 focus=0 ' $((SHELL_FRONT + 1)) || report_failure "(45) Cmd+1 did not show the shell workspace without the slot"
+APP_FRONT="$(count_log "terminal: pane> ws=2/2 app id=${FS_A}([^0-9]|$)")"
+type_keys alt-2
+wait_for_count "terminal: pane> ws=2/2 app id=${FS_A}([^0-9]|$)" $((APP_FRONT + 1)) || report_failure "(45) Cmd+2 did not bring the moved window back"
+CONF="$(count_log "terminal: wl> configure id=${FS_A} w=616 h=752 act=1")"
+type_keys ctrl-alt-f
+wait_for_log "terminal: wl> fullscreen id=${FS_A} off ws=1 slot=1 by=key" || report_failure "(45) no 'wl> fullscreen id=${FS_A} off ws=1 slot=1 by=key'"
+wait_for_count "terminal: wl> configure id=${FS_A} w=616 h=752 act=1" $((CONF + 1)) || report_failure "(45) the window did not get its column configure back"
+wait_for_log "terminal: pane> ws=1/1 panes=2 focus=1 slot=1 app id=${FS_A} " || report_failure "(45) the window is not the focused slot 1 of ws 1/1"
+wait_for_ink40 45 "700 400 100 100" "bg=3366cc ink=0" || report_failure "(45) the column is not the window's colour again"
+[ "$(ppm_ink "$SHOT40" 40 40 100 100)" != "bg=3366cc ink=0" ] || report_failure "(45) the shell side is still the window's colour"
+echo "(45): Cmd+Ctrl+F moved window ${FS_A} to ws 2 (1280x800, maximized) and back to slot 1 (616x752)"
+
+echo "=== (46) the client's set_fullscreen and unset_fullscreen, and coming out after the home workspace closed ==="
+type_keys f
+wait_for_log "terminal: wl> fullscreen id=${FS_A} on ws=2 from=1 by=client" || report_failure "(46) F (set_fullscreen) did not move the window"
+wait_for_count "terminal: wl> configure id=${FS_A} w=1280 h=800 act=1" 2 || report_failure "(46) no second 1280x800 configure"
+wait_for_ink40 46 "640 300 100 100" "bg=3366cc ink=0" || report_failure "(46) the moved window is not drawn"
+type_keys u
+wait_for_log "terminal: wl> fullscreen id=${FS_A} off ws=1 slot=1 by=client" || report_failure "(46) U (unset_fullscreen) did not bring the window back"
+wait_for_count "terminal: wl> configure id=${FS_A} w=616 h=752 act=1" $((CONF + 2)) || report_failure "(46) the window did not get its column configure back"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${FS_A} ws=1 slot=1" || report_failure "(46) Cmd+Q did not close the window"
+NEW_WS="$(count_log 'terminal: pane> ws=2/2 panes=1 focus=0 ')"
+type_keys alt-t
+wait_for_count 'terminal: pane> ws=2/2 panes=1 focus=0 ' $((NEW_WS + 1)) || report_failure "(46) Cmd+T did not open a second shell workspace"
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=2')"
+type_text 'tars-wl-test --follow-size --fullscreen-later > /tmp/wl23.log 2>&1 < /dev/null & disown'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=2' $((COLS + 1)) || report_failure "(46) the client did not open as a column of ws 2"
+FS_B="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=2' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+wait_for_log "terminal: wl> configure id=${FS_B} w=616 h=752 act=1" || report_failure "(46) the second window did not get the keys"
+type_keys f
+wait_for_log "terminal: wl> fullscreen id=${FS_B} on ws=3 from=2 by=client" || report_failure "(46) no 'wl> fullscreen id=${FS_B} on ws=3 from=2 by=client'"
+type_keys alt-2
+wait_for_log 'terminal: pane> ws=2/3 panes=1 focus=0 ' || report_failure "(46) Cmd+2 did not show the home workspace"
+type_text 'exit'
+type_keys ret
+wait_for_log "terminal: pane> ws=2/2 app id=${FS_B}([^0-9]|$)" || report_failure "(46) the home workspace did not close (no 'pane> ws=2/2 app id=${FS_B}')"
+type_keys u
+wait_for_log "terminal: wl> fullscreen id=${FS_B} off ws=1 slot=1 by=client" || report_failure "(46) the window did not come out to the right end of ws 1"
+wait_for_log "terminal: pane> ws=1/1 panes=2 focus=1 slot=1 app id=${FS_B} " || report_failure "(46) the window is not the focused slot 1 of ws 1/1"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${FS_B} ws=1 slot=1" || report_failure "(46) Cmd+Q did not close the second window"
+echo "(46): F and U moved window ${FS_A} by the client; window ${FS_B} came out to ws 1 after its home closed"
+
+echo "=== (47) with nine workspaces Cmd+Ctrl+F and F are refused and the column takes the widest width ==="
+for n in 2 3 4 5 6 7 8 9; do
+  NEW_WS="$(count_log "terminal: pane> ws=${n}/${n} panes=1 focus=0 ")"
+  type_keys alt-t
+  wait_for_count "terminal: pane> ws=${n}/${n} panes=1 focus=0 " $((NEW_WS + 1)) || report_failure "(47) Cmd+T did not open workspace ${n}"
+done
+type_keys alt-1
+wait_for_log 'terminal: pane> ws=1/9 panes=1 focus=0 ' || report_failure "(47) Cmd+1 did not show ws 1/9"
+COLS="$(count_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1')"
+type_text 'tars-wl-test --follow-size --fullscreen-later > /tmp/wl24.log &'
+type_keys ret
+wait_for_count 'terminal: wl> column id=[0-9]+ slot=1 ws=1' $((COLS + 1)) || report_failure "(47) the client did not open as a column"
+FS_C="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+ slot=1 ws=1' | tail -n 1 | sed -E 's/.*id=([0-9]+).*/\1/')"
+wait_for_log "terminal: wl> configure id=${FS_C} w=616 h=752 act=1" || report_failure "(47) the window did not get the keys"
+type_keys ctrl-alt-f
+wait_for_log "terminal: wl> fullscreen id=${FS_C} refused" || report_failure "(47) Cmd+Ctrl+F with nine workspaces was not refused"
+wait_for_log "terminal: wl> configure id=${FS_C} w=1240 h=752 act=1" || report_failure "(47) the refused window's column did not take the full width (1240)"
+type_keys f
+wait_for_count "terminal: wl> fullscreen id=${FS_C} refused" 2 || report_failure "(47) the client's set_fullscreen with nine workspaces was not refused"
+wait_for_count "terminal: wl> configure id=${FS_C} w=1240 h=752 act=1" 2 || report_failure "(47) the refused set_fullscreen got no configure"
+[ "$(count_log "terminal: wl> fullscreen id=${FS_C} on ")" -eq 0 ] || report_failure "(47) a refused window moved"
+type_keys alt-q
+wait_for_log "terminal: wl> unmap id=${FS_C} ws=1 slot=1" || report_failure "(47) Cmd+Q did not close the window"
+type_text 'echo c45-(grep -c states.1.4 /tmp/wl22.log)-(grep -c states.2.4 /tmp/wl22.log)-(grep -c fullscreen.set /tmp/wl24.log)-(grep -c states.2 /tmp/wl24.log)'
+type_keys ret
+wait_for_screen '\| c45-1-1-1-0' || report_failure "(45 · 47) the clients' logs do not have maximized once, fullscreen once and no fullscreen when refused"
+echo "(47): Cmd+Ctrl+F and F were refused at nine workspaces, the column went to 1240 and F got a configure"
 
 # ── 판정 9: render verify ───────────────────────────────────────────────
 #

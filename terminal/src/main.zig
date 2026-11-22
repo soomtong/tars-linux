@@ -2082,6 +2082,9 @@ const ShellWs = struct {
     /// 전체 화면(FU)은 workspace마다의 값이다(WY design 결정 8). 앞에 오면 격자가 이 값으로 다시 선다
     /// (`App.enterWorkspace`). 바꾸는 것은 `App.setFullscreen` 하나다.
     fullscreen: bool,
+    /// 이 workspace의 정체(CR-M2 확정 3, WY design 결정 57) — terminal 수명 동안 느는 번호(`App.next_uid`). 번호(자리)는 앞의
+    /// workspace가 닫히면 당겨지므로, 풀스크린으로 옮긴 창이 돌아갈 곳은 이것으로 기억한다(`AppWs.home`).
+    uid: u32,
 };
 
 /// strip의 칸 하나(WY design 결정 20). 셸 패널이거나 Wayland 클라이언트의 창이다.
@@ -2112,7 +2115,16 @@ const AppPane = struct {
 /// 번호로만 부른다 — 클라이언트가 먼저 끝나도 여기 매달린 포인터가 없다(`wl/server.zig`).
 const AppWs = struct {
     toplevel: u32,
+    /// 옮겨 오기 전의 셸 workspace(`ShellWs.uid`, CR-M2 확정 3). 처음부터 자기 workspace로 뜬 창(둠 · 앞이 app일 때 뜬 창)은
+    /// null이다 — 돌아갈 자리가 없어 `Cmd+Ctrl+F` · `unset_fullscreen`이 아무 일도 안 한다(확정 4).
+    home: ?u32 = null,
+    /// 누가 옮겼나(CR-M2 확정 5). `key`(`Cmd+Ctrl+F`, maximized)는 클라이언트의 `unset_fullscreen`에 maximized로 남고,
+    /// `client`(F11, fullscreen)는 column으로 돌아간다.
+    by: FullscreenBy = .client,
 };
+
+/// 풀스크린 옮기기 · 되돌리기를 누가 했나(`wl> fullscreen … by=`).
+const FullscreenBy = enum { key, client };
 
 /// 클라이언트가 볼 수정키를 `wl_keyboard.modifiers`의 비트로(WY-M0, design 결정 6). 비트는 `wl_logic`이 정한다.
 fn wlMask(m: input.AppMods) wl_logic.Mask {
@@ -4556,6 +4568,10 @@ const App = struct {
     workspaces: [MAX_WORKSPACES]?Workspace = @splat(null),
     /// `Cmd+T` · `Cmd+1`~`9`가 바꾸고, 워크스페이스가 사라지면 EOF 경로가 맞춘다(WP-M2).
     current: usize = 0,
+    /// 다음 셸 workspace의 `uid`(CR-M2 확정 3). 줄지 않는다 — `takeUid`.
+    next_uid: u32 = 1,
+    /// 방금 풀스크린으로 옮기거나 되돌린 창(CR-M2 실측 2) — 그 뒤 첫 프레임의 시간과 첫 commit까지의 밀리초를 한 번씩 찍는다.
+    fs_watch: ?struct { id: u32, at_ms: i64, framed: bool = false } = null,
     /// 공유 칸은 패널보다 오래 산다 — 마지막 패널이 닫히면 terminal이 끝나므로
     /// 프로세스와 같은 수명이다(CB design 비목표 2: terminal이 되살아나면 빈
     /// 칸으로 시작한다).
@@ -4985,6 +5001,7 @@ const App = struct {
             .panes = @splat(null),
             .focus = 0,
             .fullscreen = self.fullscreen_default,
+            .uid = self.takeUid(),
         } };
         const boot = self.workspaces[self.current].?.asShell().?;
         var boot_rects: [layout.MAX_LEAVES]layout.Rect = undefined;
@@ -5365,17 +5382,8 @@ const App = struct {
     fn focusTo(self: *App, srv: *wls.Server, want: ?u32) void {
         const ks = &self.key_state;
         const old = srv.focused;
-        if (ks.preedit()) |cp| switch (ks.hangul_owner) {
-            .app => if (old != want or old == null) {
-                if (old != null) {
-                    var utf8: [4]u8 = undefined;
-                    const n = std.unicode.utf8Encode(cp, &utf8) catch 0;
-                    srv.imeSend(utf8[0..n], "");
-                } else logline.print("terminal: hangul> dropped (the window is gone)\n", .{});
-                ks.dropComposition();
-                dumpHangul(ks);
-                self.needs_redraw = true;
-            },
+        if (ks.preedit() != null) switch (ks.hangul_owner) {
+            .app => if (old != want or old == null) self.settleAppPreedit(srv),
             .shell => if (want != null) {
                 logline.print("terminal: hangul> dropped (no shell to take it)\n", .{});
                 ks.dropComposition();
@@ -5385,6 +5393,23 @@ const App = struct {
         };
         if ((old == null) != (want == null)) ks.resetTaps();
         srv.setFocus(want, wlMask(ks.appMods()));
+    }
+
+    /// 포커스 창에 보내던 조합을 확정한다(WY design 결정 42) — `commit_string` + 빈 preedit + `done`(`imeSend`는 포커스 창에만
+    /// 보낸다). 창이 사라져 포커스가 이미 없으면 버린다. 조합이 없거나 셸의 것이면 아무것도 안 한다. 포커스를 잃는 창(`focusTo`)과
+    /// 풀스크린으로 옮기는 창(`enterOwn` — 포커스는 그대로지만 popup이 닫히고 크기가 바뀐다, CR-M2 확정 6)이 부른다.
+    fn settleAppPreedit(self: *App, srv: *wls.Server) void {
+        const ks = &self.key_state;
+        if (ks.hangul_owner != .app) return;
+        const cp = ks.preedit() orelse return;
+        if (srv.focused != null) {
+            var utf8: [4]u8 = undefined;
+            const n = std.unicode.utf8Encode(cp, &utf8) catch 0;
+            srv.imeSend(utf8[0..n], "");
+        } else logline.print("terminal: hangul> dropped (the window is gone)\n", .{});
+        ks.dropComposition();
+        dumpHangul(ks);
+        self.needs_redraw = true;
     }
 
     /// 창 `id`가 앞 워크스페이스에 보이는가 — app 워크스페이스의 그 창이거나, 앞 셸 워크스페이스의 화면 안 slot이다.
@@ -5654,6 +5679,12 @@ const App = struct {
         self.whole = .{ .col = 0, .row = 0, .cols = g.cols, .rows = g.rows };
     }
 
+    /// 새 셸 workspace의 `uid`(CR-M2 확정 3).
+    fn takeUid(self: *App) u32 {
+        defer self.next_uid += 1;
+        return self.next_uid;
+    }
+
     /// 워크스페이스 `i`를 앞에 둔다(WY design 결정 17). 앞이 바뀌는 자리 넷(`Cmd+T` · `Cmd+1`~`9` · 닫힌 워크스페이스의
     /// 다음 · 새 app 창)이 모두 이것을 부른다 — 격자를 그 워크스페이스의 전체 화면 값으로 다시 세운다. app은 화면
     /// 전체다(chrome 없음). 통째로 그리는 것은 `render`가 `last_current`로 안다.
@@ -5707,8 +5738,8 @@ const App = struct {
     }
 
     ///
-    /// 앞이 app 워크스페이스면 패널 명령(분할 · 닫기 · 포커스 · 폭 · 전체 화면)은 할 것이 없다 — 워크스페이스를 오가는
-    /// 둘(`Cmd+T` · `Cmd+1`~`9`)만 돈다(WY design 결정 15). 앞은 명령마다 다시 구한다 — 같은 배치의 앞 명령이
+    /// 앞이 app 워크스페이스면 패널 명령(분할 · 닫기 · 포커스 · 폭)은 할 것이 없다 — 워크스페이스를 오가는 둘(`Cmd+T` ·
+    /// `Cmd+1`~`9`)과 `Cmd+Q`, 원래 열로 되돌리는 `Cmd+Ctrl+F`(CR-M2)만 돈다(WY design 결정 15). 앞은 명령마다 다시 구한다 — 같은 배치의 앞 명령이
     /// 워크스페이스를 바꿨을 수 있다.
     fn runPanes(self: *App, cmds: []const input.Pane) !void {
         for (cmds) |cmd| {
@@ -5738,6 +5769,24 @@ const App = struct {
                 }
                 continue;
             }
+            // `Cmd+Ctrl+F`의 앱 갈래(CR-M2 확정 1 · 3, WY design 결정 56 · 57). 앞이 app workspace면 원래 열로 되돌리고(돌아갈
+            // 자리가 없으면 아무 일도 없다 — 둠), 셸 workspace의 포커스 slot이 창이면 그 창을 자기 workspace로 옮긴다. 셸 패널이면
+            // 아래 FU 갈래다.
+            if (cmd == .fullscreen_toggle) if (self.wl) |srv| {
+                switch (self.workspaces[self.current].?) {
+                    .app => {
+                        try self.leaveOwn(self.current, .key);
+                        continue;
+                    },
+                    .shell => |*sh| switch (sh.panes[sh.focus].?) {
+                        .app => {
+                            try self.enterOwn(srv, self.current, sh.focus, .key);
+                            continue;
+                        },
+                        .shell => {},
+                    },
+                }
+            };
             const ws = self.workspaces[self.current].?.asShell() orelse continue;
             switch (cmd) {
                 .split_right, .split_below => {
@@ -5796,7 +5845,7 @@ const App = struct {
                 },
                 .new_workspace, .workspace_1, .workspace_2, .workspace_3, .workspace_4, .workspace_5, .workspace_6, .workspace_7, .workspace_8, .workspace_9, .close_app, .menu_open => unreachable,
                 // 전체 화면(FU-M0, `Cmd+Ctrl+F`). strip은 그대로이고 패널의 사각형만 커지거나 준다. 앞의 워크스페이스
-                // 하나의 값이다(WY design 결정 8).
+                // 하나의 값이다(WY design 결정 8). 포커스가 셸 패널일 때만 여기 온다 — 창이면 위에서 옮겼다(CR-M2).
                 .fullscreen_toggle => try self.setFullscreen(self.current, !ws.fullscreen),
                 // 포커스 column의 폭을 다음 preset으로(SW-M3, design 결정 24). 혼자인 column은
                 // 늘 전체 폭이라(결정 21) 바꿀 것이 없다 — `split refused`와 같은 이유로 찍는다.
@@ -5834,7 +5883,7 @@ const App = struct {
                 // 새 워크스페이스는 설정의 전체 화면 값으로 시작한다(WY design 결정 8). 지금 앞의 값을 따르지
                 // 않는 것은 앞이 app일 수 있어서다 — app은 값이 없다.
                 const on = self.fullscreen_default;
-                self.workspaces[n] = .{ .shell = .{ .strip = layout.Strip.init(), .panes = @splat(null), .focus = 0, .fullscreen = on } };
+                self.workspaces[n] = .{ .shell = .{ .strip = layout.Strip.init(), .panes = @splat(null), .focus = 0, .fullscreen = on, .uid = self.takeUid() } };
                 self.workspaces[n].?.asShell().?.panes[0] = .{ .shell = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, self.wholeFor(on), self.accountPtr(), self.cursor_shape) };
                 // 이 배치의 뒤 명령(같은 read에 실려 온 Cmd+D 등)이 새 워크스페이스에 간다 — 위 머리가 명령마다
                 // 앞을 다시 구한다.
@@ -6960,6 +7009,7 @@ const App = struct {
         defer self.syncFocus();
         for (srv.takeEvents()) |e| switch (e) {
             .toplevel => |o| try self.openApp(srv, o),
+            .fullscreen => |r| try self.fullscreenRequest(srv, r),
             .gone => |id| {
                 const at = self.findApp(id) orelse continue;
                 switch (at) {
@@ -6976,15 +7026,18 @@ const App = struct {
                 self.needs_redraw = true;
             },
             // 앞에 보이는 창의 commit만 다음 프레임을 부른다. 셸 워크스페이스의 slot이면 그 slot을 표시해 둔다 —
-            // 셸 프레임은 바뀐 slot만 다시 옮긴다(확정 5).
-            .commit => |id| switch (self.findApp(id) orelse continue) {
-                .workspace => |wi| if (wi == self.current) {
-                    self.output_pending = true;
-                },
-                .slot => |sl| if (sl.ws == self.current) {
-                    self.app_dirty.set(sl.leaf);
-                    self.output_pending = true;
-                },
+            // 셸 프레임은 바뀐 slot만 다시 옮긴다(확정 5). 풀스크린으로 옮긴 창이면 첫 commit까지의 시간을 찍는다(CR-M2 실측 2).
+            .commit => |id| {
+                self.fsCommit(id);
+                switch (self.findApp(id) orelse continue) {
+                    .workspace => |wi| if (wi == self.current) {
+                        self.output_pending = true;
+                    },
+                    .slot => |sl| if (sl.ws == self.current) {
+                        self.app_dirty.set(sl.leaf);
+                        self.output_pending = true;
+                    },
+                }
             },
             .selection => self.takeSelection(srv),
         };
@@ -7059,7 +7112,7 @@ const App = struct {
             if (n == MAX_WORKSPACES) return srv.refuse(o.id);
             self.workspaces[n] = .{ .app = .{ .toplevel = o.id } };
             logline.print("terminal: wl> toplevel id={d} ws={d}\n", .{ o.id, n + 1 });
-            srv.placeWorkspace(o.id);
+            srv.placeWorkspace(o.id, .fullscreen);
             self.enterWorkspace(n);
             return;
         };
@@ -7069,6 +7122,106 @@ const App = struct {
         ws.focus = leaf;
         try self.revealFocus(ws);
         logline.print("terminal: wl> column id={d} slot={d} ws={d}\n", .{ o.id, leaf, self.current + 1 });
+        self.needs_redraw = true;
+    }
+
+    /// 셸 workspace `wi`의 app slot `leaf`에 선 창을 자기 workspace로 옮긴다(CR-M2 확정 1 · 2 · 6, WY design 결정 56). `by`가 `key`면
+    /// `Cmd+Ctrl+F`(maximized), `client`면 매핑 뒤의 `set_fullscreen`(fullscreen)이다(결정 58).
+    ///
+    /// - 아홉이 찼으면 거절한다(요구사항 결정 6) — 제자리에서 그 column의 폭을 가장 넓은 preset(`Cmd+R`의 끝 `full`)으로 하고,
+    ///   클라이언트가 청했으면 fullscreen 없는 configure로 답한다(`answerFullscreen`). 줄 `wl> fullscreen id=N refused`.
+    /// - 아니면 그 창에 보내던 조합을 확정하고(포커스는 같은 창이라 `focusTo`가 안 한다), strip에서 뺀 뒤(`closeSlot` — 창은 산다.
+    ///   마지막 slot이었으면 그 workspace가 닫힌다) 끝에 `.app` workspace를 더하고 앞에 둔다. 돌아갈 곳은 출발 workspace의
+    ///   `uid`다. popup은 크기가 바뀌어 서버가 닫는다(결정 53). 줄 `wl> fullscreen id=N on ws=W from=H by=key|client`.
+    fn enterOwn(self: *App, srv: *wls.Server, wi: usize, leaf: u4, by: FullscreenBy) !void {
+        const w = self.workspaces[wi].?.asShell().?;
+        const id = w.panes[leaf].?.app.toplevel;
+        if (workspaceCount(&self.workspaces) == MAX_WORKSPACES) {
+            const whole = self.wholeFor(w.fullscreen);
+            // `full`에 닿을 때까지 돌린다(넷 안). column이 하나면 null — 이미 격자 전체다.
+            while (w.strip.cycleWidth(leaf)) |x| if (x == .full) break;
+            _ = w.strip.reveal(w.focus, whole);
+            _ = try applyLayout(self.allocator, w, whole);
+            if (by == .client) srv.answerFullscreen(id);
+            logline.print("terminal: wl> fullscreen id={d} refused\n", .{id});
+            if (wi == self.current) self.needs_redraw = true;
+            return;
+        }
+        // 조합은 포커스 창의 것이다 — 뒤의 column이 스스로 옮겨 가면(F11) 포커스 창의 조합은 그대로 둔다.
+        if (srv.focused == id) self.settleAppPreedit(srv);
+        const home = w.uid;
+        try self.closeSlot(wi, leaf);
+        const n = workspaceCount(&self.workspaces);
+        self.workspaces[n] = .{ .app = .{ .toplevel = id, .home = home, .by = by } };
+        srv.placeWorkspace(id, if (by == .key) .maximized else .fullscreen);
+        self.enterWorkspace(n);
+        logline.print("terminal: wl> fullscreen id={d} on ws={d} from={d} by={s}\n", .{ id, n + 1, wi + 1, @tagName(by) });
+        self.fs_watch = .{ .id = id, .at_ms = self.nowMs() };
+    }
+
+    /// 자기 workspace `wi`의 창을 셸 workspace의 column으로 되돌린다(CR-M2 확정 3, WY design 결정 57). 돌아갈 곳은
+    /// `wl_logic.pickReturn` — home이 살아 있으면 그 포커스 column 오른쪽(`openApp`의 column 길), 없어졌으면 가장 가까운 왼쪽(없으면
+    /// 첫) 셸 workspace의 오른쪽 끝. home이 없거나(둠) 받을 셸 workspace가 없거나 strip이 거절하면(slot 여덟 · 너무 좁음) 아무
+    /// 일도 없다(그대로 풀스크린). 되돌린 뒤 그 workspace가 앞이고 포커스는 그 slot이다. column의 configure(tiled, pane 크기)는
+    /// 바퀴 끝 `syncColumns`가 보낸다. 줄 `wl> fullscreen id=N off ws=W slot=S by=key|client`.
+    fn leaveOwn(self: *App, wi: usize, by: FullscreenBy) !void {
+        const a = self.workspaces[wi].?.app;
+        const n = workspaceCount(&self.workspaces);
+        var uids: [MAX_WORKSPACES]?u32 = @splat(null);
+        for (0..n) |i| uids[i] = switch (self.workspaces[i].?) {
+            .shell => |sh| sh.uid,
+            .app => null,
+        };
+        const ti = wl_logic.pickReturn(a.home, uids[0..n], wi) orelse return;
+        const w = self.workspaces[ti].?.asShell().?;
+        const whole = self.wholeFor(w.fullscreen);
+        const at = if (uids[ti] == a.home) w.focus else w.strip.lastColumnTop() orelse return;
+        const leaf = w.strip.split(at, .right, whole) orelse return;
+        _ = try applyLayout(self.allocator, w, whole);
+        w.panes[leaf] = .{ .app = .{ .toplevel = a.toplevel } };
+        w.focus = leaf;
+        _ = w.strip.reveal(leaf, whole);
+        _ = try applyLayout(self.allocator, w, whole);
+        self.removeWorkspace(wi);
+        const dest = if (ti > wi) ti - 1 else ti;
+        self.enterWorkspace(dest);
+        logline.print("terminal: wl> fullscreen id={d} off ws={d} slot={d} by={s}\n", .{ a.toplevel, dest + 1, leaf, @tagName(by) });
+        self.fs_watch = .{ .id = a.toplevel, .at_ms = self.nowMs() };
+    }
+
+    /// 옮긴 뒤 첫 프레임(CR-M2 실측 2) — `wl> fullscreen frame us=N`. 그 프레임은 창의 옛 버퍼를 새 자리에 옮긴 것이다(새 크기의
+    /// 버퍼는 클라이언트가 configure를 받고 그린 뒤 온다 — `fsCommit`).
+    fn logFullscreenFrame(self: *App, us: i96) void {
+        const w = &(self.fs_watch orelse return);
+        if (w.framed) return;
+        w.framed = true;
+        logline.print("terminal: wl> fullscreen frame us={d}\n", .{us});
+    }
+
+    /// 옮긴 창의 첫 commit(CR-M2 실측 2) — 옮긴 때부터의 밀리초 `wl> fullscreen commit ms=N`. 한 번 찍고 지켜보기를 끝낸다. 옮긴
+    /// 프레임 뒤의 것만 센다 — frame 콜백마다 commit하는 클라이언트(tars-wl-test)는 configure를 읽기 전의 commit이 같은 바퀴에 온다.
+    fn fsCommit(self: *App, id: u32) void {
+        const w = self.fs_watch orelse return;
+        if (w.id != id or !w.framed) return;
+        logline.print("terminal: wl> fullscreen commit ms={d}\n", .{self.nowMs() - w.at_ms});
+        self.fs_watch = null;
+    }
+
+    /// 매핑된 창의 `set_fullscreen` · `unset_fullscreen`(CR-M2 확정 1 · 5, `Event.fullscreen` — Chromium의 F11).
+    /// column 창: 켜면 자기 workspace로(`enterOwn`, 거절이면 그 안에서 답한다), 끄면 이미 column이라 configure로 답만 한다.
+    /// 자기 workspace 창: 켜면 자리 그대로 fullscreen 상태로, 끄면 `Cmd+Ctrl+F`로 온 창은 maximized로 남고 스스로 온 창은 column으로
+    /// 돌아간다(`leaveOwn` — 둠처럼 돌아갈 곳이 없으면 그대로).
+    fn fullscreenRequest(self: *App, srv: *wls.Server, r: wls.FullscreenReq) !void {
+        switch (self.findApp(r.id) orelse return) {
+            .slot => |sl| if (r.on) try self.enterOwn(srv, sl.ws, sl.leaf, .client) else srv.answerFullscreen(r.id),
+            .workspace => |wi| {
+                if (r.on) return srv.setWorkspaceState(r.id, .fullscreen);
+                switch (self.workspaces[wi].?.app.by) {
+                    .key => srv.setWorkspaceState(r.id, .maximized),
+                    .client => try self.leaveOwn(wi, .client),
+                }
+            },
+        }
         self.needs_redraw = true;
     }
 
@@ -7377,6 +7530,7 @@ const App = struct {
         };
         var frame: Frame = .{};
         try self.render(&frame, want);
+        self.logFullscreenFrame(frame.frame_us);
         self.dumpFrame(&frame, pointers);
         return true;
     }

@@ -48,8 +48,9 @@ const MENU_MANAGER_VERSION = 2;
 
 /// title · app_id의 상한(TK-M5 plan 확정 4) — 넘으면 UTF-8 경계에서 자른다.
 const NAME_BYTES = 64;
-/// `wl> title` 줄의 창마다 상한(plan 확정 4) — Chromium처럼 탭마다 제목을 바꾸는 창이 로그를 불리지 않게.
-const TITLE_LINES: u8 = 4;
+/// `wl> title` 줄의 창마다 상한(plan 확정 4) — Chromium처럼 탭마다 제목을 바꾸는 창이 로그를 불리지 않게. CR-M2가 4에서 16으로
+/// 올렸다(browser 체인이 한 창에서 페이지를 여섯 넘게 연다 — 다섯째 제목부터 줄이 안 나왔다).
+const TITLE_LINES: u8 = 16;
 /// `wl> menu` 줄의 창마다 상한(plan 확정 14).
 const MENU_LINES: u8 = 8;
 /// `wl> subsurface` 줄의 창마다 상한(WY-M7 확정 2) — 만들기 · 매핑 · 해제 · 닫기만 찍는다. Chromium의 bubble은 주소창에 글자를 칠 때마다 넷이다.
@@ -116,6 +117,10 @@ pub const Event = union(enum) {
     gone: u32,
     /// 보이는 내용이 바뀌었거나 frame 콜백을 기다린다 — 그 workspace가 앞이면 다시 그린다.
     commit: u32,
+    /// 매핑된 창이 `set_fullscreen`(`on`) · `unset_fullscreen`을 보냈다(CR-M2, WY design 결정 56) — Chromium의 F11. App이 자리를
+    /// 정한다: column이면 자기 workspace로 옮기거나 거절하고(`answerFullscreen`), 자기 workspace면 상태만 바꾸거나(`setWorkspaceState`)
+    /// column으로 되돌린다. 첫 commit 전의 것은 이 일이 아니라 `Opened.fullscreen`이다(결정 21).
+    fullscreen: FullscreenReq,
     /// 클라이언트의 selection을 서버 사본으로 다 받았다(WY-M4, design 결정 33). App이 `clipboard()`를 읽어
     /// `clipboard=shared`면 셸 클립보드에 넣는다(결정 37). 바이트를 싣지 않는 것은 사본의 주인이 서버라서다 — App은
     /// 꺼낸 그 바퀴에 복사한다.
@@ -127,6 +132,9 @@ pub const MenuView = struct {
     model: *const menubar.Model,
     generation: u32,
 };
+
+/// `Event.fullscreen`의 값.
+pub const FullscreenReq = struct { id: u32, on: bool };
 
 /// 첫 commit에 정해진 것(`Event.toplevel`).
 pub const Opened = struct {
@@ -714,15 +722,34 @@ pub const Server = struct {
         logline.print("terminal: wl> toplevel refused id={d}\n", .{id});
     }
 
-    /// 창이 자기 workspace를 받았다(WY-M0의 길 — 둠, 앞이 app workspace일 때). 화면 크기 · fullscreen · activated의
-    /// configure 하나를 보낸다. 그 뒤로 크기가 안 바뀐다.
-    pub fn placeWorkspace(self: *Server, id: u32) void {
+    /// 창이 자기 workspace를 받았다(WY-M0의 길 — 둠, 앞이 app workspace일 때 · CR-M2의 옮기기). 화면 크기 · `state` · activated의
+    /// configure 하나를 보낸다(`state`는 WY design 결정 58 — 클라이언트가 청했으면 fullscreen, `Cmd+Ctrl+F`면 maximized). 이미
+    /// 매핑된 column 창이면 크기가 바뀌므로 그 popup을 닫는다(결정 53).
+    pub fn placeWorkspace(self: *Server, id: u32, state: logic.WsState) void {
         const t = self.find(id) orelse return;
-        t.place = .workspace;
+        t.place = state.place();
         t.area_w = self.fb_w;
         t.area_h = self.fb_h;
         if (t.sent) |was| if (was.w != self.fb_w or was.h != self.fb_h) dismissPopups(t, "resize");
         sendConfigure(t, self.fb_w, self.fb_h, true);
+    }
+
+    /// 자기 workspace 창의 상태만 바꾼다(CR-M2 확정 5) — 자리 · 크기는 그대로. `Cmd+Ctrl+F`로 옮긴 창이 F11을 켜고 끌 때다.
+    /// 같은 상태면 아무것도 안 한다. 줄 `wl> state id=N fullscreen=0|1`.
+    pub fn setWorkspaceState(self: *Server, id: u32, state: logic.WsState) void {
+        const t = self.find(id) orelse return;
+        const was = t.place orelse return;
+        if (was == .column or was == state.place()) return;
+        t.place = state.place();
+        sendConfigure(t, self.fb_w, self.fb_h, true);
+        logline.print("terminal: wl> state id={d} fullscreen={d}\n", .{ id, @intFromBool(state == .fullscreen) });
+    }
+
+    /// column 창의 `set_fullscreen` · `unset_fullscreen`에 답한다(CR-M2 확정 2) — 옮기지 않았을 때(아홉이 찼다 · 이미 column)도
+    /// xdg-shell은 configure로 답하라고 한다. 다음 `configureColumn`이 같은 값이어도 한 번 보낸다(fullscreen 없는 configure).
+    pub fn answerFullscreen(self: *Server, id: u32) void {
+        const t = self.find(id) orelse return;
+        t.reanswer = true;
     }
 
     /// 창이 strip의 column이다(확정 4, design 결정 22). `w` × `h`는 pane의 픽셀 크기다. App이 바퀴마다 모든 app slot에
@@ -739,7 +766,8 @@ pub const Server = struct {
     fn resendColumn(self: *Server, t: *Toplevel) void {
         if (t.place != .column or t.area_w == 0 or t.area_h == 0) return;
         const want: Toplevel.Sent = .{ .w = t.area_w, .h = t.area_h, .act = self.focused == t.id };
-        if (t.sent) |was| if (std.meta.eql(was, want)) return;
+        if (t.sent) |was| if (!t.reanswer and std.meta.eql(was, want)) return;
+        t.reanswer = false;
         // 부모의 크기가 바뀌면 그 popup을 닫는다(design 결정 53 — 다시 셈하지 않는다).
         if (t.sent) |was| if (was.w != want.w or was.h != want.h) dismissPopups(t, "resize");
         sendConfigure(t, want.w, want.h, want.act);
@@ -2611,6 +2639,8 @@ const Toplevel = struct {
     want_fullscreen: bool = false,
     /// 놓인 자리와 그 크기(픽셀) — App이 정한다(`placeWorkspace` · `configureColumn`). 놓이기 전에는 null · 0이다.
     place: ?logic.Place = null,
+    /// 다음 column configure는 같은 값이어도 보낸다(`answerFullscreen`).
+    reanswer: bool = false,
     area_w: u32 = 0,
     area_h: u32 = 0,
     /// 마지막으로 보낸 configure(column의 같은 것 거르기).
@@ -2721,7 +2751,7 @@ fn xdgSurfaceDestroyed(_: *xdg.Surface, xs: *XdgSurface) void {
 }
 
 /// configure 하나(WY-M0 확정 4 · WY-M2 확정 4). 자리(`t.place`)가 states를 고른다(`logic.toplevelStates` — 자기
-/// workspace는 fullscreen · activated, column은 activated와 tiled 넷). 장식은 없다 — 장식 관리자가 늘 server_side라고
+/// workspace는 fullscreen이나 maximized와 activated, column은 activated와 tiled 넷). 장식은 없다 — 장식 관리자가 늘 server_side라고
 /// 답하고 서버는 아직 그리지 않는다(design 결정 25). `wm_capabilities`는 첫 configure에만.
 fn sendConfigure(t: *Toplevel, w: u32, h: u32, act: bool) void {
     const xs = t.xdg orelse return;
@@ -2743,14 +2773,17 @@ fn sendConfigure(t: *Toplevel, w: u32, h: u32, act: bool) void {
 }
 
 /// 창 메뉴 · 옮기기 · 크기 · 최대화 · 최소화 요청은 받기만 한다 — 크기는 서버가 정한다(자기 workspace는 화면, column은
-/// pane). `set_min_size`도 그렇다(strip의 pane 크기가 이긴다, TK design 결정 10). 전체 화면은 첫 commit 전의 것만 뜻이 있다
-/// (WY-M2 확정 3) — 그 뒤의 것은 받기만 한다(풀스크린으로 옮기기는 결정 1의 다음 milestone 거리). 제목과 app id는 담아 둔다
-/// (TK-M5 plan 확정 4) — 메뉴 바가 앱 이름으로 쓴다.
+/// pane). `set_min_size`도 그렇다(strip의 pane 크기가 이긴다, TK design 결정 10). 전체 화면은 첫 commit 전의 것이 처음 자리를
+/// 정하고(WY-M2 확정 3, `Opened.fullscreen`), 놓인 뒤의 것은 App에 `Event.fullscreen`으로 넘긴다(CR-M2, WY design 결정 56 —
+/// 옮기기 · 되돌리기 · 상태 바꾸기는 App이 정한다). 제목과 app id는 담아 둔다(TK-M5 plan 확정 4) — 메뉴 바가 앱 이름으로 쓴다.
 fn toplevelRequest(res: *xdg.Toplevel, req: xdg.Toplevel.Request, t: *Toplevel) void {
     switch (req) {
         .destroy => res.destroy(),
-        .set_fullscreen => t.want_fullscreen = true,
-        .unset_fullscreen => t.want_fullscreen = false,
+        .set_fullscreen, .unset_fullscreen => {
+            const on = req == .set_fullscreen;
+            t.want_fullscreen = on;
+            if (t.place != null) t.srv.push(.{ .fullscreen = .{ .id = t.id, .on = on } });
+        },
         .set_title => |r| t.setName(&t.title, r.title),
         .set_app_id => |r| t.setName(&t.app_id, r.app_id),
         else => {},

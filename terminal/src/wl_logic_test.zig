@@ -325,14 +325,42 @@ pub fn main() !void {
     // WY-M2: configure의 states. 자기 workspace는 fullscreen · activated, column은 activated(포커스일 때) + tiled 넷(판 2+).
     {
         var buf: [6]u32 = undefined;
-        if (!std.mem.eql(u32, logic.toplevelStates(.workspace, false, 5, &buf), &.{ 2, 4 })) return error.WrongStates;
+        if (!std.mem.eql(u32, logic.toplevelStates(.fullscreen, false, 5, &buf), &.{ 2, 4 })) return error.WrongStates;
+        // CR-M2: `Cmd+Ctrl+F`로 옮긴 창은 maximized(1) · activated(WY design 결정 58).
+        if (!std.mem.eql(u32, logic.toplevelStates(.maximized, false, 5, &buf), &.{ 1, 4 })) return error.WrongStates;
+        if (logic.WsState.maximized.place() != .maximized or logic.WsState.fullscreen.place() != .fullscreen) return error.WrongStates;
         if (!std.mem.eql(u32, logic.toplevelStates(.column, true, 5, &buf), &.{ 4, 5, 6, 7, 8 })) return error.WrongStates;
         if (!std.mem.eql(u32, logic.toplevelStates(.column, false, 5, &buf), &.{ 5, 6, 7, 8 })) return error.WrongStates;
         // 판 1에는 tiled가 없다.
         if (!std.mem.eql(u32, logic.toplevelStates(.column, true, 1, &buf), &.{4})) return error.WrongStates;
         if (logic.toplevelStates(.column, false, 1, &buf).len != 0) return error.WrongStates;
     }
-    std.debug.print("wl_logic_test: states 5 cases\n", .{});
+    std.debug.print("wl_logic_test: states 7 cases\n", .{});
+
+    // CR-M2 확정 3 · 8: 풀스크린에서 돌아갈 workspace(WY design 결정 57). `uids`는 자리마다 셸의 uid, app이면 null.
+    {
+        const Case = struct { name: []const u8, home: ?u32, uids: []const ?u32, from: usize, want: ?usize };
+        const cases = [_]Case{
+            // home(uid 2)이 살아 있다 — 자리는 당겨졌어도(uid 1이 닫혔다) uid로 찾는다.
+            .{ .name = "home alive", .home = 2, .uids = &.{ 3, 2, null }, .from = 2, .want = 1 },
+            // home이 없어졌다 — 가장 가까운 왼쪽 셸 workspace.
+            .{ .name = "home gone, left shell", .home = 9, .uids = &.{ 1, 4, null, null }, .from = 3, .want = 1 },
+            // 왼쪽에 셸이 없다 — 첫 셸 workspace(오른쪽에 있다).
+            .{ .name = "no shell on the left", .home = 9, .uids = &.{ null, null, 5 }, .from = 0, .want = 2 },
+            // 셸 workspace가 없다 — 나오지 않는다.
+            .{ .name = "no shell workspace", .home = 1, .uids = &.{ null, null }, .from = 1, .want = null },
+            // home이 없다(처음부터 자기 workspace로 뜬 둠) — 셸이 있어도 나오지 않는다.
+            .{ .name = "no home (doom)", .home = null, .uids = &.{ 1, null }, .from = 1, .want = null },
+        };
+        for (cases) |c| {
+            const got = logic.pickReturn(c.home, c.uids, c.from);
+            if (got != c.want) {
+                std.debug.print("FAIL: pickReturn {s} = {any}, want {any}\n", .{ c.name, got, c.want });
+                return error.WrongReturn;
+            }
+        }
+        std.debug.print("wl_logic_test: pickReturn {d} cases\n", .{cases.len});
+    }
 
     // WY-M2 단계 C: 화면 → surface 좌표(24.8). 오른쪽 column 616x752를 1배로 채운 창, x 644 · y 20에서 시작.
     {

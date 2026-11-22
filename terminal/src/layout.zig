@@ -517,6 +517,12 @@ pub const Strip = struct {
         return n;
     }
 
+    /// 끝 column의 맨 위 slot(CR-M2) — 그 오른쪽에 `split(.right)`하면 strip의 오른쪽 끝에 column이 선다. 빈 strip이면 null.
+    pub fn lastColumnTop(self: *const Strip) ?u4 {
+        if (self.len == 0) return null;
+        return self.cols[self.len - 1].slots[0];
+    }
+
     /// slot 번호를 column 순, column 안은 위→아래 순으로 `buf`에 담는다.
     fn leaves(self: *const Strip, buf: *[MAX_LEAVES]u4) []u4 {
         var n: usize = 0;

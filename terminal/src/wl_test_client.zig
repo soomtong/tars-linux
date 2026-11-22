@@ -36,6 +36,9 @@
 //! WY-M7 단계 B(plan 확정 8): `--popup`이면 창 위 왼쪽 누름이 그 자리(1 × 1 anchor, anchor bottom_left · gravity bottom_right — `--popup-left`면
 //! bottom_left)에 120 × 80 popup(33CC66)을 연다. `--popup-ca N`은 constraint_adjustment, `--popup-grab`이면 그 누름의 serial로 grab. popup이 열린 채 창을
 //! 누르면 Chromium처럼 스스로 지운다(`popup closed`). 줄: `popup configure x= y= w= h=` · `popup done` · `popup enter x= y=` · `popup leave` · `popup press`.
+//! CR-M2(plan 확정 9): `--fullscreen-later`면 매핑 뒤 F 키(evdev 33) 누름에 `set_fullscreen`, U 키(22) 누름에 `unset_fullscreen`을 보낸다
+//! (Chromium의 F11처럼 — 서버가 창을 자기 workspace로 옮기고 되돌린다, WY design 결정 56). 보낼 때 `fullscreen set` · `fullscreen unset` 한 줄,
+//! 답은 configure 줄의 states(`1` maximized · `2` fullscreen)다.
 //! `wl_surface.enter`의 줄에 `enter`라는 낱말을 안 쓰는 것은 wayland 체인 판정 16이 이 로그의 `enter`(키보드)를 세기 때문이다.
 //!
 //! 바인딩은 terminal의 서버와 같은 스캐너가 만든 것이다(`build.zig`의 `wayland` 모듈 — 서버는 `server`, 이쪽은
@@ -74,6 +77,9 @@ const COPY_MIMES = [_][*:0]const u8{ "text/plain;charset=utf-8", "text/plain", "
 const KEY_C: u32 = 46;
 /// evdev KEY_V — `--paste`의 방아쇠(`Cmd+V`).
 const KEY_V: u32 = 47;
+/// evdev KEY_F · KEY_U — `--fullscreen-later`의 방아쇠(CR-M2).
+const KEY_F: u32 = 33;
+const KEY_U: u32 = 22;
 /// `--paste`가 청하는 mime(서버가 내는 넷의 첫째).
 const PASTE_MIME: [*:0]const u8 = "text/plain;charset=utf-8";
 
@@ -117,6 +123,8 @@ const Args = struct {
     follow_size: bool = false,
     /// 첫 commit 전에 `set_fullscreen`(WY-M2 확정 12) — 서버가 자기 workspace를 준다.
     fullscreen: bool = false,
+    /// `--fullscreen-later`(CR-M2 확정 9) — 매핑 뒤 F 키에 `set_fullscreen`, U 키에 `unset_fullscreen`.
+    fullscreen_later: bool = false,
     /// 포인터 enter마다 `set_cursor(NULL)`(WY-M2 확정 12).
     hide_cursor: bool = false,
     /// buffer_scale(WY-M3 확정 8, 1..3). 버퍼는 surface 크기 × 이 값이다. `--size`와 configure는 surface 크기다.
@@ -177,6 +185,8 @@ fn parseArgs(argv: []const []const u8) ?Args {
             args.follow_size = true;
         } else if (std.mem.eql(u8, a, "--fullscreen")) {
             args.fullscreen = true;
+        } else if (std.mem.eql(u8, a, "--fullscreen-later")) {
+            args.fullscreen_later = true;
         } else if (std.mem.eql(u8, a, "--hide-cursor")) {
             args.hide_cursor = true;
         } else if (std.mem.eql(u8, a, "--checker")) {
@@ -246,7 +256,7 @@ fn parseArgs(argv: []const []const u8) ?Args {
 
 fn usage() u8 {
     writeAll(2,
-        \\usage: tars-wl-test [--color RRGGBB] [--size WxH] [--ignore-close] [--follow-size] [--fullscreen]
+        \\usage: tars-wl-test [--color RRGGBB] [--size WxH] [--ignore-close] [--follow-size] [--fullscreen] [--fullscreen-later]
         \\       [--hide-cursor] [--buffer-scale N] [--checker] [--copy TEXT] [--paste] [--paste-drop]
         \\       [--text-input] [--native] [--damage] [--menu] [--subsurface | --subsurface-sync] [--sub-scale N] [--second]
         \\       [--popup] [--popup-grab] [--popup-ca N] [--popup-left]
@@ -256,6 +266,8 @@ fn usage() u8 {
         \\  own size unless --follow-size (then it takes the configured size).
         \\  --fullscreen asks for fullscreen before the first commit (its own
         \\  workspace); without it the window opens as a column right of the shell.
+        \\  --fullscreen-later asks for fullscreen when F is pressed and unsets it when
+        \\  U is pressed, after the window is mapped (like a browser's F11).
         \\  --hide-cursor hides the pointer (set_cursor NULL) over the window.
         \\  --buffer-scale N (1..3) draws a buffer N times the surface size and sets
         \\  that buffer scale; sizes (--size, configure) stay in surface units.
@@ -358,6 +370,8 @@ const State = struct {
     compositor: ?*wl.Compositor = null,
     subcompositor: ?*wl.Subcompositor = null,
     sub_surface: ?*wl.Surface = null,
+    /// 창의 toplevel — `--fullscreen-later`(CR-M2)가 키에서 쓴다.
+    toplevel: ?*xdg.Toplevel = null,
     subsurface: ?*wl.Subsurface = null,
     sub_buffer: ?*wl.Buffer = null,
     sub_step: u32 = 0,
@@ -1046,6 +1060,15 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, state: *State) vo
             if (k.key == KEY_C and k.state == .pressed) copySelection(state, k.serial);
             if (k.key == KEY_V and k.state == .pressed) pasteSelection(state);
             if (k.key == KEY_S and k.state == .pressed and state.args.subsurface) subStep(state);
+            if (state.args.fullscreen_later and k.state == .pressed) if (state.toplevel) |tl| {
+                if (k.key == KEY_F) {
+                    tl.setFullscreen(null);
+                    say("fullscreen set", .{});
+                } else if (k.key == KEY_U) {
+                    tl.unsetFullscreen();
+                    say("fullscreen unset", .{});
+                }
+            };
         },
         .modifiers => |m| say("mods depressed=0x{x}", .{m.mods_depressed}),
         // 키보드 포커스(WY-M2 확정 9) — column 창은 포커스 slot이 될 때 enter, 셸로 옮기면 leave.
@@ -1274,6 +1297,7 @@ fn run(args: Args) !u8 {
     state.seat = g.seat;
     const toplevel = try xdg_surface.getToplevel();
     toplevel.setListener(*State, toplevelListener, &state);
+    state.toplevel = toplevel;
     toplevel.setTitle("tars-wl-test");
     toplevel.setAppId("tars-wl-test");
     // 메뉴 모델(TK-M5) — 첫 commit 전에 보내 창이 처음 보일 때부터 모델이 있다.

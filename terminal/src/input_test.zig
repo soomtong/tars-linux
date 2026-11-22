@@ -2730,7 +2730,7 @@ pub fn main() !void {
         try expectAppKey(&ap, .{}, K.KEY_C, 1, K.KEY_C, true, .{ .super = true });
         try expectAppKey(&ap, .{}, K.KEY_V, 1, K.KEY_V, true, .{ .super = true });
         try expectAppKey(&ap, .{}, K.KEY_LEFT, 1, K.KEY_LEFT, true, .{ .super = true });
-        // Cmd+Ctrl+F(전체 화면)는 표다. app 워크스페이스에서는 `main.zig`가 아무것도 안 한다(늘 chrome 없음).
+        // Cmd+Ctrl+F(전체 화면)는 표다. app 창이면 `main.zig`가 그 창을 자기 workspace로 옮기거나 원래 열로 되돌린다(CR-M2).
         try expectAppKey(&ap, .{}, K.KEY_LEFTCTRL, 1, K.KEY_LEFTCTRL, true, .{ .ctrl = true, .super = true });
         try expectAppPane(&ap, K.KEY_F, .fullscreen_toggle);
         try expectAppKey(&ap, .{}, K.KEY_LEFTCTRL, 0, K.KEY_LEFTCTRL, false, .{ .super = true });
