@@ -8,6 +8,10 @@
 - 로컬 full 판: `out/tars-full.iso`(= `out/tars-0.3.0-full-x86_64.iso`, 2,461,104,128 B, 묶음 열다섯) — 사용자가 맥북 에어 2011에 `dd`로 쓴다.
   `out/`은 `make clean` · 게이트가 지운다. 다시 필요하면 `git checkout v0.3.0 && make iso-full`.
 - 소개 페이지(`gh-pages`)에 0.3.0 · SW · PT · WY · TK · CR을 넣었다.
+- 그 뒤(2026-11-23): cyber 0.4.15 → 0.4.18(사용자 "upgrade cyber lang new version"). manifest 세 줄, sha256 = GitHub digest `7006f188…481f`.
+  tarball은 같은 `cyber` · `cyber-lsp` 둘, `NEEDED` 다섯 · `RUNPATH $ORIGIN` 같음, `%ymm` · `%zmm` · `shlx` 0(arm64 컨테이너에서는
+  `objdump`가 x86을 못 읽어 0이 거짓 — `x86_64-linux-gnu-objdump`를 쓴다). `make quick` PASS, devtools 체인 PASS(빌드 뒤 743초, cyber 378ms).
+  0.3.0 ISO에는 안 실렸다 — 다음 판에 실린다.
 
 - 그 뒤: 브랜치 리뷰(`/code-review high`)의 지적 여덟을 RF-M0으로 고쳤다(plan `docs/plans/2026-11-22-tars-review-fixes-rf-m0.md`, 서브에이전트
   `rf-tk` · `rf-wl` — 끝나고 pane 닫음). 커밋 제목 길이 지적은 사용자가 고치지 않기로 했다. 루트 게이트 36/37(browser 판정 3의 첫 페이지 타이밍) →

@@ -586,10 +586,10 @@ exe = [
 [[tool]]
 name = "cyber"
 bundle = "lang-script"
-version = "0.4.15"
+version = "0.4.18"
 kind = "upstream"
-url = "https://github.com/soomtong/cyber/releases/download/0.4.15/cyber-linux-x64.tar.gz"
-sha256 = "6f062865c21d494a39325c6466d74c3c87efe0d928e213ee404fd3b98284fc2f"
+url = "https://github.com/soomtong/cyber/releases/download/0.4.18/cyber-linux-x64.tar.gz"
+sha256 = "7006f1889e4b42e38625c87c8217f667b10dd89b54a35c7ad364c94ae7d2481f"
 strip = 0
 exe = ["cyber", "cyber-lsp"]
 
